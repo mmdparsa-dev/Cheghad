@@ -2,43 +2,39 @@ name: Build and Attach Debug APK to Release
 
 on:
   release:
-    types: [published] # هر زمان یک ریلیز جدید منتشر شد
+    types: [published]
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      # ۱. دریافت کدهای پروژه
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # ۲. تنظیم جاوا نسخه ۱۷ (متناسب با پروژه شما)
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      # ۳. راه‌اندازی و کش کردن گریدل برای افزایش سرعت بیلد
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
-      # ۴. مجوز دادن به فایل gradlew
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # ۵. ساخت APK نسخه Debug
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 
-      # ۶. تغییر نام APK به نام ریلیز برای تمیزتر شدن فایل
       - name: Rename Debug APK
         run: |
           VERSION_NAME="${{ github.event.release.tag_name }}"
           mv app/build/outputs/apk/debug/app-debug.apk "app/build/outputs/apk/debug/Cheghad-${VERSION_NAME}-debug.apk"
 
-      # ۷. آپلود و متصل کردن فایل به پیج ریلیز
       - name: Attach Debug APK to Release
         uses: softprops/action-gh-release@v2
         with:
