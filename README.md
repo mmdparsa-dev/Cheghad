@@ -19,7 +19,11 @@
 - **زبان:** [Kotlin](https://kotlinlang.org/)
 - **رابط کاربری:** [Jetpack Compose](https://developer.android.com/jetpack/compose)
 
-### 🚀 نحوه نصب و راه‌اندازی
+### نصب
+ریلیز ها رو چک کن یا از توی اپ دانلود کن 
+
+
+### 🚀 ججوری ببرم تو اندروید استدیو
 1. مخزن را کلون کنید:
    `git clone https://github.com/mmdparsa/Cheghad.git`
 2. پروژه را در **Android Studio** باز کنید.
@@ -43,8 +47,11 @@
 ### 🛠 Languages
 - **Language:** [Kotlin](https://kotlinlang.org/)
 - **UI Framework:** [Jetpack Compose](https://developer.android.com/jetpack/compose) (Material3)
+  
+### Install
+Check the Releses or Download From app
 
-### 🚀 Getting Started
+### 🚀 How to use In Android Studio?
 1. Clone the repository:
    `git clone https://github.com/mmdparsa/Cheghad.git`
 2. Open the project in **Android Studio**.
