@@ -1,0 +1,53 @@
+name: Update Changelog on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepend Release Notes to CHANGELOG.md
+        run: |
+          RELEASE_TITLE="${{ github.event.release.name }}"
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          RELEASE_BODY='${{ github.event.release.body }}'
+          RELEASE_DATE=$(date +'%Y-%m-%d')
+
+          # تنظیم تیتر (اگر عنوان خالی بود از نام تگ استفاده کن)
+          TITLE=${RELEASE_TITLE:-$RELEASE_TAG}
+
+          # ساخت بلوک جدید برای تغییرات
+          NEW_ENTRY="## [$TITLE] - $RELEASE_DATE"$'\n\n'"$RELEASE_BODY"$'\n\n'
+
+          # اگر فایل وجود نداشت، آن را بساز
+          if [ ! -f CHANGELOG.md ]; then
+            echo "# Changelog" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+          fi
+
+          # اضافه کردن متن جدید به بالای فایل (بعد از تیتر اصلی)
+          # استفاده از فایل موقت برای حفظ محتوای قبلی
+          {
+            head -n 2 CHANGELOG.md
+            echo "$NEW_ENTRY"
+            tail -n +3 CHANGELOG.md
+          } > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add CHANGELOG.md
+          git commit -m "chore(changelog): update CHANGELOG.md for ${{ github.event.release.tag_name }} [skip ci]"
+          git push
