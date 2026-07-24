@@ -13,7 +13,7 @@ Below is the list of versions currently receiving security updates:
 If you discover a security vulnerability within this project, please follow these steps to report it:
 
 1. **Do NOT open a public issue.** Please report any security vulnerabilities confidentially to avoid exposing risks to other users.
-2. **Contact:** Send an email with the details to **[ایمیل خودت را اینجا بنویس]** or use the **Private Vulnerability Reporting** feature on GitHub if enabled.
+2. **Contact:** Send an email with the details to **mmdparsadev@gmail.com** or use the **Private Vulnerability Reporting** feature on GitHub if enabled.
 3. **Information to Include:**
    * A description of the vulnerability and its potential impact.
    * Steps to reproduce the issue (code snippets, screenshots, or Proof of Concept).
@@ -40,7 +40,7 @@ If you discover a security vulnerability within this project, please follow thes
 اگر آسیب‌پذیری یا مشکل امنیتی در این پروژه پیدا کردید، لطفاً مراحل زیر را دنبال کنید:
 
 ۱. **لطفاً Issue عمومی باز نکنید.** برای جلوگیری از سوءاستفاده، گزارش خود را به‌صورت محرمانه ارسال کنید.
-۲. **روش ارتباط:** جزئیات را به ایمیل **[ایمیل خودت را اینجا بنویس]** بفرستید یا از بخش **Private Vulnerability Reporting** در گیت‌هاب استفاده کنید.
+۲. **روش ارتباط:** جزئیات را به ایمیل **mmdparsadev@gmail.com** بفرستید یا از بخش **Private Vulnerability Reporting** در گیت‌هاب استفاده کنید.
 ۳. **اطلاعات مورد نیاز در گزارش:**
    * توضیح کامل آسیب‌پذیری و میزان خطرات آن.
    * مراحل بازتولید مشکل (تکه کد، اسکرین‌شات یا اثبات مفهوم / PoC).
