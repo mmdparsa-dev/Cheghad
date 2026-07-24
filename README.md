@@ -7,7 +7,7 @@
 ## فارسی
 
 ### درباره پروژه
-**چقدر (Cheghad)** یک اپلیکیشن مدرن، متن‌باز و سبک برای مدیریت مالی، پیگیری هزینه‌ها و بررسی نرخ لحظه‌ای ارزها و دارایی‌ها است. این برنامه با آخرین استانداردهای روز توسعه اندروید و رابط کاربری مدرن Material 3 Expressive طراحی شده است تا تجربه‌ای روان، زیبا و سریع را به کاربران ارائه دهد.
+**چقدر (Cheghad)** یک اپلیکیشن مدرن، اوپن سورس برای بررسی نرخ لحظه‌ای ارزها است. این برنامه با آخرین استانداردهای روز توسعه اندروید و رابط کاربری مدرن Material 3 Expressive طراحی شده است تا تجربه‌ای روان، زیبا و سریع را به کاربران ارائه دهد.
 
 ### 🌟 ویژگی‌های کلیدی
 - 🎨 **رابط کاربری مدرن:** طراحی شده بر پایه **Material 3 Expressive** با قابلیت پشتیبانی از تم تاریک و روشن.
@@ -33,7 +33,7 @@
 ## English
 
 ### About The Project
-**Cheghad** is a modern, open-source, and lightweight Android application designed for personal finance tracking, expense management, and real-time currency exchange monitoring. Built using the latest Android development standards and **Material 3 Expressive** design, it provides an intuitive, beautiful, and fast user experience.
+**Cheghad** is a modern, open-source, and lightweight Android application designed for real-time currency exchange monitoring. Built using the latest Android development standards and **Material 3 Expressive** design, it provides an intuitive, beautiful, and fast user experience.
 
 ### 🌟 Key Features
 - 🎨 **Modern UI:** Built with **Material 3 Expressive** design principles, supporting both Light and Dark themes.
