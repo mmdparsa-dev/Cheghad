@@ -13,8 +13,7 @@
 - 🎨 **رابط کاربری مدرن:** طراحی شده بر پایه **Material 3 Expressive** با قابلیت پشتیبانی از تم تاریک و روشن.
 - ⚡ **سریع و آفلاین اول (Offline-First):** ذخیره‌سازی محلی اطلاعات با استفاده از **Room Database** برای دسترسی سریع بدون نیاز به اینترنت.
 - 🔄 **همگام‌سازی هوشمند:** دریافت و بروزرسانی آنلاین قیمت ارزها و اطلاعات مالی با Retrofit و Coroutines.
-- 🔔 **مدیریت یادآورها و هشدارها:** قابلیت تنظیم هشدار برای مدیریت هزینه‌ها و برنامه‌ریزی‌های مالی.
-- 🔒 **حریم خصوصی کامل:** تمام اطلاعات مالی به صورت کاملاً محلی روی دستگاه کاربر ذخیره می‌شوند.
+- 🔔 **مدیریت یادآورها و هشدارها:** قابلیت تنظیم هشدار برای مدیریت هزینه‌ها و برنامه‌ریزی‌های مالی..
 
 ### 🛠 زبان های استفاده شده
 - **زبان:** [Kotlin](https://kotlinlang.org/)
@@ -40,7 +39,6 @@
 - ⚡ **Offline-First:** Fast local data persistence powered by **Room Database**.
 - 🔄 **Smart Sync:** Fetch real-time exchange rates and financial data seamlessly via Retrofit & Kotlin Coroutines.
 - 🔔 **Reminders & Alerts:** Set custom financial alerts and reminders for budget tracking.
-- 🔒 **Privacy Focused:** All financial logs and personal data remain stored locally on your device.
 
 ### 🛠 Languages
 - **Language:** [Kotlin](https://kotlinlang.org/)
