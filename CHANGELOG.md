@@ -1,5 +1,3 @@
-# 0.7.8
-# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
 ## [v0.7.9 - Beta] - 2026-07-25
 
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
@@ -15,7 +13,8 @@
 - حل مشکل اپدیت پشت سرهم
 - فیکس کردن باگ ها
 
-
+# 0.7.8
+# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
 ## The Changes:
 
 - Fix Update Problem
