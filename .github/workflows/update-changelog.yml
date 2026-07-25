@@ -14,6 +14,8 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
+          # مشخص کردن برانچ target برای خروج از حالت Detached HEAD
+          ref: ${{ github.event.release.target_commitish }}
           fetch-depth: 0
 
       - name: Prepend Release Notes to CHANGELOG.md
@@ -36,7 +38,6 @@ jobs:
           fi
 
           # اضافه کردن متن جدید به بالای فایل (بعد از تیتر اصلی)
-          # استفاده از فایل موقت برای حفظ محتوای قبلی
           {
             head -n 2 CHANGELOG.md
             echo "$NEW_ENTRY"
@@ -50,4 +51,5 @@ jobs:
           
           git add CHANGELOG.md
           git commit -m "chore(changelog): update CHANGELOG.md for ${{ github.event.release.tag_name }} [skip ci]"
-          git push
+          # استفاده از HEAD:برانچ هدف ریلیز برای جلوگیری از ارور Detached HEAD
+          git push origin HEAD:${{ github.event.release.target_commitish }}
