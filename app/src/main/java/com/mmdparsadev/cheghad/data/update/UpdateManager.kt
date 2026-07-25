@@ -34,7 +34,7 @@ data class GitHubAsset(
 
 object UpdateManager {
 
-    private const val GITHUB_API_URL = "https://api.github.com/repos/mmdparsa-dev/Cheghad/releases/latest"
+    private const val GITHUB_API_URL = "https://api.github.com/repos/mmdparsa-dev/Cheghad/releases"
 
     private val json = Json {
         ignoreUnknownKeys = true
@@ -60,10 +60,14 @@ object UpdateManager {
             }
 
             val responseBody = response.body?.string() ?: return@runCatching null
-            val release = json.decodeFromString<GitHubRelease>(responseBody)
+            val releases = json.decodeFromString<List<GitHubRelease>>(responseBody)
+            if (releases.isEmpty()) {
+                return@runCatching null
+            }
 
-            if (isVersionNewer(currentVersionName, release.tagName)) {
-                release
+            val latestRelease = releases.first()
+            if (isVersionNewer(currentVersionName, latestRelease.tagName)) {
+                latestRelease
             } else {
                 null
             }
@@ -96,7 +100,7 @@ object UpdateManager {
             .removePrefix("V")
             .split("-")[0]
             .trim()
-        
+
         // Extract numbers and dots only e.g. "0.7.0"
         return trimmed.filter { it.isDigit() || it == '.' }
     }
