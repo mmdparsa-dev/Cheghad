@@ -7,7 +7,9 @@
 ## تغییرات:
 
 - حل مشکل آپدیت
-#0.7.7
+
+  
+# 0.7.7
 
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
 ## The Changes:
