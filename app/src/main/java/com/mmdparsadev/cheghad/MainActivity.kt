@@ -202,6 +202,37 @@ class MainActivity : AppCompatActivity() {
                 mutableStateOf(sharedPrefs.getStringSet("disabled_news_agencies", emptySet()) ?: emptySet())
             }
 
+            var availableUpdateRelease by remember { mutableStateOf<com.mmdparsadev.cheghad.data.update.GitHubRelease?>(null) }
+            var isCheckingUpdatesManually by remember { mutableStateOf(false) }
+
+            val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+            ) {}
+
+            LaunchedEffect(Unit) {
+                // Request notification permission for Android 13+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(
+                            Context,
+                            android.Manifest.permission.POST_NOTIFICATIONS
+                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) {
+                        permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                }
+
+                // Schedule background WorkManager periodic check
+                com.mmdparsadev.cheghad.data.update.UpdateWorker.schedulePeriodicCheck(Context)
+
+                val currentVersion = com.mmdparsadev.cheghad.BuildConfig.VERSION_NAME
+                com.mmdparsadev.cheghad.data.update.UpdateManager.checkForUpdate(currentVersion).onSuccess { release ->
+                    if (release != null) {
+                        availableUpdateRelease = release
+                        com.mmdparsadev.cheghad.data.update.UpdateWorker.sendUpdateNotification(Context, release)
+                    }
+                }
+            }
+
             LaunchedEffect(UiState.ShowSuccessMessage) {
                 if (UiState.ShowSuccessMessage) {
                     Toast.makeText(Context, Context.getString(R.string.success_updated), Toast.LENGTH_SHORT).show()
@@ -249,8 +280,7 @@ class MainActivity : AppCompatActivity() {
                         label = "ScreenTransition"
                     ) { screen ->
                     if (screen == "home") {
-                        @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
-                        androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                        com.mmdparsadev.cheghad.ui.ExpressivePullToRefreshBox(
                             isRefreshing = UiState.IsLoading,
                             onRefresh = { ViewModel.RefreshData() },
                             modifier = Modifier.fillMaxSize().padding(innerPadding)
@@ -528,6 +558,28 @@ class MainActivity : AppCompatActivity() {
                             onDisabledNewsAgenciesChanged = { newSet ->
                                 disabledNewsAgencies = newSet
                                 sharedPrefs.edit().putStringSet("disabled_news_agencies", newSet).apply()
+                            },
+                            isCheckingUpdates = isCheckingUpdatesManually,
+                            onCheckForUpdates = {
+                                isCheckingUpdatesManually = true
+                                coroutineScope.launch {
+                                    val currentVersion = com.mmdparsadev.cheghad.BuildConfig.VERSION_NAME
+                                    val result = com.mmdparsadev.cheghad.data.update.UpdateManager.checkForUpdate(currentVersion)
+                                    isCheckingUpdatesManually = false
+                                    result.fold(
+                                        onSuccess = { release ->
+                                            if (release != null) {
+                                                availableUpdateRelease = release
+                                                com.mmdparsadev.cheghad.data.update.UpdateWorker.sendUpdateNotification(Context, release)
+                                            } else {
+                                                Toast.makeText(Context, "شما از آخرین نسخه برنامه ($currentVersion) استفاده می‌کنید.", Toast.LENGTH_LONG).show()
+                                            }
+                                        },
+                                        onFailure = {
+                                            Toast.makeText(Context, "خطا در برقراری ارتباط با گیت‌هاب", Toast.LENGTH_SHORT).show()
+                                        }
+                                    )
+                                }
                             }
                         )
                     } else {
@@ -583,6 +635,15 @@ class MainActivity : AppCompatActivity() {
                             selectedAlarmForEdit = null
                             Toast.makeText(Context, "تغییرات با موفقیت ذخیره شد", Toast.LENGTH_SHORT).show()
                         }
+                    )
+                }
+
+                // Update Dialog
+                availableUpdateRelease?.let { release ->
+                    com.mmdparsadev.cheghad.ui.UpdateDialog(
+                        release = release,
+                        digitType = digitType,
+                        onDismiss = { availableUpdateRelease = null }
                     )
                 }
                 
@@ -710,6 +771,7 @@ fun getLocalizedTitle(symbol: String, rawTitle: String): String {
             s == "PEPE" -> "Pepe"
             s == "SUI" -> "Sui"
             s == "UNI" -> "Uniswap"
+            s == "USOON" -> "Ondo US Oil"
             s == "GOLD" || s == "XAU" || s == "PAXG" -> "Emami Gold Coin"
             s == "BAHAR" -> "Bahar Azadi Coin"
             s == "NIM" -> "Half Gold Coin"
@@ -757,6 +819,7 @@ fun getLocalizedTitle(symbol: String, rawTitle: String): String {
         s == "PEPE" -> "پپه"
         s == "SUI" -> "سویی"
         s == "UNI" -> "یونی‌سواپ"
+        s == "USOON" -> "توکن نفت (USOON)"
         s == "GOLD" || s == "XAU" || s == "PAXG" -> "سکه امامی"
         s == "BAHAR" -> "سکه بهار آزادی"
         s == "NIM" -> "نیم سکه"
@@ -1002,9 +1065,8 @@ fun TopAppBar(
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            
-                        val editCornerRadius by androidx.compose.animation.core.animateDpAsState(
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val editCornerRadius by androidx.compose.animation.core.animateDpAsState(
                 targetValue = if (isEditingHome) 22.dp else 12.dp,
                 animationSpec = androidx.compose.animation.core.spring(
                     dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
@@ -1099,6 +1161,299 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+data class HomeRowConfig(
+    val id: Int,
+    val isMerged: Boolean,
+    val style: String,
+    val isColored: Boolean
+)
+
+@Composable
+fun RenderCard(
+    style: String,
+    item: com.mmdparsadev.cheghad.data.models.CurrencyItem?,
+    isMerged: Boolean,
+    onClickItem: (com.mmdparsadev.cheghad.data.models.CurrencyItem) -> Unit,
+    isEditing: Boolean,
+    digitType: String,
+    colorSchemeMode: String,
+    upColor: Color,
+    downColor: Color,
+    coloredCardsMode: Boolean
+) {
+    if (style == "hero" && isMerged) {
+        val usdChange = item?.ChangePercentage ?: 0.0
+        val isDark = MaterialTheme.colorScheme.background.red < 0.5f
+        val usdIsUp = usdChange >= 0.0
+        val usdIsGreen = if (colorSchemeMode == "inverted") !usdIsUp else usdIsUp
+        
+        val isZeroChange = item == null || Math.abs(usdChange) < 0.001
+        val targetHeroBgColor = if (coloredCardsMode) {
+            if (isZeroChange) {
+                if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE)
+            } else if (usdIsGreen) {
+                if (isDark) Color(0xFF1B382B) else Color(0xFFE8F5E9)
+            } else {
+                if (isDark) Color(0xFF381A1F) else Color(0xFFFFEBEE)
+            }
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        }
+        val heroBgColor by androidx.compose.animation.animateColorAsState(targetValue = targetHeroBgColor, label = "HeroBgColor")
+        
+        val targetHeroContentColor = if (coloredCardsMode) {
+            if (isZeroChange) {
+                if (isDark) Color.White else Color.Black
+            } else if (usdIsGreen) {
+                if (isDark) Color(0xFFE8F5E9) else Color(0xFF1B5E20)
+            } else {
+                if (isDark) Color(0xFFFFEBEE) else Color(0xFF8C1D18)
+            }
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
+        val heroContentColor by androidx.compose.animation.animateColorAsState(targetValue = targetHeroContentColor, label = "HeroContentColor")
+        
+        val heroTrendColor = if (isZeroChange) {
+            if (isDark) Color.LightGray else Color.Gray
+        } else if (usdIsGreen) {
+            if (isDark) Color(0xFF81C784) else Color(0xFF2E7D32)
+        } else {
+            if (isDark) Color(0xFFE57373) else Color(0xFFC62828)
+        }
+
+        val targetHeroBorderColor = if (coloredCardsMode) {
+            heroTrendColor.copy(alpha = 0.3f)
+        } else {
+            MaterialTheme.colorScheme.outlineVariant
+        }
+        val heroBorderColor by androidx.compose.animation.animateColorAsState(targetValue = targetHeroBorderColor, label = "HeroBorderColor")
+
+        val targetHeroIconBg = if (coloredCardsMode) {
+            heroTrendColor.copy(alpha = 0.15f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+        val heroIconBg by androidx.compose.animation.animateColorAsState(targetValue = targetHeroIconBg, label = "HeroIconBg")
+
+        val targetHeroIconColor = if (coloredCardsMode) {
+            heroTrendColor
+        } else {
+            MaterialTheme.colorScheme.primary
+        }
+        val heroIconColor by androidx.compose.animation.animateColorAsState(targetValue = targetHeroIconColor, label = "HeroIconColor")
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(32.dp))
+                .background(heroBgColor)
+                .border(1.dp, heroBorderColor, RoundedCornerShape(32.dp))
+                .clickable { if (!isEditing) { item?.let { onClickItem(it) } } }
+                .padding(24.dp)
+        ) {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(heroIconBg),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val iconVector = when (item?.Symbol) {
+                                "EUR" -> Icons.Default.Euro
+                                "GOLD", "XAU" -> Icons.Default.Paid
+                                "BTC" -> Icons.Default.CurrencyBitcoin
+                                "ETH" -> Icons.Default.Paid
+                                else -> Icons.Default.AttachMoney
+                            }
+                            Icon(iconVector, contentDescription = null, tint = heroIconColor, modifier = Modifier.size(28.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(getLocalizedTitle(item?.Symbol ?: "USD", item?.Title ?: "دلار آمریکا"), fontSize = adaptiveSp(22f), fontWeight = FontWeight.ExtraBold, color = heroContentColor, fontFamily = getFontFamilyForText(getLocalizedTitle(item?.Symbol ?: "USD", item?.Title ?: "دلار آمریکا")))
+                            Text(item?.Symbol ?: "USD", fontSize = adaptiveSp(14f), fontWeight = FontWeight.Medium, color = heroContentColor.copy(alpha = 0.7f), fontFamily = getFontFamilyForText(item?.Symbol ?: "USD"))
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(heroTrendColor.copy(alpha = 0.18f))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        val percentStr = if (item != null) formatPercent(usdChange, digitType) else "------"
+                        androidx.compose.animation.AnimatedContent(
+                            targetState = percentStr,
+                            transitionSpec = {
+                                androidx.compose.animation.fadeIn().togetherWith(androidx.compose.animation.fadeOut())
+                            },
+                            label = "PercentAnim"
+                        ) { pStr ->
+                            Text(pStr, fontSize = adaptiveSp(13f), fontWeight = FontWeight.Bold, color = heroTrendColor, fontFamily = getFontFamilyForText(pStr))
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(20.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        val formattedPrice = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------"
+                        val unitStr = androidx.compose.ui.res.stringResource(R.string.currency_toman)
+                        androidx.compose.animation.AnimatedContent(
+                            targetState = formattedPrice,
+                            transitionSpec = {
+                                if (targetState > initialState) {
+                                    (androidx.compose.animation.slideInVertically { height -> height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> -height } + androidx.compose.animation.fadeOut())
+                                } else {
+                                    (androidx.compose.animation.slideInVertically { height -> -height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> height } + androidx.compose.animation.fadeOut())
+                                }
+                            },
+                            label = "PriceAnim",
+                            modifier = Modifier.alignByBaseline()
+                        ) { price ->
+                            Text(price, fontSize = adaptiveSp(46f), fontWeight = FontWeight.Bold, color = heroContentColor, fontFamily = getFontFamilyForText(price))
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(unitStr, fontSize = adaptiveSp(17f), fontWeight = FontWeight.Medium, color = heroContentColor.copy(alpha = 0.7f), modifier = Modifier.alignByBaseline(), fontFamily = getFontFamilyForText(unitStr))
+                    }
+                }
+            }
+        }
+    } else if (style == "small" && !isMerged) {
+        val iconStr = when (item?.Symbol) {
+            "EUR" -> "€"
+            "GBP" -> "£"
+            "GOLD" -> "ج"
+            "BTC" -> "₿"
+            "ETH" -> "Ξ"
+            else -> item?.Symbol?.take(1) ?: "$"
+        }
+        
+        val change = item?.ChangePercentage ?: 0.0
+        val isZeroChange = item == null || Math.abs(change) < 0.001
+        val isDark = MaterialTheme.colorScheme.background.red < 0.5f
+        val isGreen = change >= 0.0
+        
+        val targetSmallBgColor = if (coloredCardsMode) {
+            if (isZeroChange) {
+                if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE)
+            } else if (isGreen) {
+                if (isDark) Color(0xFF1B382B) else Color(0xFFE8F5E9)
+            } else {
+                if (isDark) Color(0xFF381A1F) else Color(0xFFFFEBEE)
+            }
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+        val smallBgColor by androidx.compose.animation.animateColorAsState(targetValue = targetSmallBgColor, label = "SmallBgColor")
+        
+        val targetSmallContentColor = if (coloredCardsMode) {
+            if (isZeroChange) {
+                if (isDark) Color.White else Color.Black
+            } else if (isGreen) {
+                if (isDark) Color(0xFFE8F5E9) else Color(0xFF1B5E20)
+            } else {
+                if (isDark) Color(0xFFFFEBEE) else Color(0xFF8C1D18)
+            }
+        } else {
+            MaterialTheme.colorScheme.onBackground
+        }
+        val smallContentColor by androidx.compose.animation.animateColorAsState(targetValue = targetSmallContentColor, label = "SmallContentColor")
+        
+        val targetSmallBorderColor = if (coloredCardsMode) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.outlineVariant
+        }
+        val smallBorderColor by androidx.compose.animation.animateColorAsState(targetValue = targetSmallBorderColor, label = "SmallBorderColor")
+
+        SmallCard(
+            modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
+            icon = iconStr,
+            value = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------",
+            trend = if (item != null) formatPercent(item.ChangePercentage, digitType) else "------",
+            trendColor = run {
+                if (isZeroChange) {
+                    if (isDark) Color.LightGray else Color.Gray
+                } else if (isGreen) upColor else downColor
+            },
+            backgroundColor = smallBgColor,
+            contentColor = smallContentColor,
+            borderColor = smallBorderColor
+        )
+    } else {
+        val isEngCard = java.util.Locale.getDefault().language == "en"
+        val unitToman = androidx.compose.ui.res.stringResource(R.string.currency_toman)
+        val changeVal = item?.ChangePercentage ?: 0.0
+        val isDark = MaterialTheme.colorScheme.background.red < 0.5f
+        val isUp = changeVal >= 0.0
+        val isGreen = if (colorSchemeMode == "inverted") !isUp else isUp
+        
+        val isZeroChange = item == null || Math.abs(changeVal) < 0.001
+        val targetCardBgColor = if (coloredCardsMode) {
+            if (isZeroChange) {
+                if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE)
+            } else if (isGreen) {
+                if (isDark) Color(0xFF1B382B) else Color(0xFFE8F5E9)
+            } else {
+                if (isDark) Color(0xFF381A1F) else Color(0xFFFFEBEE)
+            }
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+        val cardBgColor by androidx.compose.animation.animateColorAsState(targetValue = targetCardBgColor, label = "CardBgColor")
+        
+        val targetCardContentColor = if (coloredCardsMode) {
+            if (isZeroChange) {
+                if (isDark) Color.White else Color.Black
+            } else if (isGreen) {
+                if (isDark) Color(0xFFE8F5E9) else Color(0xFF1B5E20)
+            } else {
+                if (isDark) Color(0xFFFFEBEE) else Color(0xFF8C1D18)
+            }
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
+        val cardContentColor by androidx.compose.animation.animateColorAsState(targetValue = targetCardContentColor, label = "CardContentColor")
+        
+        val cardTrendColor = if (isZeroChange) {
+            if (isDark) Color.LightGray else Color.Gray
+        } else if (isGreen) {
+            if (isDark) Color(0xFF81C784) else Color(0xFF2E7D32)
+        } else {
+            if (isDark) Color(0xFFE57373) else Color(0xFFC62828)
+        }
+
+        val targetCardBorderColor = if (coloredCardsMode) {
+            Color.Transparent
+        } else {
+            MaterialTheme.colorScheme.outlineVariant
+        }
+        val cardBorderColor by androidx.compose.animation.animateColorAsState(targetValue = targetCardBorderColor, label = "CardBorderColor")
+
+        SecondaryCard(
+            modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
+            title = getLocalizedTitle(item?.Symbol ?: "GOLD", item?.Title ?: "سکه امامی"),
+            subtitle = if (item?.Symbol == "GOLD" || item?.Symbol == "XAU") { if (isEngCard) "Emami Coin / New Design" else "سکه امامی / طرح جدید" } else "${getLocalizedTitle(item?.Symbol ?: "", item?.Title ?: "")} / $unitToman",
+            value = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------",
+            trend = if (item != null) (if (isZeroChange) "—" else if (changeVal >= 0) "↑" else "↓") else "------",
+            trendColor = cardTrendColor,
+            backgroundColor = cardBgColor,
+            contentColor = cardContentColor,
+            borderColor = cardBorderColor
+        )
+    }
+}
+
 @Composable
 fun BentoGrid(
     Items: List<com.mmdparsadev.cheghad.data.models.CurrencyItem>,
@@ -1109,11 +1464,98 @@ fun BentoGrid(
     onSymbolsChanged: (List<String>) -> Unit = {},
     onClickItem: (com.mmdparsadev.cheghad.data.models.CurrencyItem) -> Unit = {}
 ) {
-    val usdItem = Items.find { it.Symbol == homeSymbols.getOrNull(0) ?: "USD" }
-    val eurItem = Items.find { it.Symbol == homeSymbols.getOrNull(1) ?: "EUR" }
-    val goldItem = Items.find { it.Symbol == homeSymbols.getOrNull(2) ?: "GOLD" }
-    val btcItem = Items.find { it.Symbol == homeSymbols.getOrNull(3) ?: "BTC" }
-    val ethItem = Items.find { it.Symbol == homeSymbols.getOrNull(4) ?: "ETH" }
+    val context = LocalContext.current
+    val sharedPrefs = remember { context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE) }
+
+    var row1Merged by remember {
+        mutableStateOf(sharedPrefs.getBoolean("row1_merged", true))
+    }
+    var row2Merged by remember {
+        mutableStateOf(sharedPrefs.getBoolean("row2_merged", false))
+    }
+    var row3Merged by remember {
+        mutableStateOf(sharedPrefs.getBoolean("row3_merged", false))
+    }
+
+    var row1Colored by remember {
+        mutableStateOf(sharedPrefs.getBoolean("row1_colored", true))
+    }
+    var row2Colored by remember {
+        mutableStateOf(sharedPrefs.getBoolean("row2_colored", true))
+    }
+    var row3Colored by remember {
+        mutableStateOf(sharedPrefs.getBoolean("row3_colored", true))
+    }
+
+    val onRowMergeToggled: (Int, Boolean) -> Unit = { rowId, merged ->
+        when (rowId) {
+            1 -> {
+                row1Merged = merged
+                sharedPrefs.edit().putBoolean("row1_merged", merged).apply()
+            }
+            2 -> {
+                row2Merged = merged
+                sharedPrefs.edit().putBoolean("row2_merged", merged).apply()
+            }
+            3 -> {
+                row3Merged = merged
+                sharedPrefs.edit().putBoolean("row3_merged", merged).apply()
+            }
+        }
+    }
+
+    val onRowColorToggled: (Int, Boolean) -> Unit = { rowId, colored ->
+        when (rowId) {
+            1 -> {
+                row1Colored = colored
+                sharedPrefs.edit().putBoolean("row1_colored", colored).apply()
+            }
+            2 -> {
+                row2Colored = colored
+                sharedPrefs.edit().putBoolean("row2_colored", colored).apply()
+            }
+            3 -> {
+                row3Colored = colored
+                sharedPrefs.edit().putBoolean("row3_colored", colored).apply()
+            }
+        }
+    }
+
+    val rowsConfig = remember(row1Merged, row2Merged, row3Merged, row1Colored, row2Colored, row3Colored) {
+        listOf(
+            HomeRowConfig(id = 1, isMerged = row1Merged, style = "hero", isColored = row1Colored),
+            HomeRowConfig(id = 2, isMerged = row2Merged, style = "secondary", isColored = row2Colored),
+            HomeRowConfig(id = 3, isMerged = row3Merged, style = "small", isColored = row3Colored)
+        )
+    }
+
+    val slotIndices = remember(row1Merged, row2Merged, row3Merged) {
+        var currentSlotIndex = 0
+        val indices = mutableListOf<List<Int>>()
+        for (row in rowsConfig) {
+            if (row.isMerged) {
+                indices.add(listOf(currentSlotIndex))
+                currentSlotIndex += 1
+            } else {
+                indices.add(listOf(currentSlotIndex, currentSlotIndex + 1))
+                currentSlotIndex += 2
+            }
+        }
+        indices
+    }
+
+    val totalSlots = remember(row1Merged, row2Merged, row3Merged) {
+        (if (row1Merged) 1 else 2) + (if (row2Merged) 1 else 2) + (if (row3Merged) 1 else 2)
+    }
+
+    val finalHomeSymbols = remember(homeSymbols, totalSlots, Items) {
+        val list = homeSymbols.toMutableList()
+        while (list.size < totalSlots) {
+            val nextAvailable = Items.firstOrNull { it.Symbol !in list }?.Symbol ?: "USD"
+            list.add(nextAvailable)
+        }
+        list
+    }
 
     val upColor = if (colorSchemeMode == "inverted") MaterialTheme.colorScheme.error else Color(0xFF4CAF50)
     val downColor = if (colorSchemeMode == "inverted") Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
@@ -1123,7 +1565,7 @@ fun BentoGrid(
     var replaceSlotIndex by remember { mutableStateOf<Int?>(null) }
 
     var parentCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    val slotCoordinates = remember { mutableStateListOf<LayoutCoordinates?>().apply { repeat(5) { add(null) } } }
+    val slotCoordinates = remember { mutableStateListOf<LayoutCoordinates?>().apply { repeat(10) { add(null) } } }
 
     @Composable
     fun DraggableCardContainer(
@@ -1136,7 +1578,9 @@ fun BentoGrid(
         Box(
             modifier = modifier
                 .onGloballyPositioned { coords ->
-                    slotCoordinates[slotIndex] = coords
+                    if (slotIndex < slotCoordinates.size) {
+                        slotCoordinates[slotIndex] = coords
+                    }
                 }
                 .zIndex(if (isDragging) 10f else 1f)
                 .graphicsLayer {
@@ -1160,11 +1604,14 @@ fun BentoGrid(
                 )
         ) {
             content()
-            if (isEditing) {
-                // Drag handle at top right
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isEditing,
+                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.7f),
+                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.7f),
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
                         .padding(12.dp)
                         .size(24.dp)
                         .clip(CircleShape)
@@ -1177,11 +1624,16 @@ fun BentoGrid(
                         modifier = Modifier.size(14.dp).align(Alignment.Center)
                     )
                 }
+            }
 
-                // Replace/Swap button at top left
+            androidx.compose.animation.AnimatedVisibility(
+                visible = isEditing,
+                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.7f),
+                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.7f),
+                modifier = Modifier.align(Alignment.TopStart)
+            ) {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
                         .padding(12.dp)
                         .size(24.dp)
                         .clip(CircleShape)
@@ -1209,12 +1661,12 @@ fun BentoGrid(
             }
             .then(
                 if (isEditing) {
-                    Modifier.pointerInput(homeSymbols) {
+                    Modifier.pointerInput(finalHomeSymbols, totalSlots) {
                         detectDragGestures(
                             onDragStart = { startPosition ->
                                 val activeParentCoords = parentCoordinates
                                 if (activeParentCoords != null && activeParentCoords.isAttached) {
-                                    for (i in 0..4) {
+                                    for (i in 0 until totalSlots) {
                                         val slotCoords = slotCoordinates[i]
                                         if (slotCoords != null && slotCoords.isAttached) {
                                             val bounds = activeParentCoords.localBoundingBoxOf(slotCoords)
@@ -1239,20 +1691,18 @@ fun BentoGrid(
                                         val draggedBounds = activeParentCoords.localBoundingBoxOf(draggedCoords)
                                         val draggedCenter = draggedBounds.center + dragOffset
                                         
-                                        for (j in 0..4) {
+                                        for (j in 0 until totalSlots) {
                                             if (j != activeDraggedIndex) {
                                                 val otherCoords = slotCoordinates[j]
                                                 if (otherCoords != null && otherCoords.isAttached) {
                                                     val otherBounds = activeParentCoords.localBoundingBoxOf(otherCoords)
                                                     if (otherBounds.contains(draggedCenter)) {
-                                                        // Swap homeSymbols
-                                                        val newList = homeSymbols.toMutableList()
+                                                        val newList = finalHomeSymbols.toMutableList()
                                                         val temp = newList[activeDraggedIndex]
                                                         newList[activeDraggedIndex] = newList[j]
                                                         newList[j] = temp
                                                         onSymbolsChanged(newList)
                                                         
-                                                        // Adjust dragOffset to avoid snapping/jumping
                                                         val originalCenterI = otherBounds.center
                                                         val originalCenterJ = draggedBounds.center
                                                         dragOffset -= (originalCenterI - originalCenterJ)
@@ -1283,277 +1733,151 @@ fun BentoGrid(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Hero Card (slot 0)
-            DraggableCardContainer(
-                slotIndex = 0,
-                shape = RoundedCornerShape(32.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                    Crossfade(targetState = usdItem, animationSpec = tween(400), label = "USD") { item ->
-                        val usdChange = item?.ChangePercentage ?: 0.0
-                        val isDark = MaterialTheme.colorScheme.background.red < 0.5f
-                        val usdIsUp = usdChange >= 0.0
-                        val usdIsGreen = if (colorSchemeMode == "inverted") !usdIsUp else usdIsUp
+            rowsConfig.forEachIndexed { rowIndex, rowConfig ->
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = isEditing,
+                    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
+                    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = when (rowConfig.id) {
+                                1 -> "ردیف اول"
+                                2 -> "ردیف دوم"
+                                else -> "ردیف سوم"
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
                         
-                        val isZeroChange = item == null || Math.abs(usdChange) < 0.001
-                        val heroBgColor = if (isZeroChange) {
-                            if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE)
-                        } else if (usdIsGreen) {
-                            if (isDark) Color(0xFF1B382B) else Color(0xFFE8F5E9)
-                        } else {
-                            if (isDark) Color(0xFF381A1F) else Color(0xFFFFEBEE)
-                        }
-                        
-                        val heroContentColor = if (isZeroChange) {
-                            if (isDark) Color.White else Color.Black
-                        } else if (usdIsGreen) {
-                            if (isDark) Color(0xFFE8F5E9) else Color(0xFF1B5E20)
-                        } else {
-                            if (isDark) Color(0xFFFFEBEE) else Color(0xFF8C1D18)
-                        }
-                        
-                        val heroTrendColor = if (isZeroChange) {
-                            if (isDark) Color.LightGray else Color.Gray
-                        } else if (usdIsGreen) {
-                            if (isDark) Color(0xFF81C784) else Color(0xFF2E7D32)
-                        } else {
-                            if (isDark) Color(0xFFE57373) else Color(0xFFC62828)
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(32.dp))
-                                .background(heroBgColor)
-                                .border(1.dp, heroTrendColor.copy(alpha = 0.3f), RoundedCornerShape(32.dp))
-                                .clickable { if (!isEditing) { item?.let { onClickItem(it) } } }
-                                .padding(24.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(52.dp)
-                                                .clip(RoundedCornerShape(24.dp))
-                                                .background(heroTrendColor.copy(alpha = 0.15f)),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Icon(Icons.Default.AttachMoney, contentDescription = null, tint = heroTrendColor, modifier = Modifier.size(28.dp))
-                                        }
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column {
-                                            Text(getLocalizedTitle(item?.Symbol ?: "USD", item?.Title ?: "دلار آمریکا"), fontSize = adaptiveSp(22f), fontWeight = FontWeight.ExtraBold, color = heroContentColor, fontFamily = getFontFamilyForText(getLocalizedTitle(item?.Symbol ?: "USD", item?.Title ?: "دلار آمریکا")))
-                                            Text(item?.Symbol ?: "USD", fontSize = adaptiveSp(14f), fontWeight = FontWeight.Medium, color = heroContentColor.copy(alpha = 0.7f), fontFamily = getFontFamilyForText(item?.Symbol ?: "USD"))
-                                        }
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(24.dp))
-                                            .background(heroTrendColor.copy(alpha = 0.18f))
-                                            .padding(horizontal = 12.dp, vertical = 6.dp)
-                                    ) {
-                                        val percentStr = if (item != null) formatPercent(usdChange, digitType) else "------"
-                                        androidx.compose.animation.AnimatedContent(
-                                            targetState = percentStr,
-                                            transitionSpec = {
-                                                androidx.compose.animation.fadeIn().togetherWith(androidx.compose.animation.fadeOut())
-                                            },
-                                            label = "PercentAnim"
-                                        ) { pStr ->
-                                            Text(pStr, fontSize = adaptiveSp(13f), fontWeight = FontWeight.Bold, color = heroTrendColor, fontFamily = getFontFamilyForText(pStr))
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(20.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.Bottom
-                                ) {
-                                    Row(verticalAlignment = Alignment.Bottom) {
-                                        val formattedPrice = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------"
-                                        val unitStr = androidx.compose.ui.res.stringResource(R.string.currency_toman)
-                                        androidx.compose.animation.AnimatedContent(
-                                            targetState = formattedPrice,
-                                            transitionSpec = {
-                                                if (targetState > initialState) {
-                                                    (androidx.compose.animation.slideInVertically { height -> height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> -height } + androidx.compose.animation.fadeOut())
-                                                } else {
-                                                    (androidx.compose.animation.slideInVertically { height -> -height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> height } + androidx.compose.animation.fadeOut())
-                                                }
-                                            },
-                                            label = "PriceAnim",
-                                            modifier = Modifier.alignByBaseline()
-                                        ) { price ->
-                                            Text(price, fontSize = adaptiveSp(46f), fontWeight = FontWeight.Bold, color = heroContentColor, fontFamily = getFontFamilyForText(price))
-                                        }
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(unitStr, fontSize = adaptiveSp(17f), fontWeight = FontWeight.Medium, color = heroContentColor.copy(alpha = 0.7f), modifier = Modifier.alignByBaseline(), fontFamily = getFontFamilyForText(unitStr))
-                                    }
-                                }
+                            TextButton(
+                                onClick = {
+                                    onRowColorToggled(rowConfig.id, !rowConfig.isColored)
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Palette,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = if (rowConfig.isColored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (rowConfig.isColored) "رنگی" else "ساده",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (rowConfig.isColored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            TextButton(
+                                onClick = {
+                                    onRowMergeToggled(rowConfig.id, !rowConfig.isMerged)
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (rowConfig.isMerged) Icons.Default.CallSplit else Icons.Default.CallMerge,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (rowConfig.isMerged) "تفکیک" else "ادغام",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
                 }
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Gold Card (slot 2)
-                DraggableCardContainer(
-                    slotIndex = 2,
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Crossfade(targetState = goldItem, animationSpec = tween(400), label = "Gold") { item ->
-                        val isEngCard = java.util.Locale.getDefault().language == "en"
-                        val unitToman = androidx.compose.ui.res.stringResource(R.string.currency_toman)
-                        val goldChange = item?.ChangePercentage ?: 0.0
-                        val isDark = MaterialTheme.colorScheme.background.red < 0.5f
-                        val goldIsUp = goldChange >= 0.0
-                        val goldIsGreen = if (colorSchemeMode == "inverted") !goldIsUp else goldIsUp
+                
+                val slots = slotIndices.getOrNull(rowIndex) ?: emptyList()
+                androidx.compose.animation.AnimatedContent(
+                    targetState = rowConfig.isMerged,
+                    transitionSpec = {
+                        (androidx.compose.animation.fadeIn(
+                            animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+                        ) + androidx.compose.animation.scaleIn(
+                            initialScale = 0.95f,
+                            animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+                        )).togetherWith(
+                            androidx.compose.animation.fadeOut(
+                                animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+                            ) + androidx.compose.animation.scaleOut(
+                                targetScale = 0.95f,
+                                animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+                            )
+                        )
+                    },
+                    label = "RowMergeTransition"
+                ) { isMergedState ->
+                    if (isMergedState) {
+                        val slotIdx = slots.getOrNull(0) ?: 0
+                        val symbol = finalHomeSymbols.getOrNull(slotIdx)
+                        val item = Items.find { it.Symbol == symbol }
                         
-                        val isZeroChange = item == null || Math.abs(goldChange) < 0.001
-                        val goldBgColor = if (isZeroChange) {
-                            if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE)
-                        } else if (goldIsGreen) {
-                            if (isDark) Color(0xFF1B382B) else Color(0xFFE8F5E9)
-                        } else {
-                            if (isDark) Color(0xFF381A1F) else Color(0xFFFFEBEE)
+                        DraggableCardContainer(
+                            slotIndex = slotIdx,
+                            shape = RoundedCornerShape(28.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            RenderCard(
+                                style = rowConfig.style,
+                                item = item,
+                                isMerged = true,
+                                onClickItem = onClickItem,
+                                isEditing = isEditing,
+                                digitType = digitType,
+                                colorSchemeMode = colorSchemeMode,
+                                upColor = upColor,
+                                downColor = downColor,
+                                coloredCardsMode = rowConfig.isColored
+                            )
                         }
-                        val goldContentColor = if (isZeroChange) {
-                            if (isDark) Color.White else Color.Black
-                        } else if (goldIsGreen) {
-                            if (isDark) Color(0xFFE8F5E9) else Color(0xFF1B5E20)
-                        } else {
-                            if (isDark) Color(0xFFFFEBEE) else Color(0xFF8C1D18)
-                        }
-                        val goldTrendColor = if (isZeroChange) {
-                            if (isDark) Color.LightGray else Color.Gray
-                        } else if (goldIsGreen) {
-                            if (isDark) Color(0xFF81C784) else Color(0xFF2E7D32)
-                        } else {
-                            if (isDark) Color(0xFFE57373) else Color(0xFFC62828)
-                        }
-
-                        SecondaryCard(
-                            modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
-                            title = getLocalizedTitle(item?.Symbol ?: "GOLD", item?.Title ?: "سکه امامی"),
-                            subtitle = if (item?.Symbol == "GOLD" || item?.Symbol == "XAU") { if (isEngCard) "Emami Coin / New Design" else "سکه امامی / طرح جدید" } else "${getLocalizedTitle(item?.Symbol ?: "", item?.Title ?: "")} / $unitToman",
-                            value = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------",
-                            trend = if (item != null) (if (goldChange >= 0) "↑" else "↓") else "------",
-                            trendColor = goldTrendColor,
-                            backgroundColor = goldBgColor,
-                            contentColor = goldContentColor
-                        )
-                    }
-                }
-
-                // Bitcoin Card (slot 3)
-                DraggableCardContainer(
-                    slotIndex = 3,
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Crossfade(targetState = btcItem, animationSpec = tween(400), label = "BTC") { item ->
-                        val isEngCard = java.util.Locale.getDefault().language == "en"
-                        val unitToman = androidx.compose.ui.res.stringResource(R.string.currency_toman)
-                        val btcChange = item?.ChangePercentage ?: 0.0
-                        val isDark = MaterialTheme.colorScheme.background.red < 0.5f
-                        val btcIsUp = btcChange >= 0.0
-                        val btcIsGreen = if (colorSchemeMode == "inverted") !btcIsUp else btcIsUp
-                        val isZeroChange = item == null || Math.abs(btcChange) < 0.001
-                        val btcBgColor = if (isZeroChange) {
-                            if (isDark) Color(0xFF333333) else Color(0xFFEEEEEE)
-                        } else if (btcIsGreen) {
-                            if (isDark) Color(0xFF1B382B) else Color(0xFFE8F5E9)
-                        } else {
-                            if (isDark) Color(0xFF381A1F) else Color(0xFFFFEBEE)
-                        }
-                        val btcContentColor = if (isZeroChange) {
-                            if (isDark) Color.White else Color.Black
-                        } else if (btcIsGreen) {
-                            if (isDark) Color(0xFFE8F5E9) else Color(0xFF1B5E20)
-                        } else {
-                            if (isDark) Color(0xFFFFEBEE) else Color(0xFF8C1D18)
-                        }
-                        val btcTrendColor = if (isZeroChange) {
-                            if (isDark) Color.LightGray else Color.Gray
-                        } else if (btcIsGreen) {
-                            if (isDark) Color(0xFF81C784) else Color(0xFF2E7D32)
-                        } else {
-                            if (isDark) Color(0xFFE57373) else Color(0xFFC62828)
-                        }
-
-                        SecondaryCard(
-                            modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
-                            title = getLocalizedTitle(item?.Symbol ?: "BTC", item?.Title ?: "بیت‌کوین"),
-                            subtitle = if (item?.Symbol == "BTC") { if (isEngCard) "Bitcoin / Toman" else "بیت‌کوین / تومان" } else "${getLocalizedTitle(item?.Symbol ?: "", item?.Title ?: "")} / $unitToman",
-                            value = if (item != null) formatPrice(item.CurrentPrice, digitType, item?.Symbol ?: "BTC") else "------",
-                            trend = if (item != null) (if (btcChange >= 0) "↑" else "↓") else "------",
-                            trendColor = btcTrendColor,
-                            backgroundColor = btcBgColor,
-                            contentColor = btcContentColor
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                // Ethereum Card (slot 4)
-                DraggableCardContainer(
-                    slotIndex = 4,
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Crossfade(targetState = ethItem, animationSpec = tween(400), label = "ETH") { item ->
-                        SmallCard(
-                            modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
-                            icon = if (item?.Symbol == "ETH") "Ξ" else (item?.Symbol?.take(1) ?: "Ξ"),
-                            value = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------",
-                            trend = if (item != null) formatPercent(item.ChangePercentage, digitType) else "------",
-                            trendColor = run {
-                                val change = item?.ChangePercentage ?: 0.0
-                                val isZeroChange = item == null || Math.abs(change) < 0.001
-                                val isDark = MaterialTheme.colorScheme.background.red < 0.5f
-                                if (isZeroChange) {
-                                    if (isDark) Color.LightGray else Color.Gray
-                                } else if (change >= 0) upColor else downColor
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            slots.forEach { slotIdx ->
+                                val symbol = finalHomeSymbols.getOrNull(slotIdx)
+                                val item = Items.find { it.Symbol == symbol }
+                                
+                                DraggableCardContainer(
+                                    slotIndex = slotIdx,
+                                    shape = RoundedCornerShape(28.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    RenderCard(
+                                        style = rowConfig.style,
+                                        item = item,
+                                        isMerged = false,
+                                        onClickItem = onClickItem,
+                                        isEditing = isEditing,
+                                        digitType = digitType,
+                                        colorSchemeMode = colorSchemeMode,
+                                        upColor = upColor,
+                                        downColor = downColor,
+                                        coloredCardsMode = rowConfig.isColored
+                                    )
+                                }
                             }
-                        )
-                    }
-                }
-
-                // Euro Card (slot 1)
-                DraggableCardContainer(
-                    slotIndex = 1,
-                    shape = RoundedCornerShape(28.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Crossfade(targetState = eurItem, animationSpec = tween(400), label = "EUR") { item ->
-                        SmallCard(
-                            modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
-                            icon = if (item?.Symbol == "EUR") "€" else (item?.Symbol?.take(1) ?: "€"),
-                            value = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------",
-                            trend = if (item != null) formatPercent(item.ChangePercentage, digitType) else "------",
-                            trendColor = run {
-                                val change = item?.ChangePercentage ?: 0.0
-                                val isZeroChange = item == null || Math.abs(change) < 0.001
-                                val isDark = MaterialTheme.colorScheme.background.red < 0.5f
-                                if (isZeroChange) {
-                                    if (isDark) Color.LightGray else Color.Gray
-                                } else if (change >= 0) upColor else downColor
-                            }
-                        )
+                        }
                     }
                 }
             }
@@ -1562,7 +1886,7 @@ fun BentoGrid(
 
     if (replaceSlotIndex != null) {
         val slotIdx = replaceSlotIndex!!
-        val availableItems = Items.filter { it.Symbol !in homeSymbols }
+        val availableItems = Items.filter { it.Symbol !in finalHomeSymbols.take(totalSlots) }
         
         AlertDialog(
             onDismissRequest = { replaceSlotIndex = null },
@@ -1597,7 +1921,7 @@ fun BentoGrid(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        val newList = homeSymbols.toMutableList()
+                                        val newList = finalHomeSymbols.toMutableList()
                                         if (slotIdx < newList.size) {
                                             newList[slotIdx] = item.Symbol
                                             onSymbolsChanged(newList)
@@ -1676,12 +2000,14 @@ fun SecondaryCard(
     trend: String,
     trendColor: Color,
     backgroundColor: Color,
-    contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer
+    contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
+    borderColor: Color = Color.Transparent
 ) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(28.dp))
             .background(backgroundColor)
+            .border(1.dp, borderColor, RoundedCornerShape(28.dp))
             .padding(20.dp)
     ) {
         Column {
@@ -1717,24 +2043,27 @@ fun SmallCard(
     icon: String,
     value: String,
     trend: String,
-    trendColor: Color
+    trendColor: Color,
+    backgroundColor: Color = MaterialTheme.colorScheme.surface,
+    contentColor: Color = MaterialTheme.colorScheme.onBackground,
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant
 ) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(28.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(28.dp))
+            .background(backgroundColor)
+            .border(1.dp, borderColor, RoundedCornerShape(28.dp))
             .padding(18.dp)
     ) {
         Column {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-                    Text(icon, fontSize = adaptiveSp(12f), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, fontFamily = getFontFamilyForText(icon))
+                    Text(icon, fontSize = adaptiveSp(12f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(icon))
                 }
                 Text(trend, fontSize = adaptiveSp(12f), fontWeight = FontWeight.Bold, color = trendColor, fontFamily = getFontFamilyForText(trend))
             }
             Spacer(modifier = Modifier.height(10.dp))
-            Text(value, fontSize = adaptiveSp(15f), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, fontFamily = getFontFamilyForText(value))
+            Text(value, fontSize = adaptiveSp(15f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(value))
         }
     }
 }
@@ -1872,10 +2201,14 @@ fun AssetListItem(
                 fontWeight = FontWeight.Bold, 
                 color = MaterialTheme.colorScheme.onBackground
             )
+            val isZeroChange = Math.abs(item.ChangePercentage) < 0.001
+            val isDark = MaterialTheme.colorScheme.background.red < 0.5f
             val isNegative = item.ChangePercentage < 0
             val upColor = if (colorSchemeMode == "inverted") MaterialTheme.colorScheme.error else Color(0xFF4CAF50)
             val downColor = if (colorSchemeMode == "inverted") Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
-            val color = if (isNegative) downColor else upColor
+            val color = if (isZeroChange) {
+                if (isDark) Color.LightGray else Color.Gray
+            } else if (isNegative) downColor else upColor
             Text(
                 text = formatPercent(item.ChangePercentage, digitType), 
                 fontSize = 12.sp, 
@@ -2073,17 +2406,31 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
+                    val themeOptions = listOf("system" to "سیستم", "light" to "روشن", "dark" to "تاریک")
+                    val themeIcons = listOf(Icons.Default.SettingsSuggest, Icons.Default.LightMode, Icons.Default.DarkMode)
+                    val selectedThemeIndex = themeOptions.indexOfFirst { it.first == selectedTheme }.coerceAtLeast(0)
+
                     ExpressiveConnectedButtonGroup(
-                        itemsCount = 3,
-                        selectedIndex = listOf("system", "light", "dark").indexOf(selectedTheme),
-                        onSelect = { selectedTheme = listOf("system", "light", "dark")[it] }
+                        itemsCount = themeOptions.size,
+                        selectedIndex = selectedThemeIndex,
+                        onSelect = { selectedTheme = themeOptions[it].first }
                     ) { index, isSelected ->
-                        val labels = listOf("System", "Light", "Dark")
-                        val icons = listOf(Icons.Default.SettingsSuggest, Icons.Default.LightMode, Icons.Default.DarkMode)
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-                            Icon(icons[index], contentDescription = null, tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = themeIcons[index],
+                                contentDescription = null,
+                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(labels[index], fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium)
+                            Text(
+                                text = themeOptions[index].second,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
                         }
                     }
 
@@ -2381,87 +2728,6 @@ fun EditHomeBottomSheet(
     }
 }
 
-@Composable
-fun ExpressiveConnectedButtonGroup(
-    modifier: Modifier = Modifier,
-    itemsCount: Int,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    spacing: androidx.compose.ui.unit.Dp = 4.dp,
-    height: androidx.compose.ui.unit.Dp = 46.dp,
-    content: @Composable (index: Int, isSelected: Boolean) -> Unit
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(spacing),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val cornerFull = 23.dp
-        val cornerFlat = 6.dp
-
-        for (index in 0 until itemsCount) {
-            val isSelected = index == selectedIndex
-            val isPrevSelected = selectedIndex == index - 1
-            val isNextSelected = selectedIndex == index + 1
-
-            val topStartAnimated by animateDpAsState(
-                targetValue = if (isSelected || index == 0 || isPrevSelected) cornerFull else cornerFlat,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
-                label = "topStart_$index"
-            )
-            val bottomStartAnimated by animateDpAsState(
-                targetValue = if (isSelected || index == 0 || isPrevSelected) cornerFull else cornerFlat,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
-                label = "bottomStart_$index"
-            )
-            val topEndAnimated by animateDpAsState(
-                targetValue = if (isSelected || index == itemsCount - 1 || isNextSelected) cornerFull else cornerFlat,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
-                label = "topEnd_$index"
-            )
-            val bottomEndAnimated by animateDpAsState(
-                targetValue = if (isSelected || index == itemsCount - 1 || isNextSelected) cornerFull else cornerFlat,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
-                label = "bottomEnd_$index"
-            )
-
-            val animatedShape = RoundedCornerShape(
-                topStart = topStartAnimated,
-                bottomStart = bottomStartAnimated,
-                topEnd = topEndAnimated,
-                bottomEnd = bottomEndAnimated
-            )
-
-            Button(
-                onClick = { onSelect(index) },
-                shape = animatedShape,
-                modifier = Modifier
-                    .weight(1f)
-                    .height(height),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                border = if (isSelected) {
-                    BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                } else {
-                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                },
-                colors = if (isSelected) {
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.45f),
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                elevation = if (isSelected) ButtonDefaults.buttonElevation(defaultElevation = 2.dp) else ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
-            ) {
-                content(index, isSelected)
-            }
-        }
-    }
-}
 
 @Composable
 fun SettingsCard(
@@ -2599,7 +2865,9 @@ fun SettingsScreen(
     disabledNewsCategories: Set<String> = emptySet(),
     onDisabledNewsCategoriesChanged: (Set<String>) -> Unit = {},
     disabledNewsAgencies: Set<String> = emptySet(),
-    onDisabledNewsAgenciesChanged: (Set<String>) -> Unit = {}
+    onDisabledNewsAgenciesChanged: (Set<String>) -> Unit = {},
+    isCheckingUpdates: Boolean = false,
+    onCheckForUpdates: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -2961,6 +3229,64 @@ fun SettingsScreen(
         }
 
         Spacer(modifier = Modifier.height(20.dp))
+
+        // Check for Updates Section
+        SettingsCard(
+            title = "بررسی بروزرسانی",
+            subtitle = "نسخه فعلی: ${com.mmdparsadev.cheghad.BuildConfig.VERSION_NAME}",
+            icon = Icons.Default.SystemUpdate
+        ) {
+            Surface(
+                onClick = onCheckForUpdates,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (isCheckingUpdates) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (isCheckingUpdates) "در حال بررسی گیت‌هاب..." else "بررسی و دریافت نسخه جدید",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // About & Version Card
         Card(
@@ -3434,11 +3760,24 @@ fun AssetDetailDialog(
                 verticalAlignment = Alignment.Bottom
             ) {
                 Column {
-                    Text(
-                        text = displayLabel,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                    )
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = displayLabel.toLocalizedDigits(digitType),
+                        transitionSpec = {
+                            (androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(200)) +
+                             androidx.compose.animation.slideInVertically(animationSpec = androidx.compose.animation.core.tween(200)) { height -> height / 2 })
+                            .togetherWith(
+                                androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(150)) +
+                                androidx.compose.animation.slideOutVertically(animationSpec = androidx.compose.animation.core.tween(150)) { height -> -height / 2 }
+                            )
+                        },
+                        label = "DialogLabelAnim"
+                    ) { localizedLabel ->
+                        Text(
+                            text = localizedLabel,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     androidx.compose.animation.AnimatedContent(
                         targetState = formattedDisplayPrice,
@@ -3460,8 +3799,12 @@ fun AssetDetailDialog(
                     }
                 }
                 
+                val isZeroChange = Math.abs(item.ChangePercentage) < 0.001
+                val isDark = MaterialTheme.colorScheme.background.red < 0.5f
                 val isNegative = item.ChangePercentage < 0
-                val changeColor = if (isNegative) downColor else upColor
+                val changeColor = if (isZeroChange) {
+                    if (isDark) Color.LightGray else Color.Gray
+                } else if (isNegative) downColor else upColor
                 androidx.compose.animation.AnimatedContent(
                     targetState = formatPercent(item.ChangePercentage, digitType),
                     label = "DialogPercentAnim"
@@ -3603,7 +3946,7 @@ fun AssetDetailDialog(
                     val context = androidx.compose.ui.platform.LocalContext.current
                     Button(
                         onClick = {
-                            val price = targetPriceStr.toDoubleOrNull()
+                            val price = parseTargetPrice(targetPriceStr)
                             if (price == null || price <= 0.0) {
                                 Toast.makeText(context, context.getString(R.string.alarm_invalid_price), Toast.LENGTH_SHORT).show()
                             } else {
@@ -3700,7 +4043,7 @@ fun EditAlarmDialog(
                 val context = androidx.compose.ui.platform.LocalContext.current
                 Button(
                     onClick = {
-                        val price = targetPriceStr.toDoubleOrNull()
+                        val price = parseTargetPrice(targetPriceStr)
                         if (price == null || price <= 0.0) {
                             Toast.makeText(context, context.getString(R.string.alarm_invalid_price), Toast.LENGTH_SHORT).show()
                         } else {
@@ -4255,4 +4598,13 @@ fun CurrencyCalculatorScreen(
             }
         }
     }
+}
+
+fun parseTargetPrice(priceStr: String): Double? {
+    var str = priceStr.replace(",", "").replace("،", "").replace("٫", ".")
+    val persianNumbers = arrayOf("۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹")
+    for (i in persianNumbers.indices) {
+        str = str.replace(persianNumbers[i], i.toString())
+    }
+    return str.toDoubleOrNull()
 }

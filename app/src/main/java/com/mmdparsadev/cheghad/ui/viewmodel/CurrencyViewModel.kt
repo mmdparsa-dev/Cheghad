@@ -165,7 +165,7 @@ class CurrencyViewModel(
         viewModelScope.launch {
             while (isActive) {
                 FetchData(IsManualRefresh = false)
-                delay(7 * 60 * 1000L) // 7 minutes
+                delay(3 * 60 * 1000L) // 3 minutes
             }
         }
     }

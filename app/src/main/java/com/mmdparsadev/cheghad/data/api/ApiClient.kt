@@ -46,71 +46,122 @@ object ApiClient {
             }
 
             var usdIrr = 62450.0
-            val parsedPrices = mutableMapOf<String, Double>()
-            val parsedPercentages = mutableMapOf<String, Double>()
+            val parsedPrices = java.util.concurrent.ConcurrentHashMap<String, Double>()
+            val parsedPercentages = java.util.concurrent.ConcurrentHashMap<String, Double>()
+
+            val executor = java.util.concurrent.Executors.newFixedThreadPool(2)
+            val fetchedBitpinPrice = java.util.concurrent.atomic.AtomicReference<Double?>(null)
+            val fetchedBitpinChange = java.util.concurrent.atomic.AtomicReference<Double?>(null)
+
+            val tgjuTask = java.util.concurrent.CompletableFuture.runAsync({
+                try {
+                    // Fetch real rates from tgju.org
+                    val client = okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(6, TimeUnit.SECONDS)
+                        .readTimeout(6, TimeUnit.SECONDS)
+                        .build()
+                    val request = okhttp3.Request.Builder()
+                        .url("https://www.tgju.org/currency")
+                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+                        .header("Accept-Language", "fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7")
+                        .build()
+                    val response = client.newCall(request).execute()
+                    if (response.isSuccessful) {
+                        val html = response.body?.string() ?: ""
+                        
+                        // 1. Parse table row prices and change percentages
+                        val rowRegex = """data-market-row="([^"]+)"[^>]*>.*?<td[^>]*>([^<]+)</td>\s*<td[^>]*>(.*?)</td>""".toRegex(RegexOption.DOT_MATCHES_ALL)
+                        rowRegex.findAll(html).forEach { match ->
+                            val rowMatch = match.value
+                            val key = match.groups[1]?.value ?: ""
+                            val valStr = match.groups[2]?.value ?: ""
+                            val changeCell = match.groups[3]?.value ?: ""
+                            val price = valStr.toEnDigits().replace(",", "").replace(" ", "").trim().toDoubleOrNull()
+                            if (key.isNotEmpty() && price != null && price > 0) {
+                                parsedPrices[key] = price
+                                val pctMatch = """\(([-+]?[0-9]*\.?[0-9]+)%\)""".toRegex().find(changeCell)
+                                if (pctMatch != null) {
+                                    pctMatch.groups[1]?.value?.toDoubleOrNull()?.let { pct ->
+                                        val isNegative = rowMatch.contains("low") || changeCell.contains("low") || changeCell.contains("-")
+                                        parsedPercentages[key] = if (isNegative && pct > 0) -pct else pct
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 2. Parse li card prices and change percentages
+                        val liRegex = """<li\s+[^>]*id="(l-[a-zA-Z0-9_-]+)"[^>]*>.*?class="info-price"[^>]*>([^<]+)</span>\s*<span[^>]*class="info-change"[^>]*>(.*?)</span>""".toRegex(RegexOption.DOT_MATCHES_ALL)
+                        liRegex.findAll(html).forEach { match ->
+                            val fullMatch = match.value
+                            val key = match.groups[1]?.value ?: ""
+                            val valStr = match.groups[2]?.value ?: ""
+                            val changeStr = match.groups[3]?.value ?: ""
+                            val price = valStr.toEnDigits().replace(",", "").replace(" ", "").trim().toDoubleOrNull()
+                            if (key.isNotEmpty() && price != null && price > 0) {
+                                parsedPrices[key] = price
+                                val pctMatch = """\(([-+]?[0-9]*\.?[0-9]+)%\)""".toRegex().find(changeStr)
+                                if (pctMatch != null) {
+                                    pctMatch.groups[1]?.value?.toDoubleOrNull()?.let { pct ->
+                                        val isNegative = fullMatch.contains("low") || changeStr.contains("low") || changeStr.contains("-")
+                                        parsedPercentages[key] = if (isNegative && pct > 0) -pct else pct
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }, executor)
+
+            val bitpinTask = java.util.concurrent.CompletableFuture.runAsync({
+                try {
+                    val bitpinClient = okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
+                        .build()
+                    val bitpinRequest = okhttp3.Request.Builder()
+                        .url("https://api.bitpin.ir/v1/mkt/markets/")
+                        .build()
+                    val bitpinResponse = bitpinClient.newCall(bitpinRequest).execute()
+                    if (bitpinResponse.isSuccessful) {
+                        val body = bitpinResponse.body?.string() ?: ""
+                        val json = org.json.JSONObject(body)
+                        val results = json.optJSONArray("results")
+                        if (results != null) {
+                            for (i in 0 until results.length()) {
+                                val item = results.optJSONObject(i)
+                                if (item?.optString("code") == "USOON_IRT") {
+                                    val priceStr = item.optString("price")
+                                    val price = priceStr.toDoubleOrNull()
+                                    if (price != null && price > 0) fetchedBitpinPrice.set(price)
+                                    
+                                    val priceInfo = item.optJSONObject("price_info")
+                                    if (priceInfo != null) {
+                                        val change = priceInfo.optDouble("change", 0.0)
+                                        fetchedBitpinChange.set(change)
+                                    }
+                                    break
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }, executor)
 
             try {
-                // Fetch real rates from tgju.org
-                val client = okhttp3.OkHttpClient.Builder()
-                    .connectTimeout(10, TimeUnit.SECONDS)
-                    .readTimeout(10, TimeUnit.SECONDS)
-                    .build()
-                val request = okhttp3.Request.Builder()
-                    .url("https://www.tgju.org/currency")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-                    .header("Accept-Language", "fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7")
-                    .build()
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    val html = response.body?.string() ?: ""
-                    
-                    // 1. Parse table row prices and change percentages
-                    val rowRegex = """data-market-row="([^"]+)"[^>]*>.*?<td[^>]*>([^<]+)</td>\s*<td[^>]*>(.*?)</td>""".toRegex(RegexOption.DOT_MATCHES_ALL)
-                    rowRegex.findAll(html).forEach { match ->
-                        val rowMatch = match.value
-                        val key = match.groups[1]?.value ?: ""
-                        val valStr = match.groups[2]?.value ?: ""
-                        val changeCell = match.groups[3]?.value ?: ""
-                        val price = valStr.toEnDigits().replace(",", "").replace(" ", "").trim().toDoubleOrNull()
-                        if (key.isNotEmpty() && price != null && price > 0) {
-                            parsedPrices[key] = price
-                            val pctMatch = """\(([-+]?[0-9]*\.?[0-9]+)%\)""".toRegex().find(changeCell)
-                            if (pctMatch != null) {
-                                pctMatch.groups[1]?.value?.toDoubleOrNull()?.let { pct ->
-                                    val isNegative = rowMatch.contains("low") || changeCell.contains("low") || changeCell.contains("-")
-                                    parsedPercentages[key] = if (isNegative && pct > 0) -pct else pct
-                                }
-                            }
-                        }
-                    }
-                    
-                    // 2. Parse li card prices and change percentages
-                    val liRegex = """<li\s+[^>]*id="(l-[a-zA-Z0-9_-]+)"[^>]*>.*?class="info-price"[^>]*>([^<]+)</span>\s*<span[^>]*class="info-change"[^>]*>(.*?)</span>""".toRegex(RegexOption.DOT_MATCHES_ALL)
-                    liRegex.findAll(html).forEach { match ->
-                        val fullMatch = match.value
-                        val key = match.groups[1]?.value ?: ""
-                        val valStr = match.groups[2]?.value ?: ""
-                        val changeStr = match.groups[3]?.value ?: ""
-                        val price = valStr.toEnDigits().replace(",", "").replace(" ", "").trim().toDoubleOrNull()
-                        if (key.isNotEmpty() && price != null && price > 0) {
-                            parsedPrices[key] = price
-                            val pctMatch = """\(([-+]?[0-9]*\.?[0-9]+)%\)""".toRegex().find(changeStr)
-                            if (pctMatch != null) {
-                                pctMatch.groups[1]?.value?.toDoubleOrNull()?.let { pct ->
-                                    val isNegative = fullMatch.contains("low") || changeStr.contains("low") || changeStr.contains("-")
-                                    parsedPercentages[key] = if (isNegative && pct > 0) -pct else pct
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    throw java.io.IOException("Failed to fetch data from TGJU: ${response.code}")
-                }
+                java.util.concurrent.CompletableFuture.allOf(tgjuTask, bitpinTask).get(7, java.util.concurrent.TimeUnit.SECONDS)
             } catch (e: Exception) {
-                if (e is java.io.IOException) throw e
                 e.printStackTrace()
-                throw java.io.IOException("Network error while fetching prices", e)
+            } finally {
+                executor.shutdown()
+            }
+
+            if (fetchedBitpinChange.get() != null) {
+                parsedPercentages["usoon_bitpin"] = fetchedBitpinChange.get()!!
             }
 
             // Extract USD first to use as a fallback base for other currencies
@@ -141,6 +192,8 @@ object ApiClient {
             // Convert crypto prices to Toman (IRT)
             val randBTC = rawBTCUSD * randUSD
             val randETH = rawETHUSD * randUSD
+
+            val usoonPrice = fetchedBitpinPrice.get() ?: fluctuate(135.0 * randUSD, 0.02)
 
             val randGOLD = parsedPrices["l-sekee"]?.let { it / 10.0 } ?: fluctuate(42000000.0, 0.005)
             val randXAU = parsedPrices["l-ons"] ?: fluctuate(2350.0, 0.004)
@@ -196,6 +249,7 @@ object ApiClient {
                         
                         ${itemJson("16", "BTC", "Bitcoin", randBTC, getBasePrice("l-crypto-bitcoin", randBTC), "crypto")},
                         ${itemJson("17", "ETH", "Ethereum", randETH, getBasePrice("l-crypto-ethereum", randETH), "crypto")},
+                        ${itemJson("24", "USOON", "Ondo US Oil", usoonPrice, getBasePrice("usoon_bitpin", usoonPrice), "crypto", "https://cdn.bitpin.ir/media/market/currency/1771999775.svg")},
                         
                         ${itemJson("18", "GOLD", "Gold Coin (Emami)", randGOLD, getBasePrice("l-sekee", randGOLD), "gold_and_coin")},
                         ${itemJson("19", "XAU", "Gold Ounce", randXAU, getBasePrice("l-ons", randXAU), "gold_and_coin")},

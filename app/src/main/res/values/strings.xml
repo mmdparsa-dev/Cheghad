@@ -1,5 +1,9 @@
 <resources>
     <string name="app_name">Cheghad</string>
+    <string name="widget_1_desc">نمایش قیمت ۱ ارز در ویجت کوچک</string>
+    <string name="widget_2_desc">نمایش قیمت ۲ ارز در ویجت متوسط</string>
+    <string name="widget_4_desc">نمایش لیست ۴ ارز زنده</string>
+    <string name="widget_6_desc">نمایش کامل لیست ۶ ارز زنده</string>
     <string name="category_currency">Currencies</string>
     <string name="category_gold_and_coin">Gold &amp; Coins</string>
     <string name="category_crypto">Cryptocurrency</string>

@@ -81,7 +81,7 @@ class CurrencyRepository(
                 }
 
                 val primarySymbol = when(symbol.uppercase()) {
-                    "USD", "USDT" -> "USDTIRT"
+                    "USD", "USDT", "USOON" -> "USDTIRT"
                     "BTC" -> "BTCIRT"
                     "ETH" -> "ETHIRT"
                     "GOLD", "XAU" -> "PAXGIRT"

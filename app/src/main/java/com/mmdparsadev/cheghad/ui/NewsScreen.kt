@@ -72,7 +72,7 @@ fun NewsScreen(
         }.sortedByDescending { it.pubTimestamp }
     }
 
-    PullToRefreshBox(
+    ExpressivePullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = onRefresh,
         modifier = Modifier
