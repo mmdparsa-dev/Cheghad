@@ -19,7 +19,7 @@ android {
     minSdk = 24
     targetSdk = 37
     versionCode = 7
-    versionName = "0.7.7 - Beta"
+    versionName = "0.7.9 - Beta"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -57,6 +57,7 @@ android {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
   }
+  //noinspection WrongGradleMethod
   kotlin {
     compilerOptions {
       jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)

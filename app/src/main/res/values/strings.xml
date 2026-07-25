@@ -111,7 +111,7 @@
     <string name="digits_fa">Persian</string>
     <string name="digits_en">English</string>
     <string name="digits_ar">Arabic</string>
-    <string name="version_label">Version: 0.7.0 - Beta</string>
+    <string name="version_label">Version: %s</string>
     <string name="replace_hero_title">Replace Main Card</string>
     <string name="no_new_options">No new options available to replace.</string>
     <string name="cancel">Cancel</string>

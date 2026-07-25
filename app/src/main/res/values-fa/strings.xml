@@ -107,7 +107,7 @@
     <string name="digits_fa">فارسی</string>
     <string name="digits_en">انگلیسی</string>
     <string name="digits_ar">عربی</string>
-    <string name="version_label">نسخه: ۰.۷.۰ - بتا</string>
+    <string name="version_label">نسخه %s</string>
     <string name="replace_hero_title">جایگزینی کارت اصلی</string>
     <string name="no_new_options">هیچ گزینه جدیدی برای جایگزینی وجود ندارد.</string>
     <string name="cancel">انصراف</string>
