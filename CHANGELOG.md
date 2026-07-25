@@ -1,5 +1,21 @@
 # 0.7.8
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
+## [v0.7.9 - Beta] - 2026-07-25
+
+# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
+## The Changes:
+
+- Correct the App Version in Settings 
+- Fix Loop Update
+- Fix Bugs
+# 🚀 نسسسسسخه جدیییییدددددد!
+## تغییرات:
+
+- درست کردن ورژن اپ در تنظیمات
+- حل مشکل اپدیت پشت سرهم
+- فیکس کردن باگ ها
+
+
 ## The Changes:
 
 - Fix Update Problem
