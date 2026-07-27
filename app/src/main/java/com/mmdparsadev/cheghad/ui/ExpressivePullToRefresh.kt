@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.mmdparsadev.cheghad.ui.theme.getFontFamilyForText
+import com.mmdparsadev.cheghad.ui.theme.ExpressiveAnimations
 
 /**
  * Official Material 3 Expressive Loading Indicator.
@@ -64,16 +65,13 @@ fun ExpressivePullToRefreshIndicator(
     // Animated scale and opacity based on pull distance or refresh state
     val containerScale by animateFloatAsState(
         targetValue = if (isRefreshing) 1f else (distanceFraction * 0.95f).coerceIn(0f, 1.15f),
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = ExpressiveAnimations.defaultSpatial(),
         label = "containerScale"
     )
 
     val alphaFraction by animateFloatAsState(
         targetValue = if (isRefreshing) 1f else distanceFraction.coerceIn(0f, 1f),
-        animationSpec = tween(150),
+        animationSpec = ExpressiveAnimations.defaultEffects(),
         label = "alphaFraction"
     )
 

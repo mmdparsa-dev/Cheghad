@@ -39,16 +39,23 @@ class CurrencyRepository(
     suspend fun FetchLivePrices(): NetworkResult<List<CurrencyItem>> {
         return withContext(Dispatchers.IO) {
             try {
-                val Response = Api.GetLivePrices()
-                NetworkResult.Success(Response.Items)
-            } catch (E: SocketTimeoutException) {
-                NetworkResult.Error(R.string.error_timeout, E)
-            } catch (E: IOException) {
-                NetworkResult.Error(R.string.error_network, E)
-            } catch (E: HttpException) {
-                NetworkResult.Error(R.string.error_server, E)
-            } catch (E: Exception) {
-                NetworkResult.Error(R.string.error_server, E)
+                val response = Api.GetLivePrices()
+                if (response.Items.isNotEmpty()) {
+                    saveCurrenciesToCache(response.Items)
+                }
+                NetworkResult.Success(response.Items, IsFresh = true)
+            } catch (e: Exception) {
+                val cached = getCachedCurrencies()
+                if (cached.isNotEmpty()) {
+                    NetworkResult.Success(cached, IsFresh = false)
+                } else {
+                    val resId = when (e) {
+                        is SocketTimeoutException -> R.string.error_timeout
+                        is IOException -> R.string.error_network
+                        else -> R.string.error_server
+                    }
+                    NetworkResult.Error(resId, e)
+                }
             }
         }
     }

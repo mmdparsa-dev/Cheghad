@@ -34,8 +34,6 @@ class CurrencySyncWorker(
             when (val networkResult = repository.FetchLivePrices()) {
                 is NetworkResult.Success -> {
                     val items = networkResult.Data
-                    repository.saveCurrenciesToCache(items)
-
                     // Check active price alarms in background
                     checkAndTriggerAlarms(applicationContext, database, items)
                     com.mmdparsadev.cheghad.widget.CurrencyWidget().updateAll(applicationContext)

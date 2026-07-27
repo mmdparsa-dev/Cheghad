@@ -67,6 +67,7 @@ import com.mmdparsadev.cheghad.data.api.ApiClient
 import com.mmdparsadev.cheghad.data.repository.CurrencyRepository
 import com.mmdparsadev.cheghad.data.models.*
 import com.mmdparsadev.cheghad.ui.theme.*
+import com.mmdparsadev.cheghad.ui.theme.ExpressiveAnimations
 import com.mmdparsadev.cheghad.ui.viewmodel.CurrencyUiState
 import com.mmdparsadev.cheghad.ui.viewmodel.CurrencyViewModel
 import com.mmdparsadev.cheghad.worker.CurrencySyncWorker
@@ -267,15 +268,20 @@ class MainActivity : AppCompatActivity() {
                     Scaffold(
                         modifier = Modifier.fillMaxSize(),
                         containerColor = MaterialTheme.colorScheme.background,
-                        bottomBar = { BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it }) }
+                        bottomBar = { 
+                            Column {
+                                com.mmdparsadev.cheghad.ui.ConnectivityStatusBanner(uiState = UiState)
+                                BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it }) 
+                            }
+                        }
                     ) { innerPadding ->
                         androidx.compose.animation.AnimatedContent(
                             targetState = currentScreen,
                             transitionSpec = {
-                                (androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(400)) +
-                                        androidx.compose.animation.slideInHorizontally(initialOffsetX = { fullWidth -> fullWidth / 4 })) togetherWith
-                                        (androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(400)) +
-                                                androidx.compose.animation.slideOutHorizontally(targetOffsetX = { fullWidth -> -fullWidth / 4 }))
+                                (androidx.compose.animation.fadeIn(animationSpec = ExpressiveAnimations.defaultEffects()) +
+                                        androidx.compose.animation.slideInHorizontally(animationSpec = ExpressiveAnimations.defaultSpatial(), initialOffsetX = { fullWidth -> fullWidth / 4 })) togetherWith
+                                        (androidx.compose.animation.fadeOut(animationSpec = ExpressiveAnimations.defaultEffects()) +
+                                                androidx.compose.animation.slideOutHorizontally(animationSpec = ExpressiveAnimations.defaultSpatial(), targetOffsetX = { fullWidth -> -fullWidth / 4 }))
                             },
                             label = "ScreenTransition"
                         ) { screen ->
@@ -288,10 +294,10 @@ class MainActivity : AppCompatActivity() {
                                     Column(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(horizontal = 16.dp)
+                                            .padding(horizontal = adaptiveDp(16f))
                                             .verticalScroll(homeScrollState)
                                     ) {
-                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
                                         TopAppBar(
                                             UiState = UiState,
                                             isEditingHome = isEditingHome,
@@ -300,7 +306,7 @@ class MainActivity : AppCompatActivity() {
                                             OnRefresh = { ViewModel.RefreshData() },
                                             OnEditHome = { isEditingHome = !isEditingHome }
                                         )
-                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
                                         BentoGrid(
                                             Items = UiState.Items,
                                             homeSymbols = homeItemSymbols,
@@ -315,7 +321,7 @@ class MainActivity : AppCompatActivity() {
                                                 selectedItemForDetail = item
                                             }
                                         )
-                                        Spacer(modifier = Modifier.height(20.dp))
+                                        Spacer(modifier = Modifier.height(adaptiveDp(20f)))
                                         CategoryChips(
                                             selectedCategory = UiState.SelectedCategory,
                                             onCategorySelected = { cat ->
@@ -325,15 +331,15 @@ class MainActivity : AppCompatActivity() {
                                                 }
                                             }
                                         )
-                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
                                         AnimatedContent(
                                             targetState = UiState.SelectedCategory,
                                             transitionSpec = {
-                                                (fadeIn(animationSpec = tween(350, easing = FastOutSlowInEasing)) +
-                                                        slideInVertically(animationSpec = tween(350, easing = FastOutSlowInEasing), initialOffsetY = { 30 }))
+                                                (fadeIn(animationSpec = ExpressiveAnimations.defaultEffects()) +
+                                                        slideInVertically(animationSpec = ExpressiveAnimations.defaultSpatial(), initialOffsetY = { 30 }))
                                                     .togetherWith(
-                                                        fadeOut(animationSpec = tween(200, easing = FastOutLinearInEasing))
+                                                        fadeOut(animationSpec = ExpressiveAnimations.fastEffects())
                                                     )
                                             },
                                             label = "CategoryTransition"
@@ -772,7 +778,8 @@ fun getLocalizedTitle(symbol: String, rawTitle: String): String {
             s == "SUI" -> "Sui"
             s == "UNI" -> "Uniswap"
             s == "USOON" -> "Ondo US Oil"
-            s == "GOLD" || s == "XAU" || s == "PAXG" -> "Emami Gold Coin"
+            s == "GOLD" || s == "PAXG" -> "Emami Gold Coin"
+            s == "XAU" -> "Gold Ounce"
             s == "BAHAR" -> "Bahar Azadi Coin"
             s == "NIM" -> "Half Gold Coin"
             s == "RAB" -> "Quarter Gold Coin"
@@ -820,7 +827,8 @@ fun getLocalizedTitle(symbol: String, rawTitle: String): String {
         s == "SUI" -> "سویی"
         s == "UNI" -> "یونی‌سواپ"
         s == "USOON" -> "توکن نفت (USOON)"
-        s == "GOLD" || s == "XAU" || s == "PAXG" -> "سکه امامی"
+        s == "GOLD" || s == "PAXG" -> "سکه امامی"
+        s == "XAU" -> "انس طلا"
         s == "BAHAR" -> "سکه بهار آزادی"
         s == "NIM" -> "نیم سکه"
         s == "RAB" -> "ربع سکه"
@@ -861,12 +869,25 @@ fun adaptiveSp(baseSp: Float): TextUnit {
     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp
     val scale = when {
-        screenWidthDp >= 840 -> 1.22f
-        screenWidthDp >= 600 -> 1.10f
-        screenWidthDp <= 340 -> 0.90f
+        screenWidthDp >= 840 -> 1.40f
+        screenWidthDp >= 600 -> 1.15f
+        screenWidthDp <= 340 -> 0.88f
         else -> 1.0f
     }
     return (baseSp * scale).sp
+}
+
+@Composable
+fun adaptiveDp(baseDp: Float): androidx.compose.ui.unit.Dp {
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val screenWidthDp = configuration.screenWidthDp
+    val scale = when {
+        screenWidthDp >= 840 -> 1.35f
+        screenWidthDp >= 600 -> 1.12f
+        screenWidthDp <= 340 -> 0.85f
+        else -> 1.0f
+    }
+    return (baseDp * scale).dp
 }
 
 @Composable
@@ -1065,26 +1086,23 @@ fun TopAppBar(
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(adaptiveDp(12f))) {
             val editCornerRadius by androidx.compose.animation.core.animateDpAsState(
-                targetValue = if (isEditingHome) 22.dp else 12.dp,
-                animationSpec = androidx.compose.animation.core.spring(
-                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow
-                ),
+                targetValue = if (isEditingHome) adaptiveDp(22f) else adaptiveDp(12f),
+                animationSpec = ExpressiveAnimations.defaultSpatial(),
                 label = "EditShapeAnim"
             )
 
             val editBgColor by androidx.compose.animation.animateColorAsState(
                 targetValue = if (isEditingHome) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.primaryContainer,
-                animationSpec = androidx.compose.animation.core.tween(400),
+                animationSpec = ExpressiveAnimations.defaultEffects(),
                 label = "EditBgColorAnim"
             )
 
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(adaptiveDp(44f))
                     .clip(RoundedCornerShape(editCornerRadius))
                     .background(editBgColor)
                     .clickable(onClick = OnEditHome),
@@ -1093,9 +1111,9 @@ fun TopAppBar(
                 androidx.compose.animation.AnimatedContent(
                     targetState = isEditingHome,
                     transitionSpec = {
-                        (androidx.compose.animation.scaleIn(animationSpec = androidx.compose.animation.core.spring(dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy)) +
-                                androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200))).togetherWith(
-                            androidx.compose.animation.scaleOut(androidx.compose.animation.core.tween(200)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(200))
+                        (androidx.compose.animation.scaleIn(animationSpec = ExpressiveAnimations.defaultSpatial()) +
+                                androidx.compose.animation.fadeIn(ExpressiveAnimations.fastEffects())).togetherWith(
+                            androidx.compose.animation.scaleOut(ExpressiveAnimations.fastEffects()) + androidx.compose.animation.fadeOut(ExpressiveAnimations.fastEffects())
                         )
                     },
                     label = "EditAnim"
@@ -1104,7 +1122,7 @@ fun TopAppBar(
                         imageVector = if (editing) Icons.Default.Check else Icons.Default.Edit,
                         contentDescription = "Edit Home",
                         tint = if (editing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(adaptiveDp(24f))
                     )
                 }
             }
@@ -1199,7 +1217,11 @@ fun RenderCard(
         } else {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
         }
-        val heroBgColor by androidx.compose.animation.animateColorAsState(targetValue = targetHeroBgColor, label = "HeroBgColor")
+        val heroBgColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetHeroBgColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "HeroBgColor"
+        )
 
         val targetHeroContentColor = if (coloredCardsMode) {
             if (isZeroChange) {
@@ -1212,7 +1234,11 @@ fun RenderCard(
         } else {
             MaterialTheme.colorScheme.onSurface
         }
-        val heroContentColor by androidx.compose.animation.animateColorAsState(targetValue = targetHeroContentColor, label = "HeroContentColor")
+        val heroContentColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetHeroContentColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "HeroContentColor"
+        )
 
         val heroTrendColor = if (isZeroChange) {
             if (isDark) Color.LightGray else Color.Gray
@@ -1227,30 +1253,42 @@ fun RenderCard(
         } else {
             MaterialTheme.colorScheme.outlineVariant
         }
-        val heroBorderColor by androidx.compose.animation.animateColorAsState(targetValue = targetHeroBorderColor, label = "HeroBorderColor")
+        val heroBorderColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetHeroBorderColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "HeroBorderColor"
+        )
 
         val targetHeroIconBg = if (coloredCardsMode) {
             heroTrendColor.copy(alpha = 0.15f)
         } else {
             MaterialTheme.colorScheme.surfaceVariant
         }
-        val heroIconBg by androidx.compose.animation.animateColorAsState(targetValue = targetHeroIconBg, label = "HeroIconBg")
+        val heroIconBg by androidx.compose.animation.animateColorAsState(
+            targetValue = targetHeroIconBg,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "HeroIconBg"
+        )
 
         val targetHeroIconColor = if (coloredCardsMode) {
             heroTrendColor
         } else {
             MaterialTheme.colorScheme.primary
         }
-        val heroIconColor by androidx.compose.animation.animateColorAsState(targetValue = targetHeroIconColor, label = "HeroIconColor")
+        val heroIconColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetHeroIconColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "HeroIconColor"
+        )
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(32.dp))
+                .clip(RoundedCornerShape(adaptiveDp(32f)))
                 .background(heroBgColor)
-                .border(1.dp, heroBorderColor, RoundedCornerShape(32.dp))
+                .border(adaptiveDp(1f), heroBorderColor, RoundedCornerShape(adaptiveDp(32f)))
                 .clickable { if (!isEditing) { item?.let { onClickItem(it) } } }
-                .padding(24.dp)
+                .padding(adaptiveDp(24f))
         ) {
             Column {
                 Row(
@@ -1261,8 +1299,8 @@ fun RenderCard(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
-                                .size(52.dp)
-                                .clip(RoundedCornerShape(24.dp))
+                                .size(adaptiveDp(52f))
+                                .clip(RoundedCornerShape(adaptiveDp(24f)))
                                 .background(heroIconBg),
                             contentAlignment = Alignment.Center
                         ) {
@@ -1273,9 +1311,9 @@ fun RenderCard(
                                 "ETH" -> Icons.Default.Paid
                                 else -> Icons.Default.AttachMoney
                             }
-                            Icon(iconVector, contentDescription = null, tint = heroIconColor, modifier = Modifier.size(28.dp))
+                            Icon(iconVector, contentDescription = null, tint = heroIconColor, modifier = Modifier.size(adaptiveDp(28f)))
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(adaptiveDp(12f)))
                         Column {
                             Text(getLocalizedTitle(item?.Symbol ?: "USD", item?.Title ?: "دلار آمریکا"), fontSize = adaptiveSp(22f), fontWeight = FontWeight.ExtraBold, color = heroContentColor, fontFamily = getFontFamilyForText(getLocalizedTitle(item?.Symbol ?: "USD", item?.Title ?: "دلار آمریکا")))
                             Text(item?.Symbol ?: "USD", fontSize = adaptiveSp(14f), fontWeight = FontWeight.Medium, color = heroContentColor.copy(alpha = 0.7f), fontFamily = getFontFamilyForText(item?.Symbol ?: "USD"))
@@ -1283,15 +1321,15 @@ fun RenderCard(
                     }
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(24.dp))
+                            .clip(RoundedCornerShape(adaptiveDp(24f)))
                             .background(heroTrendColor.copy(alpha = 0.18f))
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .padding(horizontal = adaptiveDp(12f), vertical = adaptiveDp(6f))
                     ) {
                         val percentStr = if (item != null) formatPercent(usdChange, digitType) else "------"
                         androidx.compose.animation.AnimatedContent(
                             targetState = percentStr,
                             transitionSpec = {
-                                androidx.compose.animation.fadeIn().togetherWith(androidx.compose.animation.fadeOut())
+                                androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects()).togetherWith(androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
                             },
                             label = "PercentAnim"
                         ) { pStr ->
@@ -1299,32 +1337,30 @@ fun RenderCard(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(adaptiveDp(20f)))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.Start,
                     verticalAlignment = Alignment.Bottom
                 ) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        val formattedPrice = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------"
-                        val unitStr = androidx.compose.ui.res.stringResource(R.string.currency_toman)
-                        androidx.compose.animation.AnimatedContent(
-                            targetState = formattedPrice,
-                            transitionSpec = {
-                                if (targetState > initialState) {
-                                    (androidx.compose.animation.slideInVertically { height -> height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> -height } + androidx.compose.animation.fadeOut())
-                                } else {
-                                    (androidx.compose.animation.slideInVertically { height -> -height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> height } + androidx.compose.animation.fadeOut())
-                                }
-                            },
-                            label = "PriceAnim",
-                            modifier = Modifier.alignByBaseline()
-                        ) { price ->
-                            Text(price, fontSize = adaptiveSp(46f), fontWeight = FontWeight.Bold, color = heroContentColor, fontFamily = getFontFamilyForText(price))
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(unitStr, fontSize = adaptiveSp(17f), fontWeight = FontWeight.Medium, color = heroContentColor.copy(alpha = 0.7f), modifier = Modifier.alignByBaseline(), fontFamily = getFontFamilyForText(unitStr))
+                    val formattedPrice = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------"
+                    val unitStr = androidx.compose.ui.res.stringResource(R.string.currency_toman)
+                    androidx.compose.animation.AnimatedContent(
+                        targetState = formattedPrice,
+                        transitionSpec = {
+                            if (targetState > initialState) {
+                                (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
+                            } else {
+                                (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
+                            }
+                        },
+                        label = "PriceAnim",
+                        modifier = Modifier.alignByBaseline()
+                    ) { price ->
+                        Text(price, fontSize = adaptiveSp(46f), fontWeight = FontWeight.Bold, color = heroContentColor, fontFamily = getFontFamilyForText(price))
                     }
+                    Spacer(modifier = Modifier.width(adaptiveDp(6f)))
+                    Text(unitStr, fontSize = adaptiveSp(17f), fontWeight = FontWeight.Medium, color = heroContentColor.copy(alpha = 0.7f), modifier = Modifier.alignByBaseline(), fontFamily = getFontFamilyForText(unitStr))
                 }
             }
         }
@@ -1354,7 +1390,11 @@ fun RenderCard(
         } else {
             MaterialTheme.colorScheme.surface
         }
-        val smallBgColor by androidx.compose.animation.animateColorAsState(targetValue = targetSmallBgColor, label = "SmallBgColor")
+        val smallBgColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetSmallBgColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "SmallBgColor"
+        )
 
         val targetSmallContentColor = if (coloredCardsMode) {
             if (isZeroChange) {
@@ -1367,14 +1407,22 @@ fun RenderCard(
         } else {
             MaterialTheme.colorScheme.onBackground
         }
-        val smallContentColor by androidx.compose.animation.animateColorAsState(targetValue = targetSmallContentColor, label = "SmallContentColor")
+        val smallContentColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetSmallContentColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "SmallContentColor"
+        )
 
         val targetSmallBorderColor = if (coloredCardsMode) {
             Color.Transparent
         } else {
             MaterialTheme.colorScheme.outlineVariant
         }
-        val smallBorderColor by androidx.compose.animation.animateColorAsState(targetValue = targetSmallBorderColor, label = "SmallBorderColor")
+        val smallBorderColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetSmallBorderColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "SmallBorderColor"
+        )
 
         SmallCard(
             modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
@@ -1410,7 +1458,11 @@ fun RenderCard(
         } else {
             MaterialTheme.colorScheme.surface
         }
-        val cardBgColor by androidx.compose.animation.animateColorAsState(targetValue = targetCardBgColor, label = "CardBgColor")
+        val cardBgColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetCardBgColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "CardBgColor"
+        )
 
         val targetCardContentColor = if (coloredCardsMode) {
             if (isZeroChange) {
@@ -1423,7 +1475,11 @@ fun RenderCard(
         } else {
             MaterialTheme.colorScheme.onSurface
         }
-        val cardContentColor by androidx.compose.animation.animateColorAsState(targetValue = targetCardContentColor, label = "CardContentColor")
+        val cardContentColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetCardContentColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "CardContentColor"
+        )
 
         val cardTrendColor = if (isZeroChange) {
             if (isDark) Color.LightGray else Color.Gray
@@ -1438,12 +1494,22 @@ fun RenderCard(
         } else {
             MaterialTheme.colorScheme.outlineVariant
         }
-        val cardBorderColor by androidx.compose.animation.animateColorAsState(targetValue = targetCardBorderColor, label = "CardBorderColor")
+        val cardBorderColor by androidx.compose.animation.animateColorAsState(
+            targetValue = targetCardBorderColor,
+            animationSpec = ExpressiveAnimations.defaultEffects(),
+            label = "CardBorderColor"
+        )
 
         SecondaryCard(
             modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
             title = getLocalizedTitle(item?.Symbol ?: "GOLD", item?.Title ?: "سکه امامی"),
-            subtitle = if (item?.Symbol == "GOLD" || item?.Symbol == "XAU") { if (isEngCard) "Emami Coin / New Design" else "سکه امامی / طرح جدید" } else "${getLocalizedTitle(item?.Symbol ?: "", item?.Title ?: "")} / $unitToman",
+            subtitle = if (item?.Symbol == "GOLD") {
+                if (isEngCard) "Emami Coin / New Design" else "سکه امامی / طرح جدید"
+            } else if (item?.Symbol == "XAU") {
+                if (isEngCard) "Gold Ounce / Global Price" else "انس طلا / قیمت جهانی"
+            } else {
+                "${getLocalizedTitle(item?.Symbol ?: "", item?.Title ?: "")} / $unitToman"
+            },
             value = if (item != null) formatPrice(item.CurrentPrice, digitType, item.Symbol) else "------",
             trend = if (item != null) (if (isZeroChange) "—" else if (changeVal >= 0) "↑" else "↓") else "------",
             trendColor = cardTrendColor,
@@ -1595,7 +1661,7 @@ fun BentoGrid(
                 .then(
                     if (isEditing) {
                         Modifier.border(
-                            width = 1.5.dp,
+                            width = adaptiveDp(1.5f),
                             color = if (isDragging) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
                             shape = shape
@@ -1612,8 +1678,8 @@ fun BentoGrid(
             ) {
                 Box(
                     modifier = Modifier
-                        .padding(12.dp)
-                        .size(24.dp)
+                        .padding(adaptiveDp(12f))
+                        .size(adaptiveDp(24f))
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary)
                 ) {
@@ -1621,7 +1687,7 @@ fun BentoGrid(
                         imageVector = Icons.Default.DragHandle,
                         contentDescription = "Drag",
                         tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(14.dp).align(Alignment.Center)
+                        modifier = Modifier.size(adaptiveDp(14f)).align(Alignment.Center)
                     )
                 }
             }
@@ -1634,8 +1700,8 @@ fun BentoGrid(
             ) {
                 Box(
                     modifier = Modifier
-                        .padding(12.dp)
-                        .size(24.dp)
+                        .padding(adaptiveDp(12f))
+                        .size(adaptiveDp(24f))
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.secondary)
                         .clickable {
@@ -1646,7 +1712,7 @@ fun BentoGrid(
                         imageVector = Icons.Default.SwapHoriz,
                         contentDescription = "Replace",
                         tint = MaterialTheme.colorScheme.onSecondary,
-                        modifier = Modifier.size(14.dp).align(Alignment.Center)
+                        modifier = Modifier.size(adaptiveDp(14f)).align(Alignment.Center)
                     )
                 }
             }
@@ -1731,18 +1797,18 @@ fun BentoGrid(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(adaptiveDp(12f))
         ) {
             rowsConfig.forEachIndexed { rowIndex, rowConfig ->
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isEditing,
-                    enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandVertically(),
-                    exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkVertically()
+                    enter = androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects()) + androidx.compose.animation.expandVertically(ExpressiveAnimations.defaultSpatial()),
+                    exit = androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()) + androidx.compose.animation.shrinkVertically(ExpressiveAnimations.defaultSpatial())
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                            .padding(horizontal = adaptiveDp(4f), vertical = adaptiveDp(2f)),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1758,26 +1824,26 @@ fun BentoGrid(
                         )
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(adaptiveDp(8f)),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             TextButton(
                                 onClick = {
                                     onRowColorToggled(rowConfig.id, !rowConfig.isColored)
                                 },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(28.dp)
+                                contentPadding = PaddingValues(horizontal = adaptiveDp(8f), vertical = adaptiveDp(4f)),
+                                modifier = Modifier.height(adaptiveDp(28f))
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Palette,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(adaptiveDp(16f)),
                                     tint = if (rowConfig.isColored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(adaptiveDp(4f)))
                                 Text(
                                     text = if (rowConfig.isColored) "رنگی" else "ساده",
-                                    fontSize = 11.sp,
+                                    fontSize = adaptiveSp(11f),
                                     fontWeight = FontWeight.Bold,
                                     color = if (rowConfig.isColored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1787,18 +1853,18 @@ fun BentoGrid(
                                 onClick = {
                                     onRowMergeToggled(rowConfig.id, !rowConfig.isMerged)
                                 },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(28.dp)
+                                contentPadding = PaddingValues(horizontal = adaptiveDp(8f), vertical = adaptiveDp(4f)),
+                                modifier = Modifier.height(adaptiveDp(28f))
                             ) {
                                 Icon(
                                     imageVector = if (rowConfig.isMerged) Icons.Default.CallSplit else Icons.Default.CallMerge,
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
+                                    modifier = Modifier.size(adaptiveDp(16f))
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(adaptiveDp(4f)))
                                 Text(
                                     text = if (rowConfig.isMerged) "تفکیک" else "ادغام",
-                                    fontSize = 11.sp,
+                                    fontSize = adaptiveSp(11f),
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -1811,16 +1877,16 @@ fun BentoGrid(
                     targetState = rowConfig.isMerged,
                     transitionSpec = {
                         (androidx.compose.animation.fadeIn(
-                            animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+                            animationSpec = ExpressiveAnimations.defaultEffects()
                         ) + androidx.compose.animation.scaleIn(
                             initialScale = 0.95f,
-                            animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+                            animationSpec = ExpressiveAnimations.defaultSpatial()
                         )).togetherWith(
                             androidx.compose.animation.fadeOut(
-                                animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+                                animationSpec = ExpressiveAnimations.defaultEffects()
                             ) + androidx.compose.animation.scaleOut(
                                 targetScale = 0.95f,
-                                animationSpec = androidx.compose.animation.core.tween(durationMillis = 400)
+                                animationSpec = ExpressiveAnimations.defaultSpatial()
                             )
                         )
                     },
@@ -1833,7 +1899,7 @@ fun BentoGrid(
 
                         DraggableCardContainer(
                             slotIndex = slotIdx,
-                            shape = RoundedCornerShape(28.dp),
+                            shape = RoundedCornerShape(adaptiveDp(28f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             RenderCard(
@@ -1852,7 +1918,7 @@ fun BentoGrid(
                     } else {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(adaptiveDp(12f))
                         ) {
                             slots.forEach { slotIdx ->
                                 val symbol = finalHomeSymbols.getOrNull(slotIdx)
@@ -1860,7 +1926,7 @@ fun BentoGrid(
 
                                 DraggableCardContainer(
                                     slotIndex = slotIdx,
-                                    shape = RoundedCornerShape(28.dp),
+                                    shape = RoundedCornerShape(adaptiveDp(28f)),
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     RenderCard(
@@ -1893,7 +1959,7 @@ fun BentoGrid(
             title = {
                 Text(
                     text = androidx.compose.ui.res.stringResource(R.string.replace_hero_title),
-                    fontSize = 18.sp,
+                    fontSize = adaptiveSp(18f),
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1902,22 +1968,22 @@ fun BentoGrid(
                 if (availableItems.isEmpty()) {
                     Text(
                         text = androidx.compose.ui.res.stringResource(R.string.no_new_options),
-                        fontSize = 14.sp,
+                        fontSize = adaptiveSp(14f),
                         modifier = Modifier.fillMaxWidth()
                     )
                 } else {
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 280.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .heightIn(max = adaptiveDp(280f)),
+                        verticalArrangement = Arrangement.spacedBy(adaptiveDp(8f))
                     ) {
                         items(availableItems) { item ->
                             Card(
                                 colors = CardDefaults.cardColors(
                                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                 ),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(adaptiveDp(12f)),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
@@ -1932,23 +1998,23 @@ fun BentoGrid(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp),
+                                        .padding(adaptiveDp(12f)),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
                                         text = item.Symbol,
-                                        fontSize = 12.sp,
+                                        fontSize = adaptiveSp(12f),
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(adaptiveDp(8f))
                                     ) {
                                         Text(
                                             text = getLocalizedTitle(item.Symbol, item.Title),
-                                            fontSize = 14.sp,
+                                            fontSize = adaptiveSp(14f),
                                             fontWeight = FontWeight.Medium,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
@@ -1958,7 +2024,7 @@ fun BentoGrid(
                                                 com.mmdparsadev.cheghad.data.models.CurrencyType.GoldAndCoin -> "🥇"
                                                 else -> "💵"
                                             },
-                                            fontSize = 16.sp
+                                            fontSize = adaptiveSp(16f)
                                         )
                                     }
                                 }
@@ -2005,33 +2071,39 @@ fun SecondaryCard(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(adaptiveDp(28f)))
             .background(backgroundColor)
-            .border(1.dp, borderColor, RoundedCornerShape(28.dp))
-            .padding(20.dp)
+            .border(adaptiveDp(1f), borderColor, RoundedCornerShape(adaptiveDp(28f)))
+            .padding(adaptiveDp(20f))
     ) {
         Column {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(title, fontSize = adaptiveSp(14f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(title))
-                androidx.compose.animation.AnimatedContent(targetState = trend, label = "TrendAnim") { trnd ->
+                androidx.compose.animation.AnimatedContent(
+                    targetState = trend,
+                    transitionSpec = {
+                        androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects()).togetherWith(androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
+                    },
+                    label = "TrendAnim"
+                ) { trnd ->
                     Text(trnd, fontSize = adaptiveSp(14f), fontWeight = FontWeight.Black, color = trendColor, fontFamily = getFontFamilyForText(trnd))
                 }
             }
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(18f)))
             androidx.compose.animation.AnimatedContent(
                 targetState = value,
                 transitionSpec = {
                     if (targetState > initialState) {
-                        (androidx.compose.animation.slideInVertically { height -> height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> -height } + androidx.compose.animation.fadeOut())
+                        (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
                     } else {
-                        (androidx.compose.animation.slideInVertically { height -> -height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> height } + androidx.compose.animation.fadeOut())
+                        (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
                     }
                 },
                 label = "ValueAnim"
             ) { valStr ->
                 Text(valStr, fontSize = adaptiveSp(18f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(valStr))
             }
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(2f)))
             Text(subtitle, fontSize = adaptiveSp(11f), fontWeight = FontWeight.Medium, color = contentColor.copy(alpha = 0.7f), fontFamily = getFontFamilyForText(subtitle))
         }
     }
@@ -2050,19 +2122,19 @@ fun SmallCard(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(adaptiveDp(28f)))
             .background(backgroundColor)
-            .border(1.dp, borderColor, RoundedCornerShape(28.dp))
-            .padding(18.dp)
+            .border(adaptiveDp(1f), borderColor, RoundedCornerShape(adaptiveDp(28f)))
+            .padding(adaptiveDp(18f))
     ) {
         Column {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(28.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.size(adaptiveDp(28f)).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                     Text(icon, fontSize = adaptiveSp(12f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(icon))
                 }
                 Text(trend, fontSize = adaptiveSp(12f), fontWeight = FontWeight.Bold, color = trendColor, fontFamily = getFontFamilyForText(trend))
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(10f)))
             Text(value, fontSize = adaptiveSp(15f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(value))
         }
     }
@@ -2162,17 +2234,14 @@ fun AssetListItem(
             .fillMaxWidth()
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            .border(adaptiveDp(1f), MaterialTheme.colorScheme.outlineVariant, CircleShape)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
-            .padding(horizontal = 24.dp, vertical = 14.dp)
+            .padding(horizontal = adaptiveDp(24f), vertical = adaptiveDp(14f))
             .animateContentSize(
-                animationSpec = androidx.compose.animation.core.spring(
-                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow
-                )
+                animationSpec = ExpressiveAnimations.defaultSpatial()
             ),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -2180,24 +2249,24 @@ fun AssetListItem(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(adaptiveDp(40f))
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.secondaryContainer),
                 contentAlignment = Alignment.Center
             ) {
-                Text(item.Symbol.take(3), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                Text(item.Symbol.take(3), fontSize = adaptiveSp(10f), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(adaptiveDp(12f)))
             Column {
-                Text(getLocalizedTitle(item.Symbol, item.Title), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                Text(item.Symbol, fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
+                Text(getLocalizedTitle(item.Symbol, item.Title), fontSize = adaptiveSp(14f), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                Text(item.Symbol, fontSize = adaptiveSp(12f), color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
             }
         }
         Column(horizontalAlignment = Alignment.End) {
             val formattedPrice = formatPrice(item.CurrentPrice, digitType, item.Symbol)
             Text(
                 text = formattedPrice,
-                fontSize = 14.sp,
+                fontSize = adaptiveSp(14f),
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground
             )
@@ -2211,7 +2280,7 @@ fun AssetListItem(
             } else if (isNegative) downColor else upColor
             Text(
                 text = formatPercent(item.ChangePercentage, digitType),
-                fontSize = 12.sp,
+                fontSize = adaptiveSp(12f),
                 fontWeight = FontWeight.Bold,
                 color = color
             )
@@ -2236,21 +2305,21 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.92f)
-                    .padding(16.dp),
-                shape = RoundedCornerShape(32.dp),
+                    .padding(adaptiveDp(16f)),
+                shape = RoundedCornerShape(adaptiveDp(32f)),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                elevation = CardDefaults.cardElevation(defaultElevation = adaptiveDp(6f)),
+                border = BorderStroke(adaptiveDp(1f), MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(28.dp),
+                        .padding(adaptiveDp(28f)),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(80.dp)
+                            .size(adaptiveDp(80f))
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
@@ -2259,60 +2328,60 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                             imageVector = Icons.AutoMirrored.Filled.TrendingUp,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(44.dp)
+                            modifier = Modifier.size(adaptiveDp(44f))
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(20f)))
 
                     Text(
                         text = "چقد",
-                        fontSize = 28.sp,
+                        fontSize = adaptiveSp(28f),
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface,
                         fontFamily = getFontFamilyForText("چقد")
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(6f)))
 
                     Text(
                         text = androidx.compose.ui.res.stringResource(R.string.welcome_title),
-                        fontSize = 16.sp,
+                        fontSize = adaptiveSp(16f),
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
                         fontFamily = getFontFamilyForText(androidx.compose.ui.res.stringResource(R.string.welcome_title))
                     )
 
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(6f)))
 
                     Text(
                         text = androidx.compose.ui.res.stringResource(R.string.welcome_desc),
-                        fontSize = 13.sp,
+                        fontSize = adaptiveSp(13f),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                         fontFamily = getFontFamilyForText(androidx.compose.ui.res.stringResource(R.string.welcome_desc))
                     )
 
-                    Spacer(modifier = Modifier.height(28.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(28f)))
 
                     Text(
                         text = "زبان مورد نظر خود را انتخاب کنید / Select Language",
-                        fontSize = 12.sp,
+                        fontSize = adaptiveSp(12f),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(12f)))
 
                     // Persian language card
                     Card(
                         onClick = { selectedLang = "fa" },
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(adaptiveDp(24f)),
                         colors = CardDefaults.cardColors(
                             containerColor = if (selectedLang == "fa") MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent
                         ),
                         border = BorderStroke(
-                            width = if (selectedLang == "fa") 2.dp else 1.dp,
+                            width = if (selectedLang == "fa") adaptiveDp(2f) else adaptiveDp(1f),
                             color = if (selectedLang == "fa") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         ),
                         modifier = Modifier.fillMaxWidth()
@@ -2320,24 +2389,24 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 14.dp),
+                                .padding(horizontal = adaptiveDp(18f), vertical = adaptiveDp(14f)),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("🇮🇷", fontSize = 22.sp)
-                                Spacer(modifier = Modifier.width(14.dp))
+                                Text("🇮🇷", fontSize = adaptiveSp(22f))
+                                Spacer(modifier = Modifier.width(adaptiveDp(14f)))
                                 Column {
                                     Text(
                                         text = androidx.compose.ui.res.stringResource(R.string.persian),
-                                        fontSize = 16.sp,
+                                        fontSize = adaptiveSp(16f),
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         fontFamily = getFontFamilyForText(androidx.compose.ui.res.stringResource(R.string.persian))
                                     )
                                     Text(
                                         text = "فارسی",
-                                        fontSize = 12.sp,
+                                        fontSize = adaptiveSp(12f),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         fontFamily = getFontFamilyForText("فارسی")
                                     )
@@ -2351,17 +2420,17 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(12f)))
 
                     // English language card
                     Card(
                         onClick = { selectedLang = "en" },
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(adaptiveDp(24f)),
                         colors = CardDefaults.cardColors(
                             containerColor = if (selectedLang == "en") MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else Color.Transparent
                         ),
                         border = BorderStroke(
-                            width = if (selectedLang == "en") 2.dp else 1.dp,
+                            width = if (selectedLang == "en") adaptiveDp(2f) else adaptiveDp(1f),
                             color = if (selectedLang == "en") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         ),
                         modifier = Modifier.fillMaxWidth()
@@ -2369,23 +2438,23 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 18.dp, vertical = 14.dp),
+                                .padding(horizontal = adaptiveDp(18f), vertical = adaptiveDp(14f)),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("🇬🇧", fontSize = 22.sp)
-                                Spacer(modifier = Modifier.width(14.dp))
+                                Text("🇬🇧", fontSize = adaptiveSp(22f))
+                                Spacer(modifier = Modifier.width(adaptiveDp(14f)))
                                 Column {
                                     Text(
                                         text = androidx.compose.ui.res.stringResource(R.string.english),
-                                        fontSize = 16.sp,
+                                        fontSize = adaptiveSp(16f),
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = "English",
-                                        fontSize = 12.sp,
+                                        fontSize = adaptiveSp(12f),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -2398,14 +2467,14 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(20f)))
                     Text(
                         text = "پوسته / Theme",
-                        fontSize = 12.sp,
+                        fontSize = adaptiveSp(12f),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(12f)))
                     val themeOptions = listOf("system" to "سیستم", "light" to "روشن", "dark" to "تاریک")
                     val themeIcons = listOf(Icons.Default.SettingsSuggest, Icons.Default.LightMode, Icons.Default.DarkMode)
                     val selectedThemeIndex = themeOptions.indexOfFirst { it.first == selectedTheme }.coerceAtLeast(0)
@@ -2423,26 +2492,26 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                                 imageVector = themeIcons[index],
                                 contentDescription = null,
                                 tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(adaptiveDp(16f))
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(adaptiveDp(6f)))
                             Text(
                                 text = themeOptions[index].second,
-                                fontSize = 12.sp,
+                                fontSize = adaptiveSp(12f),
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(28.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(28f)))
 
                     Button(
                         onClick = { onComplete(selectedLang, selectedTheme) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                            .height(adaptiveDp(56f)),
+                        shape = RoundedCornerShape(adaptiveDp(20f)),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = adaptiveDp(2f))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -2450,15 +2519,15 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                         ) {
                             Text(
                                 text = androidx.compose.ui.res.stringResource(R.string.continue_btn),
-                                fontSize = 16.sp,
+                                fontSize = adaptiveSp(16f),
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = getFontFamilyForText(androidx.compose.ui.res.stringResource(R.string.continue_btn))
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(adaptiveDp(8f)))
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
                                 contentDescription = null,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(adaptiveDp(20f))
                             )
                         }
                     }
@@ -2738,21 +2807,21 @@ fun SettingsCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(28.dp),
+        shape = RoundedCornerShape(adaptiveDp(28f)),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = adaptiveDp(2f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(adaptiveDp(16f))) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .clip(RoundedCornerShape(10.dp))
+                        .size(adaptiveDp(38f))
+                        .clip(RoundedCornerShape(adaptiveDp(10f)))
                         .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -2760,28 +2829,28 @@ fun SettingsCard(
                         imageVector = icon,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(adaptiveDp(20f))
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(adaptiveDp(12f)))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        fontSize = 16.sp,
+                        fontSize = adaptiveSp(16f),
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     if (subtitle != null) {
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(adaptiveDp(2f)))
                         Text(
                             text = subtitle,
-                            fontSize = 11.sp,
+                            fontSize = adaptiveSp(11f),
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(14f)))
             content()
         }
     }
@@ -2799,46 +2868,46 @@ fun SettingsSwitchRow(
         onClick = { onCheckedChange(!isChecked) },
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp)),
-        shape = RoundedCornerShape(24.dp),
+            .clip(RoundedCornerShape(adaptiveDp(24f))),
+        shape = RoundedCornerShape(adaptiveDp(24f)),
         color = if (isChecked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = BorderStroke(
-            width = if (isChecked) 2.dp else 1.dp,
+            width = if (isChecked) adaptiveDp(2f) else adaptiveDp(1f),
             color = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         )
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = adaptiveDp(20f), vertical = adaptiveDp(12f)),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (badgeColor != null) {
                 Box(
                     modifier = Modifier
-                        .size(10.dp)
+                        .size(adaptiveDp(10f))
                         .clip(CircleShape)
                         .background(badgeColor)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(adaptiveDp(10f)))
             }
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
-                    fontSize = 14.sp,
+                    fontSize = adaptiveSp(14f),
                     fontWeight = if (isChecked) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (isChecked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
                 if (description != null) {
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(2f)))
                     Text(
                         text = description,
-                        fontSize = 11.sp,
+                        fontSize = adaptiveSp(11f),
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(adaptiveDp(8f)))
 
             Switch(
                 checked = isChecked,
@@ -2873,10 +2942,10 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
-            .padding(horizontal = 16.dp)
+            .padding(horizontal = adaptiveDp(16f))
             .verticalScroll(rememberScrollState())
     ) {
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(adaptiveDp(12f)))
 
         // Header Title
         Row(
@@ -2885,8 +2954,8 @@ fun SettingsScreen(
         ) {
             Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(adaptiveDp(44f))
+                    .clip(RoundedCornerShape(adaptiveDp(12f)))
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
             ) {
@@ -2894,26 +2963,26 @@ fun SettingsScreen(
                     imageVector = Icons.Default.Settings,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(adaptiveDp(24f))
                 )
             }
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(adaptiveDp(14f)))
             Column {
                 Text(
                     text = androidx.compose.ui.res.stringResource(R.string.settings_title),
-                    fontSize = 22.sp,
+                    fontSize = adaptiveSp(22f),
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = androidx.compose.ui.res.stringResource(R.string.settings_subtitle),
-                    fontSize = 12.sp,
+                    fontSize = adaptiveSp(12f),
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(adaptiveDp(20f)))
 
         // Language section
         val currentLocales = AppCompatDelegate.getApplicationLocales()
@@ -2939,19 +3008,19 @@ fun SettingsScreen(
                         imageVector = if (index == 0) Icons.Default.Language else Icons.Default.Translate,
                         contentDescription = null,
                         tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(adaptiveDp(16f))
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(adaptiveDp(6f)))
                     Text(
                         text = androidx.compose.ui.res.stringResource(langLabels[index]),
-                        fontSize = 12.sp,
+                        fontSize = adaptiveSp(12f),
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
         // Number Digits System Section
         SettingsCard(
@@ -2969,13 +3038,13 @@ fun SettingsScreen(
             ) { index, isSelected ->
                 Text(
                     text = androidx.compose.ui.res.stringResource(digitLabels[index]),
-                    fontSize = 12.sp,
+                    fontSize = adaptiveSp(12f),
                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
         // Calendar System Section
         SettingsCard(
@@ -2993,13 +3062,13 @@ fun SettingsScreen(
             ) { index, isSelected ->
                 Text(
                     text = androidx.compose.ui.res.stringResource(calendarLabels[index]),
-                    fontSize = 12.sp,
+                    fontSize = adaptiveSp(12f),
                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
         // Price Change Colors Section
         SettingsCard(
@@ -3017,13 +3086,13 @@ fun SettingsScreen(
             ) { index, isSelected ->
                 Text(
                     text = androidx.compose.ui.res.stringResource(colorLabels[index]),
-                    fontSize = 12.sp,
+                    fontSize = adaptiveSp(12f),
                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
         // Theme section
         SettingsCard(
@@ -3048,19 +3117,19 @@ fun SettingsScreen(
                         imageVector = themeIcons[index],
                         contentDescription = null,
                         tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(adaptiveDp(16f))
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(adaptiveDp(6f)))
                     Text(
                         text = androidx.compose.ui.res.stringResource(themeLabels[index]),
-                        fontSize = 12.sp,
+                        fontSize = adaptiveSp(12f),
                         fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
         // Time Range Reordering section
         SettingsCard(
@@ -3070,18 +3139,20 @@ fun SettingsScreen(
         ) {
             var draggedIndex by remember { mutableStateOf<Int?>(null) }
             var dragOffsetY by remember { mutableStateOf(0f) }
-            val itemHeightDp = 52.dp
+            val itemHeightDp = adaptiveDp(52f)
             val itemHeightPx = with(LocalDensity.current) { itemHeightDp.toPx() }
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
-                    .padding(8.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f), RoundedCornerShape(adaptiveDp(24f)))
+                    .padding(adaptiveDp(8f))
             ) {
                 timeRangeOrder.forEachIndexed { index, range ->
                     val isDragging = draggedIndex == index
 
+                    val density = LocalDensity.current
+                    val shadowElevationPx = if (isDragging) with(density) { adaptiveDp(8f).toPx() } else 0f
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -3090,24 +3161,24 @@ fun SettingsScreen(
                                 translationY = if (isDragging) dragOffsetY else 0f
                                 scaleX = if (isDragging) 1.03f else 1f
                                 scaleY = if (isDragging) 1.03f else 1f
-                                shadowElevation = if (isDragging) 8.dp.toPx() else 0f
+                                shadowElevation = shadowElevationPx
                             }
                             .background(
                                 if (isDragging) MaterialTheme.colorScheme.surfaceVariant
                                 else MaterialTheme.colorScheme.surface,
-                                RoundedCornerShape(24.dp)
+                                RoundedCornerShape(adaptiveDp(24f))
                             )
                             .border(
-                                width = if (isDragging) 1.5.dp else 1.dp,
+                                width = if (isDragging) adaptiveDp(1.5f) else adaptiveDp(1f),
                                 color = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                                shape = RoundedCornerShape(24.dp)
+                                shape = RoundedCornerShape(adaptiveDp(24f))
                             )
-                            .padding(horizontal = 12.dp),
+                            .padding(horizontal = adaptiveDp(12f)),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(adaptiveDp(36f))
                                 .pointerInput(index) {
                                     detectDragGestures(
                                         onDragStart = {
@@ -3153,17 +3224,17 @@ fun SettingsScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(adaptiveDp(12f)))
 
                         Text(
                             text = androidx.compose.ui.res.stringResource(range.stringRes),
-                            fontSize = 14.sp,
+                            fontSize = adaptiveSp(14f),
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                     }
                     if (index < timeRangeOrder.lastIndex) {
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(adaptiveDp(6f)))
                     }
                 }
             }
@@ -3196,7 +3267,7 @@ fun SettingsScreen(
                     }
                 )
                 if (index < categories.lastIndex) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(8f)))
                 }
             }
         }
@@ -3223,7 +3294,7 @@ fun SettingsScreen(
                     }
                 )
                 if (index < agencies.lastIndex) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(8f)))
                 }
             }
         }
@@ -3710,14 +3781,14 @@ fun AssetDetailDialog(
         sheetState = sheetState,
         dragHandle = { BottomSheetDefaults.DragHandle() },
         containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+        shape = RoundedCornerShape(topStart = adaptiveDp(28f), topEnd = adaptiveDp(28f))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
-                .padding(horizontal = 24.dp, vertical = 8.dp)
+                .padding(horizontal = adaptiveDp(24f), vertical = adaptiveDp(8f))
         ) {
             // Header
             Row(
@@ -3728,22 +3799,22 @@ fun AssetDetailDialog(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(adaptiveDp(48f))
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = item.Symbol.take(3),
-                            fontSize = 12.sp,
+                            fontSize = adaptiveSp(12f),
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(adaptiveDp(12f)))
                     Column {
-                        Text(getLocalizedTitle(item.Symbol, item.Title), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                        Text(item.Symbol, fontSize = 12.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
+                        Text(getLocalizedTitle(item.Symbol, item.Title), fontSize = adaptiveSp(16f), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+                        Text(item.Symbol, fontSize = adaptiveSp(12f), color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
                     }
                 }
                 IconButton(onClick = onDismiss) {
@@ -3751,7 +3822,7 @@ fun AssetDetailDialog(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
             // Price section
             val upColor = if (colorSchemeMode == "inverted") MaterialTheme.colorScheme.error else Color(0xFF4CAF50)
@@ -3766,36 +3837,36 @@ fun AssetDetailDialog(
                     androidx.compose.animation.AnimatedContent(
                         targetState = displayLabel.toLocalizedDigits(digitType),
                         transitionSpec = {
-                            (androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(200)) +
-                                    androidx.compose.animation.slideInVertically(animationSpec = androidx.compose.animation.core.tween(200)) { height -> height / 2 })
+                            (androidx.compose.animation.fadeIn(animationSpec = ExpressiveAnimations.defaultEffects()) +
+                                    androidx.compose.animation.slideInVertically(animationSpec = ExpressiveAnimations.defaultEffects()) { height -> height / 2 })
                                 .togetherWith(
-                                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(150)) +
-                                            androidx.compose.animation.slideOutVertically(animationSpec = androidx.compose.animation.core.tween(150)) { height -> -height / 2 }
+                                    androidx.compose.animation.fadeOut(animationSpec = ExpressiveAnimations.fastEffects()) +
+                                            androidx.compose.animation.slideOutVertically(animationSpec = ExpressiveAnimations.fastEffects()) { height -> -height / 2 }
                                 )
                         },
                         label = "DialogLabelAnim"
                     ) { localizedLabel ->
                         Text(
                             text = localizedLabel,
-                            fontSize = 12.sp,
+                            fontSize = adaptiveSp(12f),
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
                     }
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(4f)))
                     androidx.compose.animation.AnimatedContent(
                         targetState = formattedDisplayPrice,
                         transitionSpec = {
                             if (targetState > initialState) {
-                                (androidx.compose.animation.slideInVertically { height -> height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> -height } + androidx.compose.animation.fadeOut())
+                                (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
                             } else {
-                                (androidx.compose.animation.slideInVertically { height -> -height } + androidx.compose.animation.fadeIn()).togetherWith(androidx.compose.animation.slideOutVertically { height -> height } + androidx.compose.animation.fadeOut())
+                                (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
                             }
                         },
                         label = "DialogPriceAnim"
                     ) { priceStr ->
                         Text(
                             text = androidx.compose.ui.res.stringResource(R.string.currency_toman) + " " + priceStr,
-                            fontSize = 22.sp,
+                            fontSize = adaptiveSp(22f),
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
@@ -3814,14 +3885,14 @@ fun AssetDetailDialog(
                 ) { pctStr ->
                     Text(
                         text = pctStr,
-                        fontSize = 14.sp,
+                        fontSize = adaptiveSp(14f),
                         fontWeight = FontWeight.Bold,
                         color = changeColor
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
             // Chart Canvas
             val isZeroChange = Math.abs(item.ChangePercentage) < 0.001
@@ -3833,7 +3904,7 @@ fun AssetDetailDialog(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
+                    .height(adaptiveDp(200f)),
                 contentAlignment = Alignment.Center
             ) {
                 InteractiveAssetChart(
@@ -3850,19 +3921,19 @@ fun AssetDetailDialog(
                     Box(
                         modifier = Modifier
                             .matchParentSize()
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f), RoundedCornerShape(24.dp)),
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.4f), RoundedCornerShape(adaptiveDp(24f))),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
-                            modifier = Modifier.size(32.dp),
-                            strokeWidth = 3.dp,
+                            modifier = Modifier.size(adaptiveDp(32f)),
+                            strokeWidth = adaptiveDp(3f),
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
             // Time Range Buttons
             val selectedTimeRangeIndex = timeRangeOrder.indexOf(selectedTimeRange).coerceAtLeast(0)
@@ -3873,41 +3944,41 @@ fun AssetDetailDialog(
             ) { index, isSelected ->
                 Text(
                     text = androidx.compose.ui.res.stringResource(timeRangeOrder[index].stringRes),
-                    fontSize = 11.sp,
+                    fontSize = adaptiveSp(11f),
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(24f)))
 
             // Alarm Section
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(adaptiveDp(18f)),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                border = BorderStroke(adaptiveDp(1f), MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .padding(adaptiveDp(16f))
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
                             imageVector = Icons.Default.Notifications,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(adaptiveDp(20f))
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(adaptiveDp(8f)))
                         Text(
                             text = androidx.compose.ui.res.stringResource(R.string.alarm_create_title),
-                            fontSize = 14.sp,
+                            fontSize = adaptiveSp(14f),
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(12f)))
 
                     // Price Input
                     OutlinedTextField(
@@ -3919,15 +3990,15 @@ fun AssetDetailDialog(
                             keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
                         ),
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(24.dp)
+                        shape = RoundedCornerShape(adaptiveDp(24f))
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(12f)))
 
                     // Condition Selectors
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(adaptiveDp(8f))
                     ) {
                         ConditionCard(
                             text = androidx.compose.ui.res.stringResource(R.string.alarm_condition_above),
@@ -3943,7 +4014,7 @@ fun AssetDetailDialog(
                         )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
                     // Save button
                     val context = androidx.compose.ui.platform.LocalContext.current
@@ -3956,15 +4027,15 @@ fun AssetDetailDialog(
                                 onSaveAlarm(price, isAbove)
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(20.dp)
+                        modifier = Modifier.fillMaxWidth().height(adaptiveDp(56f)),
+                        shape = RoundedCornerShape(adaptiveDp(20f))
                     ) {
                         Text(androidx.compose.ui.res.stringResource(R.string.alarm_button_save))
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(adaptiveDp(16f)))
         }
     }
 }

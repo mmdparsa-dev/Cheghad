@@ -1,9 +1,5 @@
 <resources>
     <string name="app_name">Cheghad</string>
-    <string name="widget_1_desc">نمایش قیمت ۱ ارز در ویجت کوچک</string>
-    <string name="widget_2_desc">نمایش قیمت ۲ ارز در ویجت متوسط</string>
-    <string name="widget_4_desc">نمایش لیست ۴ ارز زنده</string>
-    <string name="widget_6_desc">نمایش کامل لیست ۶ ارز زنده</string>
     <string name="category_currency">Currencies</string>
     <string name="category_gold_and_coin">Gold &amp; Coins</string>
     <string name="category_crypto">Cryptocurrency</string>
@@ -23,6 +19,7 @@
     <string name="error_server">Update failed, check your internet connection.</string>
     <string name="error_timeout">Update failed, check your internet connection.</string>
     <string name="success_updated">Data updated successfully.</string>
+    <string name="error_showing_cache">Update failed, showing cached data.</string>
     <string name="all_markets">All Markets</string>
     <string name="welcome_title">Welcome to Cheghad</string>
     <string name="welcome_desc">Select your preferred language to continue</string>
@@ -32,7 +29,6 @@
     <string name="currency_toman">Toman</string>
     <string name="edit_home">Customize Home</string>
     <string name="usd_name">US Dollar</string>
-
     <string name="nav_market">Market</string>
     <string name="nav_portfolio">Alerts</string>
     <string name="nav_news">News</string>
@@ -123,4 +119,13 @@
     <string name="sort_default">Most Popular</string>
     <string name="sort_profitable">Top Gainers</string>
     <string name="sort_loss_making">Top Losers</string>
+    <string name="widget_config_title">Widget Settings</string>
+    <string name="widget_config_select_currency">Select Currency</string>
+    <string name="widget_config_select_theme">Select Theme</string>
+    <string name="widget_theme_glassy">Glassy</string>
+    <string name="widget_theme_dark">Dark</string>
+    <string name="widget_theme_light">Light</string>
+    <string name="widget_theme_trend">Based on Trend</string>
+    <string name="widget_config_save">Save Settings</string>
+    <string name="widget_config_success">Widget updated!</string>
 </resources>

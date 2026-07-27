@@ -25,7 +25,11 @@ import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
+import androidx.glance.currentState
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.state.PreferencesGlanceStateDefinition
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.mmdparsadev.cheghad.MainActivity
@@ -111,7 +115,8 @@ fun getWidgetLocalizedTitle(symbol: String, rawTitle: String, isEnglish: Boolean
             s == "SUI" -> "Sui"
             s == "UNI" -> "Uniswap"
             s == "USOON" -> "Ondo US Oil"
-            s == "GOLD" || s == "XAU" || s == "PAXG" -> "Emami Gold Coin"
+            s == "GOLD" || s == "PAXG" -> "Emami Gold Coin"
+            s == "XAU" -> "Gold Ounce"
             s == "BAHAR" -> "Bahar Azadi Coin"
             s == "NIM" -> "Half Gold Coin"
             s == "RAB" -> "Quarter Gold Coin"
@@ -129,32 +134,38 @@ fun getWidgetLocalizedTitle(symbol: String, rawTitle: String, isEnglish: Boolean
 
 class CurrencyWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Exact
+    override val stateDefinition = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val db = AppDatabase.getDatabase(context)
         val currencies = db.currencyDao().getAllCurrencies()
 
         provideContent {
+            val prefs = currentState<Preferences>()
+            val selectedId = prefs[stringPreferencesKey("selected_currency_id")]
+            val theme = prefs[stringPreferencesKey("widget_theme")] ?: "glassy"
+            
+            val displayItem = currencies.find { it.Id == selectedId } ?: currencies.firstOrNull()
+
             GlanceTheme {
-                WidgetLayout(currencies)
+                WidgetLayout(displayItem, theme)
             }
         }
     }
 }
 
 @Composable
-fun WidgetLayout(currencies: List<CurrencyItem>) {
+fun WidgetLayout(item: CurrencyItem?, theme: String) {
     val context = LocalContext.current
     val size = LocalSize.current
     val isEnglish = isAppEnglish(context)
-    val displayItem = currencies.firstOrNull()
 
     val density = context.resources.displayMetrics.density
     val widthPx = (size.width.value * density).toInt().coerceAtLeast(150)
     val heightPx = (size.height.value * density).toInt().coerceAtLeast(150)
 
-    val bitmap = remember(displayItem, isEnglish, widthPx, heightPx) {
-        renderWidgetBitmap(context, displayItem, isEnglish, widthPx, heightPx)
+    val bitmap = remember(item, isEnglish, widthPx, heightPx, theme) {
+        renderWidgetBitmap(context, item, isEnglish, widthPx, heightPx, theme)
     }
 
     Image(
@@ -171,7 +182,8 @@ fun renderWidgetBitmap(
     item: CurrencyItem?,
     isEnglish: Boolean,
     widthPx: Int,
-    heightPx: Int
+    heightPx: Int,
+    theme: String
 ): Bitmap {
     val w = widthPx.coerceAtLeast(150)
     val h = heightPx.coerceAtLeast(150)
@@ -189,21 +201,38 @@ fun renderWidgetBitmap(
     val padding = squareSide * 0.085f
     val cornerRadius = squareSide * 0.15f
 
-    // 1. Glassmorphic dark translucent background
+    val isNegative = (item?.ChangePercentage ?: 0.0) < 0
+    val isZeroChange = Math.abs(item?.ChangePercentage ?: 0.0) < 0.001
+
+    // 1. Background logic based on theme
+    val bgColor = when (theme) {
+        "dark" -> android.graphics.Color.parseColor("#FF1E1E24")
+        "light" -> android.graphics.Color.WHITE
+        "trend" -> when {
+            isZeroChange -> android.graphics.Color.parseColor("#FF757575") // Gray for no change
+            isNegative -> android.graphics.Color.parseColor("#FFD32F2F")
+            else -> android.graphics.Color.parseColor("#FF388E3C")
+        }
+        else -> android.graphics.Color.parseColor("#E61E1E24") // glassy (default)
+    }
+    
+    val contentColor = if (theme == "light") android.graphics.Color.BLACK else android.graphics.Color.WHITE
+    val secondaryContentColor = if (theme == "light") android.graphics.Color.parseColor("#99000000") else android.graphics.Color.parseColor("#B3FFFFFF")
+
     val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#E61E1E24")
+        color = bgColor
         style = Paint.Style.FILL
     }
     canvas.drawRoundRect(0f, 0f, w.toFloat(), h.toFloat(), cornerRadius, cornerRadius, bgPaint)
 
     if (item == null) {
         val loadingPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            textSize = squareSide * 0.08f
+            color = contentColor
+            textSize = squareSide * 0.12f
             typeface = vazirTypeface
             textAlign = Paint.Align.CENTER
         }
-        val loadingText = if (isEnglish) "Loading..." else "در حال دریافت..."
+        val loadingText = "-------"
         canvas.drawText(loadingText, w / 2f, h / 2f, loadingPaint)
         return bitmap
     }
@@ -215,14 +244,11 @@ fun renderWidgetBitmap(
     val formattedPercent = formatPercent(item.ChangePercentage, digitType)
     val unitText = if (isEnglish) "Toman" else "تومان"
 
-    val isZeroChange = Math.abs(item.ChangePercentage) < 0.001
-    val isNegative = item.ChangePercentage < 0
-    val changeColor = if (isZeroChange) {
-        android.graphics.Color.parseColor("#AAFFFFFF")
-    } else if (isNegative) {
-        android.graphics.Color.parseColor("#FFFF5252")
-    } else {
-        android.graphics.Color.parseColor("#FF4CAF50")
+    val changeColor = when {
+        isZeroChange -> secondaryContentColor
+        theme == "trend" -> contentColor
+        isNegative -> android.graphics.Color.parseColor("#FFFF5252")
+        else -> android.graphics.Color.parseColor("#FF4CAF50")
     }
 
     val symbolBadgeIcon = when {
@@ -239,24 +265,24 @@ fun renderWidgetBitmap(
     // Dynamic scale ratios
     val badgeRadius = squareSide * 0.12f
     val badgeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#33FFFFFF")
+        color = if (theme == "light") android.graphics.Color.parseColor("#22000000") else android.graphics.Color.parseColor("#33FFFFFF")
         style = Paint.Style.FILL
     }
     val badgeTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
+        color = contentColor
         textSize = badgeRadius * 0.88f
         typeface = vazirTypeface
         textAlign = Paint.Align.CENTER
     }
 
     val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
+        color = contentColor
         textSize = squareSide * 0.085f
         typeface = Typeface.create(vazirTypeface, Typeface.BOLD)
     }
 
     val symbolPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#B3FFFFFF")
+        color = secondaryContentColor
         textSize = squareSide * 0.055f
         typeface = vazirTypeface
     }
@@ -307,13 +333,13 @@ fun renderWidgetBitmap(
 
     // 3. Bottom Row Typography & Auto-scaling
     val pricePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.WHITE
+        color = contentColor
         textSize = squareSide * 0.13f
         typeface = Typeface.create(vazirTypeface, Typeface.BOLD)
     }
 
     val unitPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.parseColor("#CCFFFFFF")
+        color = secondaryContentColor
         textSize = squareSide * 0.06f
         typeface = vazirTypeface
     }

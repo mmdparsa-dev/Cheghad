@@ -39,7 +39,8 @@ data class CurrencyUiState(
     val HistoryPoints: Map<String, List<Double>> = emptyMap(),
     val IsHistoryLoading: Boolean = false,
     val NewsArticles: List<NewsArticle> = emptyList(),
-    val IsNewsLoading: Boolean = false
+    val IsNewsLoading: Boolean = false,
+    val IsOffline: Boolean = false
 )
 
 class CurrencyViewModel(
@@ -92,6 +93,19 @@ class CurrencyViewModel(
         StartPeriodicUpdates()
         ObserveAlarms()
         FetchNews()
+        ObserveConnectivity()
+    }
+
+    private fun ObserveConnectivity() {
+        context?.let { ctx ->
+            viewModelScope.launch {
+                val observer = com.mmdparsadev.cheghad.utils.NetworkConnectivityObserver(ctx)
+                observer.observe().collect { status ->
+                    val isOffline = status != com.mmdparsadev.cheghad.utils.ConnectivityStatus.Available
+                    _UiState.update { it.copy(IsOffline = isOffline) }
+                }
+            }
+        }
     }
 
     private fun ObserveCurrencies() {
@@ -246,16 +260,24 @@ class CurrencyViewModel(
         viewModelScope.launch {
             when (val Result = Repository.FetchLivePrices()) {
                 is NetworkResult.Success -> {
-                    val CurrentTime = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-                    Repository.saveCurrenciesToCache(Result.Data)
-                    saveCachedItemsToPrefs(Result.Data)
-                    prefs?.edit()?.putString("cached_time", CurrentTime)?.apply()
+                    val CurrentTime = if (Result.IsFresh) {
+                        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                    } else {
+                        prefs?.getString("cached_time", "") ?: ""
+                    }
+                    
+                    if (Result.IsFresh) {
+                        saveCachedItemsToPrefs(Result.Data)
+                        prefs?.edit()?.putString("cached_time", CurrentTime)?.apply()
+                    }
+
                     _UiState.update {
                         it.copy(
                             IsLoading = false,
                             Items = Result.Data,
                             LastUpdatedTime = CurrentTime,
-                            ShowSuccessMessage = IsManualRefresh
+                            ShowSuccessMessage = IsManualRefresh && Result.IsFresh,
+                            ErrorMessageResId = if (!Result.IsFresh && IsManualRefresh) R.string.error_showing_cache else null
                         )
                     }
                     CheckTriggeredAlarms(Result.Data)

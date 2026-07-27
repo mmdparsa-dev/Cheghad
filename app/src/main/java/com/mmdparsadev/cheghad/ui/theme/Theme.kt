@@ -2,7 +2,6 @@ package com.mmdparsadev.cheghad.ui.theme
 
 import android.os.Build
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -46,21 +45,21 @@ private val DarkColorScheme =
 
 @Composable
 fun animateColorScheme(targetColorScheme: ColorScheme): ColorScheme {
-  val primary = animateColorAsState(targetColorScheme.primary, tween(400), label = "primary")
-  val onPrimary = animateColorAsState(targetColorScheme.onPrimary, tween(400), label = "onPrimary")
-  val primaryContainer = animateColorAsState(targetColorScheme.primaryContainer, tween(400), label = "primaryContainer")
-  val onPrimaryContainer = animateColorAsState(targetColorScheme.onPrimaryContainer, tween(400), label = "onPrimaryContainer")
-  val secondary = animateColorAsState(targetColorScheme.secondary, tween(400), label = "secondary")
-  val onSecondary = animateColorAsState(targetColorScheme.onSecondary, tween(400), label = "onSecondary")
-  val secondaryContainer = animateColorAsState(targetColorScheme.secondaryContainer, tween(400), label = "secondaryContainer")
-  val onSecondaryContainer = animateColorAsState(targetColorScheme.onSecondaryContainer, tween(400), label = "onSecondaryContainer")
-  val background = animateColorAsState(targetColorScheme.background, tween(400), label = "background")
-  val onBackground = animateColorAsState(targetColorScheme.onBackground, tween(400), label = "onBackground")
-  val surface = animateColorAsState(targetColorScheme.surface, tween(400), label = "surface")
-  val onSurface = animateColorAsState(targetColorScheme.onSurface, tween(400), label = "onSurface")
-  val outlineVariant = animateColorAsState(targetColorScheme.outlineVariant, tween(400), label = "outlineVariant")
-  val error = animateColorAsState(targetColorScheme.error, tween(400), label = "error")
-  val errorContainer = animateColorAsState(targetColorScheme.errorContainer, tween(400), label = "errorContainer")
+  val primary = animateColorAsState(targetColorScheme.primary, ExpressiveAnimations.defaultEffects(), label = "primary")
+  val onPrimary = animateColorAsState(targetColorScheme.onPrimary, ExpressiveAnimations.defaultEffects(), label = "onPrimary")
+  val primaryContainer = animateColorAsState(targetColorScheme.primaryContainer, ExpressiveAnimations.defaultEffects(), label = "primaryContainer")
+  val onPrimaryContainer = animateColorAsState(targetColorScheme.onPrimaryContainer, ExpressiveAnimations.defaultEffects(), label = "onPrimaryContainer")
+  val secondary = animateColorAsState(targetColorScheme.secondary, ExpressiveAnimations.defaultEffects(), label = "secondary")
+  val onSecondary = animateColorAsState(targetColorScheme.onSecondary, ExpressiveAnimations.defaultEffects(), label = "onSecondary")
+  val secondaryContainer = animateColorAsState(targetColorScheme.secondaryContainer, ExpressiveAnimations.defaultEffects(), label = "secondaryContainer")
+  val onSecondaryContainer = animateColorAsState(targetColorScheme.onSecondaryContainer, ExpressiveAnimations.defaultEffects(), label = "onSecondaryContainer")
+  val background = animateColorAsState(targetColorScheme.background, ExpressiveAnimations.defaultEffects(), label = "background")
+  val onBackground = animateColorAsState(targetColorScheme.onBackground, ExpressiveAnimations.defaultEffects(), label = "onBackground")
+  val surface = animateColorAsState(targetColorScheme.surface, ExpressiveAnimations.defaultEffects(), label = "surface")
+  val onSurface = animateColorAsState(targetColorScheme.onSurface, ExpressiveAnimations.defaultEffects(), label = "onSurface")
+  val outlineVariant = animateColorAsState(targetColorScheme.outlineVariant, ExpressiveAnimations.defaultEffects(), label = "outlineVariant")
+  val error = animateColorAsState(targetColorScheme.error, ExpressiveAnimations.defaultEffects(), label = "error")
+  val errorContainer = animateColorAsState(targetColorScheme.errorContainer, ExpressiveAnimations.defaultEffects(), label = "errorContainer")
 
   return targetColorScheme.copy(
     primary = primary.value,

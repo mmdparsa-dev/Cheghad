@@ -19,7 +19,7 @@ android {
     minSdk = 24
     targetSdk = 37
     versionCode = 7
-    versionName = "0.7.9 - Beta"
+    versionName = "0.8.6 - Beta"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -83,7 +83,7 @@ dependencies {
   implementation(platform(libs.firebase.bom))
   implementation(libs.androidx.appcompat)
   implementation(libs.androidx.glance.appwidget)
-  // implementation(libs.accompanist.permissions)
+  implementation(libs.androidx.datastore.preferences)
   implementation(libs.androidx.activity.compose)
   // implementation(libs.androidx.camera.camera2)
   // implementation(libs.androidx.camera.core)

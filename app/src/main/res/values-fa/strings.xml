@@ -19,6 +19,7 @@
     <string name="error_server">بروزرسانی ناموفق، اینترنت خود را چک کنید.</string>
     <string name="error_timeout">بروزرسانی ناموفق، اینترنت خود را چک کنید.</string>
     <string name="success_updated">داده‌ها با موفقیت بروز شدند.</string>
+    <string name="error_showing_cache">بروزرسانی ناموفق، در حال نمایش قیمت‌های قدیمی...</string>
     <string name="all_markets">تمام بازارها</string>
     <string name="welcome_title">به چقد خوش آمدید</string>
     <string name="welcome_desc">برای ادامه زبان خود را انتخاب کنید</string>
@@ -119,4 +120,13 @@
     <string name="sort_default">محبوب‌ترین</string>
     <string name="sort_profitable">پرسودترین</string>
     <string name="sort_loss_making">پرضررترین</string>
+    <string name="widget_config_title">تنظیمات ویجت</string>
+    <string name="widget_config_select_currency">انتخاب ارز برای نمایش</string>
+    <string name="widget_config_select_theme">انتخاب تم ظاهری</string>
+    <string name="widget_theme_glassy">شیشه‌ای (Glassy)</string>
+    <string name="widget_theme_dark">تیره (Dark)</string>
+    <string name="widget_theme_light">روشن (Light)</string>
+    <string name="widget_theme_trend">بر اساس روند قیمت</string>
+    <string name="widget_config_save">ذخیره تنظیمات</string>
+    <string name="widget_config_success">ویجت با موفقیت بروز شد!</string>
 </resources>

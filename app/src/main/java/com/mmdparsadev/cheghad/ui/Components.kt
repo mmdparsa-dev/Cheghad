@@ -1,15 +1,21 @@
 package com.mmdparsadev.cheghad.ui
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.mmdparsadev.cheghad.R
+import com.mmdparsadev.cheghad.ui.viewmodel.CurrencyUiState
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -69,6 +75,41 @@ fun ExpressiveConnectedButtonGroup(
                 )
             ) {
                 content(index, isSelected)
+            }
+        }
+    }
+}
+
+@Composable
+fun ConnectivityStatusBanner(uiState: CurrencyUiState) {
+    AnimatedVisibility(
+        visible = uiState.IsOffline,
+        enter = expandVertically() + fadeIn(),
+        exit = shrinkVertically() + fadeOut()
+    ) {
+        Surface(
+            color = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudOff,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(
+                        if (uiState.IsLoading) R.string.status_updating
+                        else R.string.status_offline_mode
+                    ),
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
         }
     }

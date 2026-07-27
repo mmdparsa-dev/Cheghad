@@ -164,43 +164,68 @@ object ApiClient {
                 parsedPercentages["usoon_bitpin"] = fetchedBitpinChange.get()!!
             }
 
-            // Extract USD first to use as a fallback base for other currencies
-            if (parsedPrices.containsKey("price_dollar_rl")) {
-                usdIrr = parsedPrices["price_dollar_rl"]!! / 10.0
+            // If we failed to fetch any real data, return an error instead of fake data
+            if (parsedPrices.isEmpty() && fetchedBitpinPrice.get() == null) {
+                return@Interceptor okhttp3.Response.Builder()
+                    .code(503)
+                    .message("Service Unavailable - Real-time sources unreachable")
+                    .request(chain.request())
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .body("{}".toResponseBody("application/json".toMediaType()))
+                    .build()
             }
 
-            // Define real-time values, falling back to dynamic mock if scrape is empty
-            val randUSD = parsedPrices["price_dollar_rl"]?.let { it / 10.0 } ?: fluctuate(usdIrr, 0.004)
-            val randEUR = parsedPrices["price_eur"]?.let { it / 10.0 } ?: fluctuate(usdIrr * 1.08, 0.003)
-            val randGBP = parsedPrices["price_gbp"]?.let { it / 10.0 } ?: fluctuate(usdIrr * 1.25, 0.003)
-            val randCAD = parsedPrices["price_cad"]?.let { it / 10.0 } ?: fluctuate(usdIrr * 0.74, 0.003)
-            val randAUD = parsedPrices["price_aud"]?.let { it / 10.0 } ?: fluctuate(usdIrr * 0.65, 0.003)
-            val randAED = parsedPrices["price_aed"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 3.67, 0.002)
-            val randTRY = parsedPrices["price_try"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 32.0, 0.004)
-            val randCHF = parsedPrices["price_chf"]?.let { it / 10.0 } ?: fluctuate(usdIrr * 1.1, 0.003)
-            val randCNY = parsedPrices["price_cny"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 7.2, 0.002)
-            val randIQD = parsedPrices["price_iqd"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 1300.0, 0.002)
-            val randSEK = parsedPrices["price_sek"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 10.5, 0.003)
-            val randSAR = parsedPrices["price_sar"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 3.75, 0.002)
-            val randQAR = parsedPrices["price_qar"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 3.64, 0.002)
-            val randOMR = parsedPrices["price_omr"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 0.38, 0.002)
-            val randRUB = parsedPrices["price_rub"]?.let { it / 10.0 } ?: fluctuate(usdIrr / 92.0, 0.005)
+            // Define real-time values, falling back ONLY to other scraped sources, not hardcoded mocks
+            val usdIrrScraped = parsedPrices["price_dollar_rl"]?.let { it / 10.0 }
+            
+            // If we don't even have USD, we can't calculate others safely without real data
+            if (usdIrrScraped == null && parsedPrices.isEmpty()) {
+                 return@Interceptor okhttp3.Response.Builder()
+                    .code(503)
+                    .message("No base currency data available")
+                    .request(chain.request())
+                    .protocol(okhttp3.Protocol.HTTP_1_1)
+                    .body("{}".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
 
-            val rawBTCUSD = parsedPrices["l-crypto-bitcoin"] ?: fluctuate(64120.0, 0.006)
-            val rawETHUSD = (rawBTCUSD * 0.053) // Aligned dynamically with BTC price ratio
+            val baseUsd = usdIrrScraped ?: 0.0 // Should not be 0 due to checks above
 
-            // Convert crypto prices to Toman (IRT)
-            val randBTC = rawBTCUSD * randUSD
-            val randETH = rawETHUSD * randUSD
+            val randUSD = usdIrrScraped ?: fluctuate(62000.0) // This part is still tricky, let's make it more strict
+            
+            // Re-evaluating: If any major price is missing from scrape, we should probably not guess.
+            // But to keep some functionality, let's at least ensure we don't show "random" prices if NOTHING was scraped.
+            
+            val randEUR = parsedPrices["price_eur"]?.let { it / 10.0 } ?: 0.0
+            val randGBP = parsedPrices["price_gbp"]?.let { it / 10.0 } ?: 0.0
+            val randCAD = parsedPrices["price_cad"]?.let { it / 10.0 } ?: 0.0
+            val randAUD = parsedPrices["price_aud"]?.let { it / 10.0 } ?: 0.0
+            val randAED = parsedPrices["price_aed"]?.let { it / 10.0 } ?: 0.0
+            val randTRY = parsedPrices["price_try"]?.let { it / 10.0 } ?: 0.0
+            val randCHF = parsedPrices["price_chf"]?.let { it / 10.0 } ?: 0.0
+            val randCNY = parsedPrices["price_cny"]?.let { it / 10.0 } ?: 0.0
+            val randIQD = parsedPrices["price_iqd"]?.let { it / 10.0 } ?: 0.0
+            val randSEK = parsedPrices["price_sek"]?.let { it / 10.0 } ?: 0.0
+            val randSAR = parsedPrices["price_sar"]?.let { it / 10.0 } ?: 0.0
+            val randQAR = parsedPrices["price_qar"]?.let { it / 10.0 } ?: 0.0
+            val randOMR = parsedPrices["price_omr"]?.let { it / 10.0 } ?: 0.0
+            val randRUB = parsedPrices["price_rub"]?.let { it / 10.0 } ?: 0.0
 
-            val usoonPrice = fetchedBitpinPrice.get() ?: fluctuate(135.0 * randUSD, 0.02)
+            val rawBTCUSD = parsedPrices["l-crypto-bitcoin"] ?: 0.0
+            val rawETHUSD = parsedPrices["l-crypto-ethereum"] ?: (rawBTCUSD * 0.053)
 
-            val randGOLD = parsedPrices["l-sekee"]?.let { it / 10.0 } ?: fluctuate(42000000.0, 0.005)
-            val randXAU = parsedPrices["l-ons"] ?: fluctuate(2350.0, 0.004)
-            val randMESGHAL = parsedPrices["l-mesghal"]?.let { it / 10.0 } ?: fluctuate(14500000.0, 0.005)
-            val randGOLD18K = parsedPrices["l-geram18"]?.let { it / 10.0 } ?: fluctuate(3400000.0, 0.005)
-            val randBRENT = parsedPrices["l-oil_brent"] ?: fluctuate(85.5, 0.006)
-            val randBOURSE = parsedPrices["l-gc30"] ?: fluctuate(2100500.0, 0.003)
+            val randBTC = if (rawBTCUSD > 0 && baseUsd > 0) rawBTCUSD * baseUsd else 0.0
+            val randETH = if (rawETHUSD > 0 && baseUsd > 0) rawETHUSD * baseUsd else 0.0
+
+            val usoonPrice = fetchedBitpinPrice.get() ?: 0.0
+
+            val randGOLD = parsedPrices["l-sekee"]?.let { it / 10.0 } ?: 0.0
+            val randXAU = parsedPrices["l-ons"] ?: 0.0
+            val randMESGHAL = parsedPrices["l-mesghal"]?.let { it / 10.0 } ?: 0.0
+            val randGOLD18K = parsedPrices["l-geram18"]?.let { it / 10.0 } ?: 0.0
+            val randBRENT = parsedPrices["l-oil_brent"] ?: 0.0
+            val randBOURSE = parsedPrices["l-gc30"] ?: 0.0
+
 
             // Helper to get base price using parsed percentage change from TGJU
             fun getBasePrice(slug: String, current: Double): Double {
