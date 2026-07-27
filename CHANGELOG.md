@@ -1,5 +1,35 @@
 ## [v0.7.9 - Beta] - 2026-07-25
 
+## [v0.8.6 - Beta] - 2026-07-27
+
+# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
+## The Changes:
+
+- Fix problem Update
+- Updates Component
+- Add Edit in widgets
+- You can change Apparace widget
+- You can select Currency widget
+- Add status update 
+- Fix Database problem
+- Re-writed Animations by Material 3 Experrssive
+- Add Gold Ouns
+- Fix Bugs
+# 🚀 نسسسسسخه جدیییییدددددد!
+## تغییرات:
+
+- رفع مشکل به‌روزرسانی
+- به‌روزرسانی کامپوننت
+- افزودن قابلیت ویرایش به ویجت‌ها
+- امکان تغییر ظاهر ویجت
+- امکان انتخاب ویجت ارز
+- افزودن قابلیت به‌روزرسانی وضعیت
+- رفع مشکل پایگاه داده
+- بازنویسی انیمیشن‌ها با استفاده از Material 3 Expressive
+- افزودن قیمت انس طلا
+- فیکس باگ‌ها
+
+
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
 ## The Changes:
 
