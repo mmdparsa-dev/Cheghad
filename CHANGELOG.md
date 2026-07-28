@@ -1,5 +1,3 @@
-## [v0.7.9 - Beta] - 2026-07-25
-
 ## [v0.8.6 - Beta] - 2026-07-27
 
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
@@ -10,7 +8,7 @@
 - Add Edit in widgets
 - You can change Apparace widget
 - You can select Currency widget
-- Add status update 
+- Add status update
 - Fix Database problem
 - Re-writed Animations by Material 3 Experrssive
 - Add Gold Ouns
@@ -29,11 +27,11 @@
 - افزودن قیمت انس طلا
 - فیکس باگ‌ها
 
-
+## [v0.7.9 - Beta] - 2026-07-25
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
 ## The Changes:
 
-- Correct the App Version in Settings 
+- Correct the App Version in Settings
 - Fix Loop Update
 - Fix Bugs
 # 🚀 نسسسسسخه جدیییییدددددد!
@@ -53,14 +51,14 @@
 
 - حل مشکل آپدیت
 
-  
+
 # 0.7.7
 
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
 ## The Changes:
 
-- Add USOON 
-- Rewrited by Material 3 Expressive 
+- Add USOON
+- Rewrited by Material 3 Expressive
 - Smoother Animations
 - Add Update Application
 - Add Check For In Application
@@ -96,7 +94,7 @@
 
 ### The First Release Of Cheghad App🚀
 
-If app has Bug Tell me from Issues 
+If app has Bug Tell me from Issues
 
 ⚠️Warning:This Verison is Beta & Can has bug
 
