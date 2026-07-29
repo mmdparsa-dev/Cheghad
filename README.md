@@ -25,7 +25,7 @@
 
 ### 🚀 ججوری ببرم تو اندروید استدیو
 1. مخزن را کلون کنید:
-   `git clone https://github.com/mmdparsa/Cheghad.git`
+   `git clone https://github.com/mmdparsa-dev/Cheghad`
 2. پروژه را در **Android Studio** باز کنید.
 3. اجازه دهید کدهای Gradle همگام‌سازی (Sync) شوند.
 4. پروژه را روی شبیه‌ساز یا دستگاه واقعی اجرا کنید.
@@ -53,7 +53,7 @@ Check the Releses or Download From app
 
 ### 🚀 How to use In Android Studio?
 1. Clone the repository:
-   `git clone https://github.com/mmdparsa/Cheghad.git`
+   `git clone https://github.com/mmdparsa-dev/Cheghad`
 2. Open the project in **Android Studio**.
 3. Allow Gradle to sync all necessary dependencies.
 4. Build and run the app on an Emulator or a physical device.
