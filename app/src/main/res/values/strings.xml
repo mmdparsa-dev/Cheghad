@@ -102,6 +102,13 @@
     <string name="trend_color_title">Price Trend Colors</string>
     <string name="trend_color_standard">Standard</string>
     <string name="trend_color_inverted">Inverted</string>
+    <string name="settings_color_title">App Theme Color</string>
+    <string name="color_default">Default</string>
+    <string name="color_blue">Blue</string>
+    <string name="color_green">Green</string>
+    <string name="color_red">Red</string>
+    <string name="color_orange">Orange</string>
+    <string name="color_pink">Pink</string>
     <string name="today_date">Today: %s</string>
     <string name="digits_system_title">Number Digits System</string>
     <string name="digits_fa">Persian</string>
@@ -128,4 +135,14 @@
     <string name="widget_theme_trend">Based on Trend</string>
     <string name="widget_config_save">Save Settings</string>
     <string name="widget_config_success">Widget updated!</string>
+    <string name="calc_title">Calculator &amp; Currency Converter</string>
+    <string name="calc_subtitle">Calculate asset value and online conversion to Toman</string>
+    <string name="calc_mode_asset_to_toman">Asset to Toman</string>
+    <string name="calc_mode_toman_to_asset">Toman to Asset</string>
+    <string name="calc_select_asset">Select Asset / Currency</string>
+    <string name="calc_amount">Amount</string>
+    <string name="calc_total_value">Total value in Toman:</string>
+    <string name="calc_toman_amount">Amount in Toman</string>
+    <string name="calc_toman_hint">e.g., 10,000,000 Toman</string>
+    <string name="calc_equivalents">Equivalent in other currencies:</string>
 </resources>

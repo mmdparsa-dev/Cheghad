@@ -41,6 +41,13 @@ import com.mmdparsadev.cheghad.formatPercent
 import com.mmdparsadev.cheghad.formatPrice
 import com.mmdparsadev.cheghad.getLocalizedTitle
 import com.mmdparsadev.cheghad.worker.CurrencySyncWorker
+import androidx.compose.ui.graphics.toArgb
+import com.mmdparsadev.cheghad.ui.theme.AppThemeColor
+import com.mmdparsadev.cheghad.data.repository.dataStore
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import androidx.datastore.preferences.core.Preferences as DataStorePreferences
+import androidx.datastore.preferences.core.stringPreferencesKey as dsStringPreferencesKey
 import kotlin.math.min
 
 class CurrencyWidgetReceiver : GlanceAppWidgetReceiver() {
@@ -140,6 +147,11 @@ class CurrencyWidget : GlanceAppWidget() {
         val db = AppDatabase.getDatabase(context)
         val currencies = db.currencyDao().getAllCurrencies()
 
+        // Get app-wide settings for color seed
+        val appSettings = context.dataStore.data.first()
+        val appColorSeedName = appSettings[dsStringPreferencesKey("color_seed")] ?: "DEFAULT"
+        val appColorSeed = AppThemeColor.entries.find { it.name == appColorSeedName } ?: AppThemeColor.DEFAULT
+
         provideContent {
             val prefs = currentState<Preferences>()
             val selectedId = prefs[stringPreferencesKey("selected_currency_id")]
@@ -148,14 +160,14 @@ class CurrencyWidget : GlanceAppWidget() {
             val displayItem = currencies.find { it.Id == selectedId } ?: currencies.firstOrNull()
 
             GlanceTheme {
-                WidgetLayout(displayItem, theme)
+                WidgetLayout(displayItem, theme, appColorSeed)
             }
         }
     }
 }
 
 @Composable
-fun WidgetLayout(item: CurrencyItem?, theme: String) {
+fun WidgetLayout(item: CurrencyItem?, theme: String, appColorSeed: AppThemeColor) {
     val context = LocalContext.current
     val size = LocalSize.current
     val isEnglish = isAppEnglish(context)
@@ -164,8 +176,8 @@ fun WidgetLayout(item: CurrencyItem?, theme: String) {
     val widthPx = (size.width.value * density).toInt().coerceAtLeast(150)
     val heightPx = (size.height.value * density).toInt().coerceAtLeast(150)
 
-    val bitmap = remember(item, isEnglish, widthPx, heightPx, theme) {
-        renderWidgetBitmap(context, item, isEnglish, widthPx, heightPx, theme)
+    val bitmap = remember(item, isEnglish, widthPx, heightPx, theme, appColorSeed) {
+        renderWidgetBitmap(context, item, isEnglish, widthPx, heightPx, theme, appColorSeed)
     }
 
     Image(
@@ -183,7 +195,8 @@ fun renderWidgetBitmap(
     isEnglish: Boolean,
     widthPx: Int,
     heightPx: Int,
-    theme: String
+    theme: String,
+    appColorSeed: AppThemeColor = AppThemeColor.DEFAULT
 ): Bitmap {
     val w = widthPx.coerceAtLeast(150)
     val h = heightPx.coerceAtLeast(150)
@@ -212,6 +225,9 @@ fun renderWidgetBitmap(
             isZeroChange -> android.graphics.Color.parseColor("#FF757575") // Gray for no change
             isNegative -> android.graphics.Color.parseColor("#FFD32F2F")
             else -> android.graphics.Color.parseColor("#FF388E3C")
+        }
+        "app_color" -> {
+            appColorSeed.seedColor.toArgb()
         }
         else -> android.graphics.Color.parseColor("#E61E1E24") // glassy (default)
     }

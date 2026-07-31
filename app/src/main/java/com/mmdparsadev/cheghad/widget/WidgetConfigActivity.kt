@@ -8,11 +8,17 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -21,6 +27,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -35,12 +42,21 @@ import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.database.AppDatabase
 import com.mmdparsadev.cheghad.data.models.CurrencyItem
 import com.mmdparsadev.cheghad.getLocalizedTitle
+import androidx.activity.viewModels
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.mmdparsadev.cheghad.ui.viewmodel.SettingsViewModel
+import com.mmdparsadev.cheghad.data.repository.SettingsRepository
+import com.mmdparsadev.cheghad.ui.theme.AppThemeColor
 import com.mmdparsadev.cheghad.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.launch
 
 class WidgetConfigActivity : ComponentActivity() {
 
     private var appWidgetId = AppWidgetManager.INVALID_APPWIDGET_ID
+
+    private val settingsViewModel: SettingsViewModel by viewModels {
+        SettingsViewModel.Factory(SettingsRepository(applicationContext))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,15 +81,23 @@ class WidgetConfigActivity : ComponentActivity() {
         }
 
         setContent {
-            val sharedPrefs = remember { getSharedPreferences("app_prefs", MODE_PRIVATE) }
-            val appThemeMode = remember { sharedPrefs.getString("app_theme_mode", "system") ?: "system" }
+            val userSettings by settingsViewModel.settings.collectAsStateWithLifecycle()
+            if (!userSettings.isLoaded) return@setContent
 
-            MyApplicationTheme(themeMode = appThemeMode) {
+            val appThemeMode = userSettings.themeMode
+            val colorSeedName = userSettings.colorSeed
+            val selectedAppColor = AppThemeColor.entries.find { it.name == colorSeedName } ?: AppThemeColor.DEFAULT
+
+            MyApplicationTheme(
+                themeMode = appThemeMode,
+                seedColor = if (selectedAppColor == AppThemeColor.DEFAULT) null else selectedAppColor.seedColor,
+                animate = false
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    WidgetConfigScreen(appWidgetId) {
+                    WidgetConfigScreen(appWidgetId, colorSeedName) {
                         val resultValue = Intent().apply {
                             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
                         }
@@ -88,7 +112,7 @@ class WidgetConfigActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WidgetConfigScreen(appWidgetId: Int, onFinished: () -> Unit) {
+fun WidgetConfigScreen(appWidgetId: Int, appColorSeed: String, onFinished: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val db = remember { AppDatabase.getDatabase(context) }
@@ -149,7 +173,7 @@ fun WidgetConfigScreen(appWidgetId: Int, onFinished: () -> Unit) {
 
                 item {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Divider()
+                    HorizontalDivider()
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = stringResource(R.string.widget_config_select_theme),
@@ -161,6 +185,7 @@ fun WidgetConfigScreen(appWidgetId: Int, onFinished: () -> Unit) {
                 item {
                     ThemeSelectionSection(
                         selectedTheme = selectedTheme,
+                        appColorSeed = appColorSeed,
                         onThemeSelected = { selectedTheme = it }
                     )
                 }
@@ -177,7 +202,17 @@ fun WidgetConfigScreen(appWidgetId: Int, onFinished: () -> Unit) {
                                     set(stringPreferencesKey("widget_theme"), selectedTheme)
                                 }
                             }
-                            CurrencyWidget().update(context, glanceId)
+                            
+                            // Detect which widget to update
+                            val appWidgetManager = AppWidgetManager.getInstance(context)
+                            val providerName = appWidgetManager.getAppWidgetInfo(appWidgetId)?.provider?.className
+                            
+                            when (providerName) {
+                                MinimalBadgeWidgetReceiver::class.java.name -> MinimalBadgeWidget().update(context, glanceId)
+                                PriceDeltaWidgetReceiver::class.java.name -> PriceDeltaWidget().update(context, glanceId)
+                                else -> CurrencyWidget().update(context, glanceId)
+                            }
+
                             Toast.makeText(context, R.string.widget_config_success, Toast.LENGTH_SHORT).show()
                             onFinished()
                         } catch (e: Exception) {
@@ -197,37 +232,95 @@ fun WidgetConfigScreen(appWidgetId: Int, onFinished: () -> Unit) {
 
 @Composable
 fun CurrencySelectionItem(item: CurrencyItem, isSelected: Boolean, onClick: () -> Unit) {
+    val motionScheme = MaterialTheme.motionScheme
     val title = getLocalizedTitle(item.Symbol, item.Title)
     
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-        ),
-        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null
+    val backgroundColor by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        animationSpec = motionScheme.defaultEffectsSpec(),
+        label = "backgroundColor"
+    )
+    
+    val borderColor by animateColorAsState(
+        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = motionScheme.defaultEffectsSpec(),
+        label = "borderColor"
+    )
+
+    val scale by animateFloatAsState(
+        targetValue = if (isSelected) 1.02f else 1f,
+        animationSpec = motionScheme.defaultSpatialSpec(),
+        label = "scale"
+    )
+    
+    Surface(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer(scaleX = scale, scaleY = scale),
+        shape = RoundedCornerShape(24.dp), // Capsule-like rounded corners
+        color = backgroundColor,
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(2.dp, borderColor) else null
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, fontWeight = FontWeight.Bold)
-                Text(text = item.Symbol, style = MaterialTheme.typography.bodySmall)
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                        CircleShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = item.Symbol.take(1).uppercase(),
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
             }
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title, 
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = item.Symbol, 
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
             if (isSelected) {
-                Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(
+                    imageVector = Icons.Default.Check, 
+                    contentDescription = null, 
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }
 }
 
 @Composable
-fun ThemeSelectionSection(selectedTheme: String, onThemeSelected: (String) -> Unit) {
+fun ThemeSelectionSection(selectedTheme: String, appColorSeed: String, onThemeSelected: (String) -> Unit) {
+    val colorOption = AppThemeColor.entries.find { it.name == appColorSeed } ?: AppThemeColor.DEFAULT
+    
     val themes = listOf(
         "glassy" to stringResource(R.string.widget_theme_glassy),
         "dark" to stringResource(R.string.widget_theme_dark),
         "light" to stringResource(R.string.widget_theme_light),
-        "trend" to stringResource(R.string.widget_theme_trend)
+        "trend" to stringResource(R.string.widget_theme_trend),
+        "app_color" to "بر اساس رنگ برنامه"
     )
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -242,6 +335,15 @@ fun ThemeSelectionSection(selectedTheme: String, onThemeSelected: (String) -> Un
                 RadioButton(selected = selectedTheme == id, onClick = { onThemeSelected(id) })
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = label)
+                
+                if (id == "app_color") {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(colorOption.seedColor, CircleShape)
+                    )
+                }
             }
         }
     }

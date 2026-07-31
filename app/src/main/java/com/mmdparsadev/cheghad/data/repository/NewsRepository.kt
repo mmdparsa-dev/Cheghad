@@ -14,6 +14,12 @@ import java.util.concurrent.TimeUnit
 
 class NewsRepository {
 
+    private var serverTimeOffset: Long = 0L
+
+    private fun getCurrentTime(): Long {
+        return System.currentTimeMillis() + serverTimeOffset
+    }
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(8, TimeUnit.SECONDS)
         .readTimeout(8, TimeUnit.SECONDS)
@@ -58,6 +64,15 @@ class NewsRepository {
                 
                 val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
+                    // Sync with server time using Date header
+                    val serverDateStr = response.header("Date")
+                    if (serverDateStr != null) {
+                        val serverTs = parseHttpDate(serverDateStr)
+                        if (serverTs > 0) {
+                            serverTimeOffset = serverTs - System.currentTimeMillis()
+                        }
+                    }
+
                     val xmlData = response.body?.string() ?: ""
                     if (xmlData.isNotEmpty()) {
                         val parsedArticles = parseRssFeed(xmlData, agency)
@@ -84,7 +99,7 @@ class NewsRepository {
     }
 
     private fun parseDateToMillis(dateStr: String): Long {
-        if (dateStr.isBlank()) return System.currentTimeMillis()
+        if (dateStr.isBlank()) return getCurrentTime()
         val formats = listOf(
             java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US),
             java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", java.util.Locale.US),
@@ -98,11 +113,11 @@ class NewsRepository {
                 if (date != null) return date.time
             } catch (_: Exception) {}
         }
-        return System.currentTimeMillis()
+        return getCurrentTime()
     }
 
     private fun formatTimeAgo(timestamp: Long): String {
-        val diff = System.currentTimeMillis() - timestamp
+        val diff = getCurrentTime() - timestamp
         if (diff <= 0) return "لحظاتی پیش"
         val minutes = diff / (1000 * 60)
         val hours = minutes / 60
@@ -232,6 +247,15 @@ class NewsRepository {
         return result.toString()
     }
 
+    private fun parseHttpDate(dateStr: String): Long {
+        return try {
+            val sdf = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US)
+            sdf.parse(dateStr)?.time ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
     private fun cleanHtml(htmlStr: String): String {
         return htmlStr
             .replace(Regex("<[^>]*>"), "")
@@ -276,7 +300,7 @@ class NewsRepository {
         val donya = AGENCIES.find { it.id == "donya" } ?: AGENCIES[0]
         val tgju = AGENCIES.find { it.id == "tgju" } ?: AGENCIES[0]
 
-        val now = System.currentTimeMillis()
+        val now = getCurrentTime()
         return listOf(
             NewsArticle(
                 id = "news_1",

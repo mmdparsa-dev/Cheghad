@@ -84,6 +84,7 @@ dependencies {
   implementation(libs.androidx.appcompat)
   implementation(libs.androidx.glance.appwidget)
   implementation(libs.androidx.datastore.preferences)
+  implementation(libs.androidx.core.splashscreen)
   implementation(libs.androidx.activity.compose)
   // implementation(libs.androidx.camera.camera2)
   // implementation(libs.androidx.camera.core)

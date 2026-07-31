@@ -103,6 +103,13 @@
     <string name="trend_color_title">رنگ تغییرات قیمت</string>
     <string name="trend_color_standard">استاندارد</string>
     <string name="trend_color_inverted">معکوس</string>
+    <string name="settings_color_title">رنگ پوسته برنامه</string>
+    <string name="color_default">پیش‌فرض</string>
+    <string name="color_blue">آبی</string>
+    <string name="color_green">سبز</string>
+    <string name="color_red">قرمز</string>
+    <string name="color_orange">نارنجی</string>
+    <string name="color_pink">صورتی</string>
     <string name="today_date">امروز: %s</string>
     <string name="digits_system_title">سیستم ارقام و اعداد</string>
     <string name="digits_fa">فارسی</string>
@@ -129,4 +136,14 @@
     <string name="widget_theme_trend">بر اساس روند قیمت</string>
     <string name="widget_config_save">ذخیره تنظیمات</string>
     <string name="widget_config_success">ویجت با موفقیت بروز شد!</string>
+    <string name="calc_title">ماشین‌حساب و مبدل ارزی</string>
+    <string name="calc_subtitle">محاسبه ارزش دارایی‌ها و تبدیل آنلاین به تومان</string>
+    <string name="calc_mode_asset_to_toman">ارز به تومان</string>
+    <string name="calc_mode_toman_to_asset">تومان به ارز</string>
+    <string name="calc_select_asset">انتخاب دارایی / ارز</string>
+    <string name="calc_amount">مقدار</string>
+    <string name="calc_total_value">ارزش کل به تومان:</string>
+    <string name="calc_toman_amount">مبلغ به تومان</string>
+    <string name="calc_toman_hint">مثلاً ۱۰,۰۰۰,۰۰۰ تومان</string>
+    <string name="calc_equivalents">معادل در سایر ارزها:</string>
 </resources>

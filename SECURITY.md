@@ -5,9 +5,10 @@
 Below is the list of versions currently receiving security updates:
 
 | Version | Supported          |
-|---------| ------------------ |
-| 0.7.x   | :white_check_mark: |
+|---------|--------------------|
+| 0.7.x   |         :x:        |
 | 0.8.x   | :white_check_mark: |
+| 0.9.x   | :white_check_mark: |
 
 ## Reporting a Vulnerability
 
@@ -35,8 +36,9 @@ If you discover a security vulnerability within this project, please follow thes
 
 | نسخه  | پشتیبانی می‌شود |
 |-------| ------------------ |
-| 0.7.x | :white_check_mark: |
-| 0.8.x | :white_check_mark: |
+| 0.7.x   |         :x:        |
+| 0.8.x   | :white_check_mark: |
+| 0.9.x   | :white_check_mark: |
 ## گزارش آسیب‌پذیری‌های امنیتی
 
 اگر آسیب‌پذیری یا مشکل امنیتی در این پروژه پیدا کردید، لطفاً مراحل زیر را دنبال کنید:

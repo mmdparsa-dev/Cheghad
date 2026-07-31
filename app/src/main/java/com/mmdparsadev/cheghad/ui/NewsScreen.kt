@@ -282,7 +282,10 @@ fun NewsScreen(
     selectedArticleForDetail?.let { article ->
         ModalBottomSheet(
             onDismissRequest = { selectedArticleForDetail = null },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
+            )
         ) {
             Column(
                 modifier = Modifier

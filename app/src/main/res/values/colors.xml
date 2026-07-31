@@ -7,4 +7,12 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="widget_dark_bg">#FF1E1E24</color>
+    <color name="widget_trend_negative">#FFD32F2F</color>
+    <color name="widget_trend_positive">#FF388E3C</color>
+    <color name="widget_trend_neutral">#FF757575</color>
+    <color name="widget_secondary_light">#99000000</color>
+    <color name="widget_secondary_dark">#B3FFFFFF</color>
+    <color name="widget_negative_red">#FFFF5252</color>
+    <color name="widget_positive_green">#FF4CAF50</color>
 </resources>

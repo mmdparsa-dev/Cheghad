@@ -53,21 +53,18 @@ fun ExpressiveConnectedButtonGroup(
                     .height(height)
             }
 
-            // ۱. استخراج متغیر شکل (Shape) اصلی بر اساس جایگاه دکمه در گروه
-            val targetShape = when (index) {
-                0 -> ButtonGroupDefaults.connectedLeadingButtonShapes().shape
-                itemsCount - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes().shape
-                else -> ButtonGroupDefaults.connectedMiddleButtonShapes().shape
+            // ۱. استخراج متغیر شکل‌های (Shapes) دکمه بر اساس جایگاه در گروه
+            val buttonShapes = when (index) {
+                0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                itemsCount - 1 -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
             }
 
             ToggleButton(
                 checked = isSelected,
                 onCheckedChange = { onSelect(index) },
-                // ۲. مقداردهی استاندارد به پارامتر shapes با استفاده از ToggleButtonDefaults
-                shapes = ToggleButtonDefaults.shapes(
-                    shape = targetShape,
-                    checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape
-                ),
+                // ۲. استفاده از شکل‌های استخراج شده برای دکمه
+                shapes = buttonShapes,
                 modifier = itemModifier,
                 contentPadding = PaddingValues(
                     horizontal = if (scrollable) 16.dp else 4.dp,

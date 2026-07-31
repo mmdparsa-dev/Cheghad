@@ -10,6 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.launch
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
@@ -35,7 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 
@@ -67,10 +68,11 @@ import com.mmdparsadev.cheghad.data.api.ApiClient
 import com.mmdparsadev.cheghad.data.repository.CurrencyRepository
 import com.mmdparsadev.cheghad.data.models.*
 import com.mmdparsadev.cheghad.ui.theme.*
-import com.mmdparsadev.cheghad.ui.theme.ExpressiveAnimations
+import androidx.compose.material3.MaterialTheme
 import com.mmdparsadev.cheghad.ui.viewmodel.CurrencyUiState
 import com.mmdparsadev.cheghad.ui.viewmodel.CurrencyViewModel
 import com.mmdparsadev.cheghad.worker.CurrencySyncWorker
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.concurrent.TimeUnit
 
 import androidx.compose.foundation.verticalScroll
@@ -78,6 +80,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -102,16 +107,37 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    private val settingsViewModel: com.mmdparsadev.cheghad.ui.viewmodel.SettingsViewModel by viewModels {
+        com.mmdparsadev.cheghad.ui.viewmodel.SettingsViewModel.Factory(
+            com.mmdparsadev.cheghad.data.repository.SettingsRepository(applicationContext)
+        )
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         SetupBackgroundSync()
 
+        splashScreen.setKeepOnScreenCondition {
+            !settingsViewModel.settings.value.isLoaded
+        }
+
         val sharedPrefs = getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
 
         setContent {
+            val userSettings by settingsViewModel.settings.collectAsStateWithLifecycle()
+            if (!userSettings.isLoaded) return@setContent
+
+            val appThemeMode = userSettings.themeMode
+            val calendarType = userSettings.calendarType
+            val colorSchemeMode = userSettings.colorSchemeMode
+            val digitType = userSettings.digitType
+            val colorSeedName = userSettings.colorSeed
+            val selectedAppColor = com.mmdparsadev.cheghad.ui.theme.AppThemeColor.values().find { it.name == colorSeedName } ?: com.mmdparsadev.cheghad.ui.theme.AppThemeColor.DEFAULT
+
             var isFirstLaunch by remember { mutableStateOf(sharedPrefs.getBoolean("first_launch", true)) }
             var currentScreen by remember { mutableStateOf("home") }
 
@@ -175,26 +201,6 @@ class MainActivity : AppCompatActivity() {
                 )
             }
 
-            var appThemeMode by remember {
-                mutableStateOf(sharedPrefs.getString("app_theme_mode", "system") ?: "system")
-            }
-
-            var calendarType by remember {
-                mutableStateOf(sharedPrefs.getString("calendar_type", "jalali") ?: "jalali")
-            }
-
-            var colorSchemeMode by remember {
-                mutableStateOf(sharedPrefs.getString("color_scheme_mode", "standard") ?: "standard")
-            }
-
-            val currentAppLocale = AppCompatDelegate.getApplicationLocales().get(0) ?: java.util.Locale.getDefault()
-            val isEnglishLocale = currentAppLocale.language.startsWith("en", ignoreCase = true)
-            val defaultDigitType = if (isEnglishLocale) "en" else "fa"
-
-            var digitType by remember {
-                mutableStateOf(sharedPrefs.getString("digit_type", null) ?: defaultDigitType)
-            }
-
             var disabledNewsCategories by remember {
                 mutableStateOf(sharedPrefs.getStringSet("disabled_news_categories", emptySet()) ?: emptySet())
             }
@@ -251,14 +257,18 @@ class MainActivity : AppCompatActivity() {
             val homeScrollState = rememberScrollState()
             val coroutineScope = rememberCoroutineScope()
 
-            MyApplicationTheme(themeMode = appThemeMode) {
+            MyApplicationTheme(
+                themeMode = appThemeMode,
+                seedColor = if (selectedAppColor == com.mmdparsadev.cheghad.ui.theme.AppThemeColor.DEFAULT) null else selectedAppColor.seedColor,
+                animate = false
+            ) {
+                val motionScheme = MaterialTheme.motionScheme
                 if (isFirstLaunch) {
                     WelcomeScreen(
                         onComplete = { langCode, theme ->
                             val newDigitType = if (langCode == "en") "en" else "fa"
-                            digitType = newDigitType
-                            sharedPrefs.edit().putString("digit_type", newDigitType).apply()
-                            sharedPrefs.edit().putString("theme", theme).apply()
+                            settingsViewModel.setDigitType(newDigitType)
+                            settingsViewModel.setThemeMode(theme)
                             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(langCode))
                             sharedPrefs.edit().putBoolean("first_launch", false).apply()
                             isFirstLaunch = false
@@ -278,10 +288,10 @@ class MainActivity : AppCompatActivity() {
                         androidx.compose.animation.AnimatedContent(
                             targetState = currentScreen,
                             transitionSpec = {
-                                (androidx.compose.animation.fadeIn(animationSpec = ExpressiveAnimations.defaultEffects()) +
-                                        androidx.compose.animation.slideInHorizontally(animationSpec = ExpressiveAnimations.defaultSpatial(), initialOffsetX = { fullWidth -> fullWidth / 4 })) togetherWith
-                                        (androidx.compose.animation.fadeOut(animationSpec = ExpressiveAnimations.defaultEffects()) +
-                                                androidx.compose.animation.slideOutHorizontally(animationSpec = ExpressiveAnimations.defaultSpatial(), targetOffsetX = { fullWidth -> -fullWidth / 4 }))
+                                (fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                                        slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec(), initialOffsetX = { fullWidth -> fullWidth / 4 })) togetherWith
+                                        (fadeOut(animationSpec = motionScheme.defaultEffectsSpec()) +
+                                                slideOutHorizontally(animationSpec = motionScheme.defaultSpatialSpec(), targetOffsetX = { fullWidth -> -fullWidth / 4 }))
                             },
                             label = "ScreenTransition"
                         ) { screen ->
@@ -336,10 +346,10 @@ class MainActivity : AppCompatActivity() {
                                         AnimatedContent(
                                             targetState = UiState.SelectedCategory,
                                             transitionSpec = {
-                                                (fadeIn(animationSpec = ExpressiveAnimations.defaultEffects()) +
-                                                        slideInVertically(animationSpec = ExpressiveAnimations.defaultSpatial(), initialOffsetY = { 30 }))
+                                                (fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                                                        slideInVertically(animationSpec = motionScheme.defaultSpatialSpec(), initialOffsetY = { 30 }))
                                                     .togetherWith(
-                                                        fadeOut(animationSpec = ExpressiveAnimations.fastEffects())
+                                                        fadeOut(animationSpec = motionScheme.fastEffectsSpec())
                                                     )
                                             },
                                             label = "CategoryTransition"
@@ -381,10 +391,7 @@ class MainActivity : AppCompatActivity() {
                                                     val currentSortText = androidx.compose.ui.res.stringResource(currentSortStringRes)
                                                     val rotationAngle by animateFloatAsState(
                                                         targetValue = if (isSortMenuExpanded) 180f else 0f,
-                                                        animationSpec = spring(
-                                                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                                                            stiffness = Spring.StiffnessLow
-                                                        ),
+                                                        animationSpec = motionScheme.defaultSpatialSpec(),
                                                         label = "SortArrowRotation"
                                                     )
 
@@ -526,30 +533,19 @@ class MainActivity : AppCompatActivity() {
                                     innerPadding = innerPadding,
                                     onLanguageSelected = { langCode ->
                                         val newDigitType = if (langCode == "en") "en" else "fa"
-                                        digitType = newDigitType
-                                        sharedPrefs.edit().putString("digit_type", newDigitType).apply()
+                                        settingsViewModel.setDigitType(newDigitType)
                                         AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(langCode))
                                     },
                                     appThemeMode = appThemeMode,
-                                    onThemeSelected = { selectedTheme ->
-                                        appThemeMode = selectedTheme
-                                        sharedPrefs.edit().putString("app_theme_mode", selectedTheme).apply()
-                                    },
+                                    onThemeSelected = { settingsViewModel.setThemeMode(it) },
                                     calendarType = calendarType,
-                                    onCalendarSelected = { selectedCalendar ->
-                                        calendarType = selectedCalendar
-                                        sharedPrefs.edit().putString("calendar_type", selectedCalendar).apply()
-                                    },
+                                    onCalendarSelected = { settingsViewModel.setCalendarType(it) },
                                     colorSchemeMode = colorSchemeMode,
-                                    onColorSchemeSelected = { selectedColorScheme ->
-                                        colorSchemeMode = selectedColorScheme
-                                        sharedPrefs.edit().putString("color_scheme_mode", selectedColorScheme).apply()
-                                    },
+                                    onColorSchemeSelected = { settingsViewModel.setColorSchemeMode(it) },
+                                    colorSeedName = colorSeedName,
+                                    onColorSeedSelected = { settingsViewModel.setColorSeed(it) },
                                     digitType = digitType,
-                                    onDigitTypeSelected = { selectedDigitType ->
-                                        digitType = selectedDigitType
-                                        sharedPrefs.edit().putString("digit_type", selectedDigitType).apply()
-                                    },
+                                    onDigitTypeSelected = { settingsViewModel.setDigitType(it) },
                                     timeRangeOrder = timeRangeOrder,
                                     onTimeRangeOrderChanged = { newOrder ->
                                         timeRangeOrder = newOrder
@@ -1028,6 +1024,7 @@ fun TopAppBar(
     OnRefresh: () -> Unit,
     OnEditHome: () -> Unit
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     val context = androidx.compose.ui.platform.LocalContext.current
     val formattedToday = remember(calendarType, digitType) {
         val isEng = java.util.Locale.getDefault().language == "en"
@@ -1068,7 +1065,7 @@ fun TopAppBar(
                     text = appTitle,
                     fontSize = adaptiveSp(20f),
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onBackground,
                     fontFamily = getFontFamilyForText(appTitle)
                 )
                 val timeDisplay = if (UiState.LastUpdatedTime.isNotEmpty()) {
@@ -1089,14 +1086,14 @@ fun TopAppBar(
         Row(horizontalArrangement = Arrangement.spacedBy(adaptiveDp(12f))) {
             val editCornerRadius by androidx.compose.animation.core.animateDpAsState(
                 targetValue = if (isEditingHome) adaptiveDp(22f) else adaptiveDp(12f),
-                animationSpec = ExpressiveAnimations.defaultSpatial(),
+                animationSpec = motionScheme.defaultSpatialSpec(),
                 label = "EditShapeAnim"
             )
 
             val editBgColor by androidx.compose.animation.animateColorAsState(
                 targetValue = if (isEditingHome) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.primaryContainer,
-                animationSpec = ExpressiveAnimations.defaultEffects(),
+                animationSpec = motionScheme.defaultEffectsSpec(),
                 label = "EditBgColorAnim"
             )
 
@@ -1111,9 +1108,9 @@ fun TopAppBar(
                 androidx.compose.animation.AnimatedContent(
                     targetState = isEditingHome,
                     transitionSpec = {
-                        (androidx.compose.animation.scaleIn(animationSpec = ExpressiveAnimations.defaultSpatial()) +
-                                androidx.compose.animation.fadeIn(ExpressiveAnimations.fastEffects())).togetherWith(
-                            androidx.compose.animation.scaleOut(ExpressiveAnimations.fastEffects()) + androidx.compose.animation.fadeOut(ExpressiveAnimations.fastEffects())
+                        (scaleIn(animationSpec = motionScheme.defaultSpatialSpec()) +
+                                fadeIn(motionScheme.fastEffectsSpec())).togetherWith(
+                            scaleOut(motionScheme.fastEffectsSpec()) + fadeOut(motionScheme.fastEffectsSpec())
                         )
                     },
                     label = "EditAnim"
@@ -1199,6 +1196,7 @@ fun RenderCard(
     downColor: Color,
     coloredCardsMode: Boolean
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     if (style == "hero" && isMerged) {
         val usdChange = item?.ChangePercentage ?: 0.0
         val isDark = MaterialTheme.colorScheme.background.red < 0.5f
@@ -1219,7 +1217,7 @@ fun RenderCard(
         }
         val heroBgColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetHeroBgColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "HeroBgColor"
         )
 
@@ -1236,7 +1234,7 @@ fun RenderCard(
         }
         val heroContentColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetHeroContentColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "HeroContentColor"
         )
 
@@ -1255,7 +1253,7 @@ fun RenderCard(
         }
         val heroBorderColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetHeroBorderColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "HeroBorderColor"
         )
 
@@ -1266,7 +1264,7 @@ fun RenderCard(
         }
         val heroIconBg by androidx.compose.animation.animateColorAsState(
             targetValue = targetHeroIconBg,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "HeroIconBg"
         )
 
@@ -1277,7 +1275,7 @@ fun RenderCard(
         }
         val heroIconColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetHeroIconColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "HeroIconColor"
         )
 
@@ -1329,7 +1327,7 @@ fun RenderCard(
                         androidx.compose.animation.AnimatedContent(
                             targetState = percentStr,
                             transitionSpec = {
-                                androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects()).togetherWith(androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
+                                fadeIn(motionScheme.defaultEffectsSpec()).togetherWith(fadeOut(motionScheme.defaultEffectsSpec()))
                             },
                             label = "PercentAnim"
                         ) { pStr ->
@@ -1348,11 +1346,9 @@ fun RenderCard(
                     androidx.compose.animation.AnimatedContent(
                         targetState = formattedPrice,
                         transitionSpec = {
-                            if (targetState > initialState) {
-                                (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
-                            } else {
-                                (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
-                            }
+                            androidx.compose.animation.fadeIn(motionScheme.defaultEffectsSpec()).togetherWith(
+                                fadeOut(motionScheme.defaultEffectsSpec())
+                            )
                         },
                         label = "PriceAnim",
                         modifier = Modifier.alignByBaseline()
@@ -1392,7 +1388,7 @@ fun RenderCard(
         }
         val smallBgColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetSmallBgColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "SmallBgColor"
         )
 
@@ -1409,7 +1405,7 @@ fun RenderCard(
         }
         val smallContentColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetSmallContentColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "SmallContentColor"
         )
 
@@ -1420,7 +1416,7 @@ fun RenderCard(
         }
         val smallBorderColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetSmallBorderColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "SmallBorderColor"
         )
 
@@ -1460,7 +1456,7 @@ fun RenderCard(
         }
         val cardBgColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetCardBgColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "CardBgColor"
         )
 
@@ -1477,7 +1473,7 @@ fun RenderCard(
         }
         val cardContentColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetCardContentColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "CardContentColor"
         )
 
@@ -1496,7 +1492,7 @@ fun RenderCard(
         }
         val cardBorderColor by androidx.compose.animation.animateColorAsState(
             targetValue = targetCardBorderColor,
-            animationSpec = ExpressiveAnimations.defaultEffects(),
+            animationSpec = motionScheme.defaultEffectsSpec(),
             label = "CardBorderColor"
         )
 
@@ -1530,6 +1526,7 @@ fun BentoGrid(
     onSymbolsChanged: (List<String>) -> Unit = {},
     onClickItem: (com.mmdparsadev.cheghad.data.models.CurrencyItem) -> Unit = {}
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     val context = LocalContext.current
     val sharedPrefs = remember { context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE) }
 
@@ -1640,6 +1637,7 @@ fun BentoGrid(
         modifier: Modifier = Modifier,
         content: @Composable BoxScope.() -> Unit
     ) {
+        val motionScheme = MaterialTheme.motionScheme
         val isDragging = draggedIndex == slotIndex
         Box(
             modifier = modifier
@@ -1802,8 +1800,8 @@ fun BentoGrid(
             rowsConfig.forEachIndexed { rowIndex, rowConfig ->
                 androidx.compose.animation.AnimatedVisibility(
                     visible = isEditing,
-                    enter = androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects()) + androidx.compose.animation.expandVertically(ExpressiveAnimations.defaultSpatial()),
-                    exit = androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()) + androidx.compose.animation.shrinkVertically(ExpressiveAnimations.defaultSpatial())
+                    enter = androidx.compose.animation.fadeIn(motionScheme.defaultEffectsSpec()) + expandVertically(motionScheme.defaultSpatialSpec()),
+                    exit = fadeOut(motionScheme.defaultEffectsSpec()) + shrinkVertically(motionScheme.defaultSpatialSpec())
                 ) {
                     Row(
                         modifier = Modifier
@@ -1857,7 +1855,7 @@ fun BentoGrid(
                                 modifier = Modifier.height(adaptiveDp(28f))
                             ) {
                                 Icon(
-                                    imageVector = if (rowConfig.isMerged) Icons.Default.CallSplit else Icons.Default.CallMerge,
+                                    imageVector = if (rowConfig.isMerged) Icons.AutoMirrored.Filled.CallSplit else Icons.AutoMirrored.Filled.CallMerge,
                                     contentDescription = null,
                                     modifier = Modifier.size(adaptiveDp(16f))
                                 )
@@ -1877,16 +1875,16 @@ fun BentoGrid(
                     targetState = rowConfig.isMerged,
                     transitionSpec = {
                         (androidx.compose.animation.fadeIn(
-                            animationSpec = ExpressiveAnimations.defaultEffects()
-                        ) + androidx.compose.animation.scaleIn(
+                            animationSpec = motionScheme.defaultEffectsSpec()
+                        ) + scaleIn(
                             initialScale = 0.95f,
-                            animationSpec = ExpressiveAnimations.defaultSpatial()
+                            animationSpec = motionScheme.defaultSpatialSpec()
                         )).togetherWith(
-                            androidx.compose.animation.fadeOut(
-                                animationSpec = ExpressiveAnimations.defaultEffects()
-                            ) + androidx.compose.animation.scaleOut(
+                            fadeOut(
+                                animationSpec = motionScheme.defaultEffectsSpec()
+                            ) + scaleOut(
                                 targetScale = 0.95f,
-                                animationSpec = ExpressiveAnimations.defaultSpatial()
+                                animationSpec = motionScheme.defaultSpatialSpec()
                             )
                         )
                     },
@@ -2069,6 +2067,7 @@ fun SecondaryCard(
     contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
     borderColor: Color = Color.Transparent
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(adaptiveDp(28f)))
@@ -2082,7 +2081,9 @@ fun SecondaryCard(
                 androidx.compose.animation.AnimatedContent(
                     targetState = trend,
                     transitionSpec = {
-                        androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects()).togetherWith(androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
+                        androidx.compose.animation.fadeIn(motionScheme.defaultEffectsSpec()).togetherWith(
+                            fadeOut(motionScheme.defaultEffectsSpec())
+                        )
                     },
                     label = "TrendAnim"
                 ) { trnd ->
@@ -2093,11 +2094,9 @@ fun SecondaryCard(
             androidx.compose.animation.AnimatedContent(
                 targetState = value,
                 transitionSpec = {
-                    if (targetState > initialState) {
-                        (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
-                    } else {
-                        (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
-                    }
+                    androidx.compose.animation.fadeIn(motionScheme.defaultEffectsSpec()).togetherWith(
+                        androidx.compose.animation.fadeOut(motionScheme.defaultEffectsSpec())
+                    )
                 },
                 label = "ValueAnim"
             ) { valStr ->
@@ -2120,6 +2119,7 @@ fun SmallCard(
     contentColor: Color = MaterialTheme.colorScheme.onBackground,
     borderColor: Color = MaterialTheme.colorScheme.outlineVariant
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(adaptiveDp(28f)))
@@ -2229,6 +2229,7 @@ fun AssetListItem(
     onClick: () -> Unit = {},
     onLongClick: () -> Unit = {}
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -2241,7 +2242,7 @@ fun AssetListItem(
             )
             .padding(horizontal = adaptiveDp(24f), vertical = adaptiveDp(14f))
             .animateContentSize(
-                animationSpec = ExpressiveAnimations.defaultSpatial()
+                animationSpec = motionScheme.defaultSpatialSpec()
             ),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -2292,19 +2293,22 @@ fun AssetListItem(
 fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
     var selectedLang by remember { mutableStateOf("fa") }
     var selectedTheme by remember { mutableStateOf("system") }
+    val scrollState = rememberScrollState()
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .navigationBarsPadding(),
             contentAlignment = Alignment.Center
         ) {
+            val cardMaxHeight = maxHeight - adaptiveDp(32f)
             Card(
                 modifier = Modifier
                     .fillMaxWidth(0.92f)
+                    .heightIn(max = cardMaxHeight)
                     .padding(adaptiveDp(16f)),
                 shape = RoundedCornerShape(adaptiveDp(32f)),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -2314,6 +2318,7 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(scrollState)
                         .padding(adaptiveDp(28f)),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
@@ -2545,7 +2550,7 @@ fun EditHomeBottomSheet(
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
     var selectedSymbols by remember { mutableStateOf(currentSymbols) }
 
     val density = LocalDensity.current
@@ -2911,7 +2916,18 @@ fun SettingsSwitchRow(
 
             Switch(
                 checked = isChecked,
-                onCheckedChange = onCheckedChange
+                onCheckedChange = onCheckedChange,
+                thumbContent = if (isChecked) {
+                    {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(SwitchDefaults.IconSize),
+                        )
+                    }
+                } else {
+                    null
+                }
             )
         }
     }
@@ -2927,6 +2943,8 @@ fun SettingsScreen(
     onCalendarSelected: (String) -> Unit = {},
     colorSchemeMode: String = "standard",
     onColorSchemeSelected: (String) -> Unit = {},
+    colorSeedName: String = "DEFAULT",
+    onColorSeedSelected: (String) -> Unit = {},
     digitType: String = "fa",
     onDigitTypeSelected: (String) -> Unit = {},
     timeRangeOrder: List<TimeRange>,
@@ -3089,6 +3107,67 @@ fun SettingsScreen(
                     fontSize = adaptiveSp(12f),
                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
+
+        // App Theme Color Section
+        SettingsCard(
+            title = androidx.compose.ui.res.stringResource(R.string.settings_color_title),
+            icon = Icons.Default.Palette
+        ) {
+            val colorOptions = com.mmdparsadev.cheghad.ui.theme.AppThemeColor.values()
+            
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(adaptiveDp(16f))
+            ) {
+                colorOptions.forEach { colorOption ->
+                    val isSelected = colorOption.name == colorSeedName
+                    
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable { onColorSeedSelected(colorOption.name) }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(adaptiveDp(48f))
+                                .clip(CircleShape)
+                                .background(
+                                    if (colorOption == com.mmdparsadev.cheghad.ui.theme.AppThemeColor.DEFAULT) 
+                                        Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.tertiary))
+                                    else Brush.linearGradient(listOf(colorOption.seedColor, colorOption.seedColor))
+                                )
+                                .border(
+                                    width = if (isSelected) adaptiveDp(3f) else adaptiveDp(1f),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(adaptiveDp(24f))
+                                )
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.height(adaptiveDp(6f)))
+                        
+                        Text(
+                            text = androidx.compose.ui.res.stringResource(colorOption.stringRes),
+                            fontSize = adaptiveSp(10f),
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+                }
             }
         }
 
@@ -3416,6 +3495,7 @@ fun InteractiveAssetChart(
     symbol: String? = null,
     onActiveIndexChanged: (Int?) -> Unit
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     val minPrice = points.minOrNull() ?: 0.0
     val maxPrice = points.maxOrNull() ?: 1.0
     val midPrice = (maxPrice + minPrice) / 2.0
@@ -3649,6 +3729,7 @@ fun AssetDetailDialog(
     onDismiss: () -> Unit,
     onSaveAlarm: (targetPrice: Double, isAbove: Boolean) -> Unit
 ) {
+    val motionScheme = MaterialTheme.motionScheme
     var targetPriceStr by remember { mutableStateOf(formatTargetPrice(item.CurrentPrice)) }
     var isAbove by remember { mutableStateOf(true) }
     var selectedTimeRange by remember { mutableStateOf(TimeRange.DAY) }
@@ -3774,7 +3855,7 @@ fun AssetDetailDialog(
 
     val formattedDisplayPrice = formatPrice(displayPrice, digitType, item.Symbol)
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -3837,11 +3918,11 @@ fun AssetDetailDialog(
                     androidx.compose.animation.AnimatedContent(
                         targetState = displayLabel.toLocalizedDigits(digitType),
                         transitionSpec = {
-                            (androidx.compose.animation.fadeIn(animationSpec = ExpressiveAnimations.defaultEffects()) +
-                                    androidx.compose.animation.slideInVertically(animationSpec = ExpressiveAnimations.defaultEffects()) { height -> height / 2 })
+                            (androidx.compose.animation.fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
+                                    slideInVertically(animationSpec = motionScheme.defaultEffectsSpec()) { height -> height / 2 })
                                 .togetherWith(
-                                    androidx.compose.animation.fadeOut(animationSpec = ExpressiveAnimations.fastEffects()) +
-                                            androidx.compose.animation.slideOutVertically(animationSpec = ExpressiveAnimations.fastEffects()) { height -> -height / 2 }
+                                    fadeOut(animationSpec = motionScheme.fastEffectsSpec()) +
+                                            slideOutVertically(animationSpec = motionScheme.fastEffectsSpec()) { height -> -height / 2 }
                                 )
                         },
                         label = "DialogLabelAnim"
@@ -3856,16 +3937,14 @@ fun AssetDetailDialog(
                     androidx.compose.animation.AnimatedContent(
                         targetState = formattedDisplayPrice,
                         transitionSpec = {
-                            if (targetState > initialState) {
-                                (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
-                            } else {
-                                (androidx.compose.animation.slideInVertically(ExpressiveAnimations.defaultSpatial()) { height -> -height } + androidx.compose.animation.fadeIn(ExpressiveAnimations.defaultEffects())).togetherWith(androidx.compose.animation.slideOutVertically(ExpressiveAnimations.defaultSpatial()) { height -> height } + androidx.compose.animation.fadeOut(ExpressiveAnimations.defaultEffects()))
-                            }
+                            androidx.compose.animation.fadeIn(motionScheme.defaultEffectsSpec()).togetherWith(
+                                androidx.compose.animation.fadeOut(motionScheme.defaultEffectsSpec())
+                            )
                         },
                         label = "DialogPriceAnim"
                     ) { priceStr ->
                         Text(
-                            text = androidx.compose.ui.res.stringResource(R.string.currency_toman) + " " + priceStr,
+                            text = stringResource(R.string.currency_toman) + " " + priceStr,
                             fontSize = adaptiveSp(22f),
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onBackground
@@ -4428,7 +4507,7 @@ fun CurrencyCalculatorScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "ماشین‌حساب و مبدل ارزی",
+                text = stringResource(R.string.calc_title),
                 fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary,
@@ -4436,7 +4515,7 @@ fun CurrencyCalculatorScreen(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "محاسبه ارزش دارایی‌ها و تبدیل آنلاین به تومان",
+                text = stringResource(R.string.calc_subtitle),
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center
@@ -4444,7 +4523,10 @@ fun CurrencyCalculatorScreen(
         }
 
         // Mode Selector Tabs (Connected Button Group)
-        val modeLabels = listOf("ارز به تومان", "تومان به ارز")
+        val modeLabels = listOf(
+            stringResource(R.string.calc_mode_asset_to_toman),
+            stringResource(R.string.calc_mode_toman_to_asset)
+        )
         ExpressiveConnectedButtonGroup(
             itemsCount = modeLabels.size,
             selectedIndex = calculationMode,
@@ -4458,214 +4540,197 @@ fun CurrencyCalculatorScreen(
             )
         }
 
-        if (calculationMode == 0) {
-            // Asset to Toman Converter
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "انتخاب دارایی / ارز",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
+        AnimatedContent(
+            targetState = calculationMode,
+            transitionSpec = {
+                if (targetState > initialState) {
+                    (slideInHorizontally { width -> width } + fadeIn()).togetherWith(slideOutHorizontally { width -> -width } + fadeOut())
+                } else {
+                    (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(slideOutHorizontally { width -> width } + fadeOut())
+                }.using(
+                    SizeTransform(clip = false)
+                )
+            },
+            label = "CalculatorModeTransition"
+        ) { mode ->
+            if (mode == 0) {
+                // Asset to Toman Converter
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = stringResource(R.string.calc_select_asset),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                    androidx.compose.foundation.lazy.LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        contentPadding = PaddingValues(horizontal = 2.dp)
-                    ) {
-                        itemsIndexed(items) { index, item ->
-                            val isSelected = selectedItem?.Symbol == item.Symbol
-                            val cornerFull = 23.dp
-                            val cornerFlat = 6.dp
-                            val itemShape = when {
-                                items.size == 1 -> CircleShape
-                                index == 0 -> RoundedCornerShape(topStart = cornerFull, bottomStart = cornerFull, topEnd = cornerFlat, bottomEnd = cornerFlat)
-                                index == items.size - 1 -> RoundedCornerShape(topStart = cornerFlat, bottomStart = cornerFlat, topEnd = cornerFull, bottomEnd = cornerFull)
-                                else -> RoundedCornerShape(cornerFlat)
-                            }
+                        ExpressiveConnectedButtonGroup(
+                            itemsCount = items.size,
+                            selectedIndex = items.indexOf(selectedItem).coerceAtLeast(0),
+                            onSelect = { selectedItem = items[it] },
+                            scrollable = true,
+                            height = 44.dp,
+                            spacing = 4.dp
+                        ) { index, isSelected ->
+                            val item = items[index]
                             val itemTitle = getLocalizedTitle(item.Symbol, item.Title)
-
-                            Button(
-                                onClick = { selectedItem = item },
-                                shape = itemShape,
-                                modifier = Modifier.height(44.dp),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                                border = if (isSelected) {
-                                    BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-                                } else {
-                                    BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                },
-                                colors = if (isSelected) {
-                                    ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    )
-                                } else {
-                                    ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.45f),
-                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                elevation = null
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(22.dp)
-                                            .clip(CircleShape)
-                                            .background(if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f) else MaterialTheme.colorScheme.primaryContainer),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            text = item.Symbol.take(2),
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = itemTitle,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                        fontFamily = getFontFamilyForText(itemTitle)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    OutlinedTextField(
-                        value = quantityInput,
-                        onValueChange = { quantityInput = it },
-                        label = { Text("مقدار (${selectedItem?.Symbol ?: ""})") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        ),
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Result Box (Premium look)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(24.dp))
-                            .background(
-                                androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary,
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                                    )
-                                )
-                            )
-                            .padding(20.dp)
-                    ) {
-                        Column {
-                            Text("ارزش کل به تومان:", fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "${formatPrice(totalToman, digitType)} تومان",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        }
-                    }
-                }
-            }
-        } else {
-            // Toman to all Assets Converter
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Text(
-                        text = "مبلغ به تومان",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    OutlinedTextField(
-                        value = tomanInput,
-                        onValueChange = { tomanInput = it },
-                        label = { Text("مثلاً ۱۰,۰۰۰,۰۰۰ تومان") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(24.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                            focusedBorderColor = MaterialTheme.colorScheme.primary
-                        ),
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
-                    )
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "معادل در سایر ارزها:",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    items.forEach { item ->
-                        val calculatedAmount = if (item.CurrentPrice > 0) tomanEntered / item.CurrentPrice else 0.0
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                                .padding(14.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(28.dp)
+                                        .size(22.dp)
                                         .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.secondaryContainer),
+                                        .background(if (isSelected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.22f) else MaterialTheme.colorScheme.primaryContainer),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        item.Symbol.take(3),
+                                        text = item.Symbol.take(2),
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text(item.Title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = itemTitle,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                    fontFamily = getFontFamilyForText(itemTitle)
+                                )
                             }
-                            Text(
-                                text = String.format(Locale.US, "%.4f", calculatedAmount).toLocalizedDigits(digitType) + " " + item.Symbol,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        OutlinedTextField(
+                            value = quantityInput,
+                            onValueChange = { quantityInput = it },
+                            label = { Text("${stringResource(R.string.calc_amount)} (${selectedItem?.Symbol ?: ""})") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                focusedBorderColor = MaterialTheme.colorScheme.primary
+                            ),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+
+                        Spacer(modifier = Modifier.height(20.dp))
+
+                        // Result Box (Premium look)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primary,
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                                        )
+                                    )
+                                )
+                            .padding(20.dp)
+                        ) {
+                            Column {
+                                Text(stringResource(R.string.calc_total_value), fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${formatPrice(totalToman, digitType)} ${stringResource(R.string.currency_toman)}",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Toman to all Assets Converter
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = stringResource(R.string.calc_toman_amount),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = tomanInput,
+                            onValueChange = { tomanInput = it },
+                            label = { Text(stringResource(R.string.calc_toman_hint)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                focusedBorderColor = MaterialTheme.colorScheme.primary
+                            ),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = stringResource(R.string.calc_equivalents),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        items.forEach { item ->
+                            val calculatedAmount = if (item.CurrentPrice > 0) tomanEntered / item.CurrentPrice else 0.0
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                                    .padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.secondaryContainer),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            item.Symbol.take(3),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(item.Title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                }
+                                Text(
+                                    text = String.format(Locale.US, "%.4f", calculatedAmount).toLocalizedDigits(digitType) + " " + item.Symbol,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 }

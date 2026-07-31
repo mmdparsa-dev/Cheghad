@@ -30,7 +30,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:label="@string/app_name"
-            android:theme="@style/Theme.MyApplication">
+            android:theme="@style/Theme.App.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -46,11 +46,25 @@
                 android:name="autoStoreLocales"
                 android:value="true" />
         </service>
-        <receiver android:name=".widget.CurrencyWidgetReceiver" android:exported="true" android:label="چقد؟">
+        <receiver android:name=".widget.CurrencyWidgetReceiver" android:exported="true" android:label="چقد؟ (معمولی)">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/currency_widget_info" />
+        </receiver>
+
+        <receiver android:name=".widget.MinimalBadgeWidgetReceiver" android:exported="true" android:label="چقد؟ (آیکون کوچک)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/minimal_badge_info" />
+        </receiver>
+
+        <receiver android:name=".widget.PriceDeltaWidgetReceiver" android:exported="true" android:label="چقد؟ (نوار تغییرات)">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/price_delta_info" />
         </receiver>
 
         <activity
