@@ -1,3 +1,37 @@
+## [v0.9.4 - Beta] - 2026-07-31
+
+# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
+## The Changes:
+
+- Fix Slow app Boot
+- Re-writed some section by Material Design 3 Experessive
+- Add Color app
+- Add 2 Widget for unlock screen
+- Add Preview Widget 
+- Translated Calculator section
+- Update Switches
+- Update Progress inductor
+- Fix not show resume in Welcome
+- Button "Select Asset / Currency" Re-writed by Material Design 3 Experessive
+- Respansived Widgets
+- Fix Bugs
+# 🚀 نسسسسسخه جدیییییدددددد!
+## تغییرات:
+
+- رفع مشکل کندی در اجرای اولیه برنامه
+- بازنویسی بخش‌هایی از برنامه با استفاده از استانداردهای Material Design 3 Expressive
+- افزودن قابلیت انتخاب رنگ برای برنامه
+- افزودن ۲ ویجت برای صفحه قفل
+- افزودن ویجت پیش‌نمایش
+- ترجمه بخش ماشین‌حساب
+- به‌روزرسانی سوئیچ‌ها
+- به‌روزرسانی نشانگر پیشرفت
+- رفع مشکل عدم نمایش گزینه ادامه در صفحه خوش‌آمدگویی
+- بازنویسی دکمه «انتخاب دارایی/ارز» بر اساس Material Design 3 Expressive
+- بهینه‌سازی ویجت‌ها برای نمایش واکنش‌گرا
+- برطرف کردن باگ ها
+
+
 ## [v0.8.6 - Beta] - 2026-07-27
 
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
