@@ -1,4 +1,4 @@
-name: Auto Update TOML (2-Day Check)
+name: Auto Optimizer TOML 🚀
 
 on:
   schedule:
@@ -6,25 +6,20 @@ on:
   workflow_dispatch:
 
 jobs:
-  update-toml:
+  update-and-clean-toml:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-       
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-
-      - name: Make gradlew executable
-        run: chmod +x gradlew
-
-
-      - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+      - name: Remove unused dependencies
+        run: ./gradlew buildHealth --fix
 
       - name: Run Catalog Update
         run: ./gradlew versionCatalogUpdate
@@ -33,7 +28,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: 'chore: ⚡ Auto update libs.versions.toml'
-          title: '🤖⚡ Auto Update Dependencies (2-Day Check)'
+          commit-message: 'chore: 🧹 Clean unused deps & update libs.versions.toml'
+          title: '🤖⚡ Clean Unused Deps & Update Catalog'
           branch: 'auto-update-toml'
           delete-branch: true
