@@ -7,4 +7,5 @@
   alias(libs.plugins.roborazzi) apply false
   alias(libs.plugins.secrets) apply false
   alias(libs.plugins.google.services) apply false
+  alias(libs.plugins.version.catalog.update)
 }
