@@ -1,4 +1,4 @@
-name: Auto Optimizer TOML 🚀
+name: Auto Clean & Update TOML 🚀
 
 on:
   schedule:
@@ -18,12 +18,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+      - name: Create local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+
       - name: Remove unused dependencies
-        run: ./gradlew buildHealth --fix
+        run: ./gradlew buildHealth --fix || true
 
       - name: Run Catalog Update
         run: ./gradlew versionCatalogUpdate
 
+      # ۵. ساخت Pull Request
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
