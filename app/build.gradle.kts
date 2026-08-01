@@ -80,7 +80,6 @@ googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.W
 // This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
-  implementation(platform(libs.firebase.bom))
   implementation(libs.androidx.appcompat)
   implementation(libs.androidx.glance.appwidget)
   implementation(libs.androidx.datastore.preferences)
