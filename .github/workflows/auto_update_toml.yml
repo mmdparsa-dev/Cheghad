@@ -2,7 +2,6 @@ name: Auto Update TOML (2-Day Check)
 
 on:
   schedule:
-
     - cron: '0 12 */2 * *'
   workflow_dispatch:
 
@@ -18,6 +17,9 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      - name: Make gradlew executable
+        run: chmod +x gradlew
 
       - name: Run Catalog Update
         run: ./gradlew versionCatalogUpdate
