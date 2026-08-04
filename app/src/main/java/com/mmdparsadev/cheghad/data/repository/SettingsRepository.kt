@@ -11,13 +11,15 @@ import java.io.IOException
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-class SettingsRepository(private val context: Context) {
+class SettingsRepository(val context: Context) {
     private object PreferencesKeys {
         val APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
         val COLOR_SEED = stringPreferencesKey("color_seed")
         val CALENDAR_TYPE = stringPreferencesKey("calendar_type")
         val DIGIT_TYPE = stringPreferencesKey("digit_type")
         val COLOR_SCHEME_MODE = stringPreferencesKey("color_scheme_mode")
+        val LOCKSCREEN_WIDGET_CURRENCY_ID = stringPreferencesKey("lockscreen_widget_currency_id")
+        val LOCKSCREEN_WIDGET_THEME = stringPreferencesKey("lockscreen_widget_theme")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data
@@ -34,7 +36,19 @@ class SettingsRepository(private val context: Context) {
             val calendarType = preferences[PreferencesKeys.CALENDAR_TYPE] ?: "jalali"
             val digitType = preferences[PreferencesKeys.DIGIT_TYPE] ?: "fa"
             val colorSchemeMode = preferences[PreferencesKeys.COLOR_SCHEME_MODE] ?: "standard"
-            UserSettings(themeMode, colorSeed, calendarType, digitType, colorSchemeMode, isLoaded = true)
+            val lockscreenWidgetCurrencyId = preferences[PreferencesKeys.LOCKSCREEN_WIDGET_CURRENCY_ID] ?: "USD"
+            val lockscreenWidgetTheme = preferences[PreferencesKeys.LOCKSCREEN_WIDGET_THEME] ?: "glassy"
+
+            UserSettings(
+                themeMode = themeMode,
+                colorSeed = colorSeed,
+                calendarType = calendarType,
+                digitType = digitType,
+                colorSchemeMode = colorSchemeMode,
+                lockscreenWidgetCurrencyId = lockscreenWidgetCurrencyId,
+                lockscreenWidgetTheme = lockscreenWidgetTheme,
+                isLoaded = true
+            )
         }
 
     suspend fun updateThemeMode(mode: String) {
@@ -66,6 +80,18 @@ class SettingsRepository(private val context: Context) {
             preferences[PreferencesKeys.COLOR_SCHEME_MODE] = mode
         }
     }
+
+    suspend fun updateLockscreenWidgetCurrencyId(id: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LOCKSCREEN_WIDGET_CURRENCY_ID] = id
+        }
+    }
+
+    suspend fun updateLockscreenWidgetTheme(theme: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LOCKSCREEN_WIDGET_THEME] = theme
+        }
+    }
 }
 
 data class UserSettings(
@@ -74,5 +100,7 @@ data class UserSettings(
     val calendarType: String,
     val digitType: String,
     val colorSchemeMode: String,
+    val lockscreenWidgetCurrencyId: String = "USD",
+    val lockscreenWidgetTheme: String = "glassy",
     val isLoaded: Boolean = false
 )

@@ -9,7 +9,6 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import androidx.glance.appwidget.updateAll
 import com.mmdparsadev.cheghad.MainActivity
 import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.api.ApiClient
@@ -17,9 +16,11 @@ import com.mmdparsadev.cheghad.data.models.CurrencyItem
 import com.mmdparsadev.cheghad.data.repository.CurrencyRepository
 import com.mmdparsadev.cheghad.data.repository.NetworkResult
 
+import com.mmdparsadev.cheghad.widget.updateAllWidgets
+
 class CurrencySyncWorker(
     appContext: Context,
-    workerParams: WorkerParameters
+    workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
@@ -31,12 +32,12 @@ class CurrencySyncWorker(
                 database.currencyDao()
             )
 
-            when (val networkResult = repository.FetchLivePrices()) {
+            when (val networkResult = repository.fetchLivePrices()) {
                 is NetworkResult.Success -> {
-                    val items = networkResult.Data
+                    val items = networkResult.data
                     // Check active price alarms in background
                     checkAndTriggerAlarms(applicationContext, database, items)
-                    com.mmdparsadev.cheghad.widget.CurrencyWidget().updateAll(applicationContext)
+                    updateAllWidgets(applicationContext)
                     Result.success()
                 }
                 is NetworkResult.Error -> {
@@ -58,13 +59,11 @@ class CurrencySyncWorker(
         val activeAlarms = alarmDao.getActiveAlarms()
 
         for (alarm in activeAlarms) {
-            val currentItem = items.find { it.Symbol == alarm.symbol } ?: continue
-            val currentPrice = currentItem.CurrentPrice
+            val currentItem = items.find { it.symbol == alarm.symbol } ?: continue
+            val currentPrice = currentItem.currentPrice
 
             var isTriggered = false
-            if (alarm.isAbove && currentPrice >= alarm.targetPrice) {
-                isTriggered = true
-            } else if (!alarm.isAbove && currentPrice <= alarm.targetPrice) {
+            if ((alarm.isAbove && currentPrice >= alarm.targetPrice) || (!alarm.isAbove && currentPrice <= alarm.targetPrice)) {
                 isTriggered = true
             }
 
@@ -110,7 +109,7 @@ class CurrencySyncWorker(
                 context,
                 alarm.id.toInt(),
                 intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
             val notification = NotificationCompat.Builder(context, channelId)

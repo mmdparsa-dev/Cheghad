@@ -73,7 +73,7 @@ class NewsRepository {
                         }
                     }
 
-                    val xmlData = response.body?.string() ?: ""
+                    val xmlData = response.body.string()
                     if (xmlData.isNotEmpty()) {
                         val parsedArticles = parseRssFeed(xmlData, agency)
                         fetchedList.addAll(parsedArticles)

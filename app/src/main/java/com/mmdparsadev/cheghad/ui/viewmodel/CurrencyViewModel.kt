@@ -13,6 +13,9 @@ import com.mmdparsadev.cheghad.data.repository.CurrencyRepository
 import com.mmdparsadev.cheghad.data.repository.AlarmRepository
 import com.mmdparsadev.cheghad.data.repository.NewsRepository
 import com.mmdparsadev.cheghad.data.repository.NetworkResult
+import com.mmdparsadev.cheghad.utils.ConnectivityStatus
+import com.mmdparsadev.cheghad.utils.NetworkConnectivityObserver
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
@@ -28,38 +32,45 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import com.mmdparsadev.cheghad.widget.updateAllWidgets
+
 data class CurrencyUiState(
-    val IsLoading: Boolean = false,
-    val Items: List<CurrencyItem> = emptyList(),
-    val ErrorMessageResId: Int? = null,
-    val LastUpdatedTime: String = "",
-    val ShowSuccessMessage: Boolean = false,
-    val SelectedCategory: String = "all",
-    val Alarms: List<AlarmEntity> = emptyList(),
-    val HistoryPoints: Map<String, List<Double>> = emptyMap(),
-    val IsHistoryLoading: Boolean = false,
-    val NewsArticles: List<NewsArticle> = emptyList(),
-    val IsNewsLoading: Boolean = false,
-    val IsOffline: Boolean = false
+    val isLoading: Boolean = false,
+    val items: List<CurrencyItem> = emptyList(),
+    val errorMessageResId: Int? = null,
+    val lastUpdatedTime: String = "",
+    val showSuccessMessage: Boolean = false,
+    val selectedCategory: String = "all",
+    val alarms: List<AlarmEntity> = emptyList(),
+    val historyPoints: Map<String, List<Double>> = emptyMap(),
+    val isHistoryLoading: Boolean = false,
+    val newsArticles: List<NewsArticle> = emptyList(),
+    val isNewsLoading: Boolean = false,
+    val isOffline: Boolean = false
 )
 
 class CurrencyViewModel(
-    private val Repository: CurrencyRepository,
+    private val repository: CurrencyRepository,
     private val alarmRepository: AlarmRepository,
     private val context: Context? = null,
     private val newsRepository: NewsRepository = NewsRepository()
 ) : ViewModel() {
     private val prefs: SharedPreferences? = context?.getSharedPreferences("currency_cache_prefs", Context.MODE_PRIVATE)
 
-    private val _UiState = MutableStateFlow(
+    private val _uiState = MutableStateFlow(
         CurrencyUiState(
-            Items = loadCachedItemsFromPrefs(),
-            NewsArticles = newsRepository.getInitialNewsArticles()
+            items = loadCachedItemsFromPrefs(),
+            newsArticles = newsRepository.getInitialNewsArticles()
         )
     )
-    val UiState: StateFlow<CurrencyUiState> = _UiState.asStateFlow()
+    val uiState: StateFlow<CurrencyUiState> = _uiState.asStateFlow()
 
     private val jsonFormat = Json { ignoreUnknownKeys = true }
+
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        throwable.printStackTrace()
+        _uiState.update { it.copy(errorMessageResId = R.string.error_server) }
+    }
 
     private fun loadCachedItemsFromPrefs(): List<CurrencyItem> {
         return try {
@@ -89,119 +100,125 @@ class CurrencyViewModel(
     val triggeredAlarmFlow = _triggeredAlarmFlow.asSharedFlow()
 
     init {
-        ObserveCurrencies()
-        StartPeriodicUpdates()
-        ObserveAlarms()
-        FetchNews()
-        ObserveConnectivity()
+        observeCurrencies()
+        startPeriodicUpdates()
+        observeAlarms()
+        fetchNews()
+        observeConnectivity()
     }
 
-    private fun ObserveConnectivity() {
+    private fun observeConnectivity() {
         context?.let { ctx ->
-            viewModelScope.launch {
-                val observer = com.mmdparsadev.cheghad.utils.NetworkConnectivityObserver(ctx)
-                observer.observe().collect { status ->
-                    val isOffline = status != com.mmdparsadev.cheghad.utils.ConnectivityStatus.Available
-                    _UiState.update { it.copy(IsOffline = isOffline) }
-                }
+            viewModelScope.launch(exceptionHandler) {
+                val observer = NetworkConnectivityObserver(ctx)
+                observer.observe()
+                    .catch { e -> e.printStackTrace() }
+                    .collect { status ->
+                        val isOffline = status != ConnectivityStatus.Available
+                        _uiState.update { it.copy(isOffline = isOffline) }
+                    }
             }
         }
     }
 
-    private fun ObserveCurrencies() {
-        viewModelScope.launch {
+    private fun observeCurrencies() {
+        viewModelScope.launch(exceptionHandler) {
             // Immediately load from cache once
-            val initialCurrencies = Repository.getCachedCurrencies()
+            val initialCurrencies = repository.getCachedCurrencies()
             if (initialCurrencies.isNotEmpty()) {
                 saveCachedItemsToPrefs(initialCurrencies)
                 val cachedTime = prefs?.getString("cached_time", "") ?: ""
-                _UiState.update { 
+                _uiState.update { 
                     it.copy(
-                        Items = initialCurrencies.filter { item -> item.HiddenUntil < System.currentTimeMillis() },
-                        LastUpdatedTime = cachedTime
+                        items = initialCurrencies.filter { item -> item.hiddenUntil < System.currentTimeMillis() },
+                        lastUpdatedTime = cachedTime
                     )
                 }
             }
             
             // Then observe for updates
-            Repository.getVisibleCurrenciesFlow(System.currentTimeMillis()).collect { currencies ->
-                if (currencies.isNotEmpty()) {
-                    saveCachedItemsToPrefs(currencies)
-                    val cachedTime = prefs?.getString("cached_time", "") ?: ""
-                    _UiState.update { 
-                        it.copy(
-                            Items = currencies,
-                            LastUpdatedTime = if (it.LastUpdatedTime.isEmpty()) cachedTime else it.LastUpdatedTime
-                        )
+            repository.getVisibleCurrenciesFlow(System.currentTimeMillis())
+                .catch { e -> e.printStackTrace() }
+                .collect { currencies ->
+                    if (currencies.isNotEmpty()) {
+                        saveCachedItemsToPrefs(currencies)
+                        val cachedTime = prefs?.getString("cached_time", "") ?: ""
+                        _uiState.update { 
+                            it.copy(
+                                items = currencies,
+                                lastUpdatedTime = if (it.lastUpdatedTime.isEmpty()) cachedTime else it.lastUpdatedTime
+                            )
+                        }
                     }
                 }
-            }
         }
     }
 
-    fun HideCurrencyForItem(id: String) {
-        viewModelScope.launch {
-            Repository.hideCurrency(id, 3600000L) // 1 hour in millis
-            FetchData(false) // Trigger a refresh to update the list immediately
+    fun hideCurrencyForItem(id: String) {
+        viewModelScope.launch(exceptionHandler) {
+            repository.hideCurrency(id, 3600000L) // 1 hour in millis
+            fetchData(false) // Trigger a refresh to update the list immediately
         }
     }
 
-    fun FetchNews() {
-        viewModelScope.launch {
-            _UiState.update { it.copy(IsNewsLoading = true) }
+    fun fetchNews() {
+        viewModelScope.launch(exceptionHandler) {
+            _uiState.update { it.copy(isNewsLoading = true) }
             val news = newsRepository.fetchLiveNews()
-            _UiState.update { it.copy(NewsArticles = news, IsNewsLoading = false) }
+            _uiState.update { it.copy(newsArticles = news, isNewsLoading = false) }
         }
     }
 
-    fun FetchHistory(symbol: String, range: String, currentPrice: Double? = null, changePercentage: Double? = null) {
-        viewModelScope.launch {
-            _UiState.update { it.copy(IsHistoryLoading = true) }
-            val points = Repository.FetchHistory(symbol, range, currentPrice, changePercentage)
-            _UiState.update {
+    fun fetchHistory(symbol: String, range: String, currentPrice: Double? = null, changePercentage: Double? = null) {
+        viewModelScope.launch(exceptionHandler) {
+            _uiState.update { it.copy(isHistoryLoading = true) }
+            val points = repository.fetchHistory(symbol, range, currentPrice, changePercentage)
+            _uiState.update {
                 it.copy(
-                    IsHistoryLoading = false,
-                    HistoryPoints = it.HistoryPoints + (symbol to points)
+                    isHistoryLoading = false,
+                    historyPoints = it.historyPoints + (symbol to points)
                 )
             }
         }
     }
 
-    private fun ObserveAlarms() {
-        viewModelScope.launch {
-            alarmRepository.allAlarmsFlow.collect { alarmsList ->
-                _UiState.update { it.copy(Alarms = alarmsList) }
-            }
+    private fun observeAlarms() {
+        viewModelScope.launch(exceptionHandler) {
+            alarmRepository.allAlarmsFlow
+                .catch { e -> e.printStackTrace() }
+                .collect { alarmsList ->
+                    _uiState.update { it.copy(alarms = alarmsList) }
+                }
         }
     }
 
-    private fun StartPeriodicUpdates() {
-        viewModelScope.launch {
+    private fun startPeriodicUpdates() {
+        viewModelScope.launch(exceptionHandler) {
             while (isActive) {
-                FetchData(IsManualRefresh = false)
+                fetchData(isManualRefresh = false)
                 delay(3 * 60 * 1000L) // 3 minutes
             }
         }
     }
 
-    fun RefreshData() {
-        FetchData(IsManualRefresh = true)
+    fun refreshData() {
+        fetchData(isManualRefresh = true)
     }
 
-    fun ClearSuccessMessage() {
-        _UiState.update { it.copy(ShowSuccessMessage = false) }
+    fun clearSuccessMessage() {
+        _uiState.update { it.copy(showSuccessMessage = false) }
     }
 
-    fun ClearErrorMessage() {
-        _UiState.update { it.copy(ErrorMessageResId = null) }
+    fun clearErrorMessage() {
+        _uiState.update { it.copy(errorMessageResId = null) }
     }
 
-    fun SetCategory(category: String) {
-        _UiState.update { it.copy(SelectedCategory = category) }
+    fun setCategory(category: String) {
+        _uiState.update { it.copy(selectedCategory = category) }
     }
 
-    fun AddAlarm(symbol: String, title: String, targetPrice: Double, isAbove: Boolean) {
-        viewModelScope.launch {
+    fun addAlarm(symbol: String, title: String, targetPrice: Double, isAbove: Boolean) {
+        viewModelScope.launch(exceptionHandler) {
             alarmRepository.insertAlarm(
                 AlarmEntity(
                     symbol = symbol,
@@ -214,30 +231,30 @@ class CurrencyViewModel(
         }
     }
 
-    fun UpdateAlarm(alarm: AlarmEntity) {
-        viewModelScope.launch {
+    fun updateAlarm(alarm: AlarmEntity) {
+        viewModelScope.launch(exceptionHandler) {
             alarmRepository.updateAlarm(alarm)
         }
     }
 
-    fun DeleteAlarm(alarm: AlarmEntity) {
-        viewModelScope.launch {
+    fun deleteAlarm(alarm: AlarmEntity) {
+        viewModelScope.launch(exceptionHandler) {
             alarmRepository.deleteAlarm(alarm)
         }
     }
 
-    fun DeleteAlarmById(id: Long) {
-        viewModelScope.launch {
+    fun deleteAlarmById(id: Long) {
+        viewModelScope.launch(exceptionHandler) {
             alarmRepository.deleteAlarmById(id)
         }
     }
 
-    private fun CheckTriggeredAlarms(items: List<CurrencyItem>) {
-        viewModelScope.launch {
+    private fun checkTriggeredAlarms(items: List<CurrencyItem>) {
+        viewModelScope.launch(exceptionHandler) {
             val activeAlarms = alarmRepository.getActiveAlarms()
             for (alarm in activeAlarms) {
-                val currentItem = items.find { it.Symbol == alarm.symbol } ?: continue
-                val currentPrice = currentItem.CurrentPrice
+                val currentItem = items.find { it.symbol == alarm.symbol } ?: continue
+                val currentPrice = currentItem.currentPrice
                 
                 var isTriggered = false
                 if (alarm.isAbove && currentPrice >= alarm.targetPrice) {
@@ -254,39 +271,42 @@ class CurrencyViewModel(
         }
     }
 
-    private fun FetchData(IsManualRefresh: Boolean) {
-        if (_UiState.value.IsLoading) return
-        _UiState.update { it.copy(IsLoading = true, ErrorMessageResId = null) }
-        viewModelScope.launch {
-            when (val Result = Repository.FetchLivePrices()) {
+    private fun fetchData(isManualRefresh: Boolean) {
+        if (_uiState.value.isLoading) return
+        _uiState.update { it.copy(isLoading = true, errorMessageResId = null) }
+        viewModelScope.launch(exceptionHandler) {
+            when (val result = repository.fetchLivePrices()) {
                 is NetworkResult.Success -> {
-                    val CurrentTime = if (Result.IsFresh) {
+                    val currentTime = if (result.isFresh) {
                         SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
                     } else {
                         prefs?.getString("cached_time", "") ?: ""
                     }
                     
-                    if (Result.IsFresh) {
-                        saveCachedItemsToPrefs(Result.Data)
-                        prefs?.edit()?.putString("cached_time", CurrentTime)?.apply()
+                    if (result.isFresh) {
+                        saveCachedItemsToPrefs(result.data)
+                        prefs?.edit()?.putString("cached_time", currentTime)?.apply()
                     }
 
-                    _UiState.update {
+                    _uiState.update {
                         it.copy(
-                            IsLoading = false,
-                            Items = Result.Data,
-                            LastUpdatedTime = CurrentTime,
-                            ShowSuccessMessage = IsManualRefresh && Result.IsFresh,
-                            ErrorMessageResId = if (!Result.IsFresh && IsManualRefresh) R.string.error_showing_cache else null
+                            isLoading = false,
+                            items = result.data,
+                            lastUpdatedTime = currentTime,
+                            showSuccessMessage = isManualRefresh && result.isFresh,
+                            errorMessageResId = if (!result.isFresh && isManualRefresh) R.string.error_showing_cache else null
                         )
                     }
-                    CheckTriggeredAlarms(Result.Data)
+                    if (result.isFresh) {
+                        context?.let { updateAllWidgets(it) }
+                    }
+                    checkTriggeredAlarms(result.data)
                 }
                 is NetworkResult.Error -> {
-                    _UiState.update {
+                    _uiState.update {
                         it.copy(
-                            IsLoading = false,
-                            ErrorMessageResId = Result.MessageResId
+                            isLoading = false,
+                            errorMessageResId = result.messageResId
                         )
                     }
                 }
@@ -295,11 +315,11 @@ class CurrencyViewModel(
     }
 
     companion object {
-        fun ProvideFactory(Repository: CurrencyRepository, alarmRepository: AlarmRepository, context: Context? = null): ViewModelProvider.Factory =
+        fun provideFactory(repository: CurrencyRepository, alarmRepository: AlarmRepository, context: Context? = null): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return CurrencyViewModel(Repository, alarmRepository, context) as T
+                    return CurrencyViewModel(repository, alarmRepository, context) as T
                 }
             }
     }

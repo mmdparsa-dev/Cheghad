@@ -59,7 +59,7 @@ object UpdateManager {
                 return@runCatching null
             }
 
-            val responseBody = response.body?.string() ?: return@runCatching null
+            val responseBody = response.body.string()
             val releases = json.decodeFromString<List<GitHubRelease>>(responseBody)
             if (releases.isEmpty()) {
                 return@runCatching null
@@ -119,7 +119,7 @@ object UpdateManager {
             val response = client.newCall(request).execute()
             if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
 
-            val body = response.body ?: throw Exception("Empty response body")
+            val body = response.body
             val contentLength = body.contentLength()
 
             val downloadDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.cacheDir

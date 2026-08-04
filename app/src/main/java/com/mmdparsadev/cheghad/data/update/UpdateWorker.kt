@@ -16,6 +16,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.mmdparsadev.cheghad.BuildConfig
 import com.mmdparsadev.cheghad.MainActivity
+import com.mmdparsadev.cheghad.R
 import java.util.concurrent.TimeUnit
 
 class UpdateWorker(
@@ -101,11 +102,15 @@ class UpdateWorker(
 
                 val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                     .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                    .setContentTitle("نسخه جدید چقد منتشر شد (${release.tagName})")
-                    .setContentText("برای بروزرسانی و دریافت تغییرات جدید کلیک کنید.")
+                    .setContentTitle(context.getString(R.string.update_new_version_available, release.tagName))
+                    .setContentText(context.getString(
+                        R.string.update_ready_to_install, release.tagName, release.body ?: context.getString(
+                            R.string.update_no_changelog)))
                     .setStyle(
                         NotificationCompat.BigTextStyle()
-                            .bigText("نسخه جدید ${release.tagName} آماده دریافت است.\n\nتغییرات:\n${release.body ?: "بهبود عملکرد و رفع مشکلات"}")
+                            .bigText(context.getString(
+                                R.string.update_ready_to_install, release.tagName, release.body ?: context.getString(
+                                    R.string.update_no_changelog)))
                     )
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setAutoCancel(true)

@@ -3,6 +3,7 @@ package com.mmdparsadev.cheghad.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,10 +31,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mmdparsadev.cheghad.MainActivity
 import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.models.NewsArticle
 import com.mmdparsadev.cheghad.data.models.NewsCategory
 import com.mmdparsadev.cheghad.data.repository.NewsRepository
+import com.mmdparsadev.cheghad.formatTimeAgo
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +51,7 @@ fun NewsScreen(
     disabledAgencies: Set<String> = emptySet()
 ) {
     val context = LocalContext.current
+    val isEnglish = digitType == "en"
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(NewsCategory.All) }
     var selectedAgencyId by remember { mutableStateOf<String?>(null) }
@@ -177,6 +181,13 @@ fun NewsScreen(
                 ).filter { (cat, _) -> cat == NewsCategory.All || !disabledCategories.contains(cat.name) }
             }
 
+            // Reset selected category if it's no longer available
+            LaunchedEffect(categories) {
+                if (categories.none { it.first == selectedCategory }) {
+                    selectedCategory = NewsCategory.All
+                }
+            }
+
             val selectedCategoryIndex = categories.indexOfFirst { it.first == selectedCategory }.coerceAtLeast(0)
 
             ExpressiveConnectedButtonGroup(
@@ -200,7 +211,17 @@ fun NewsScreen(
             val activeAgencies = remember(disabledAgencies) {
                 NewsRepository.AGENCIES.filter { agency -> !disabledAgencies.contains(agency.id) }
             }
-            val agencyItems = listOf(null to stringResource(R.string.news_agency_all)) + activeAgencies.map { it.id to it.nameFa }
+            val agencyItems = listOf(null to stringResource(R.string.news_agency_all)) + activeAgencies.map { 
+                it.id to if (isEnglish) it.nameEn else it.nameFa 
+            }
+
+            // Reset selected agency if it's no longer available
+            LaunchedEffect(agencyItems) {
+                if (selectedAgencyId != null && agencyItems.none { it.first == selectedAgencyId }) {
+                    selectedAgencyId = null
+                }
+            }
+
             val selectedAgencyIndex = agencyItems.indexOfFirst { it.first == selectedAgencyId }.coerceAtLeast(0)
 
             ExpressiveConnectedButtonGroup(
@@ -220,58 +241,69 @@ fun NewsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Articles List
-            if (filteredArticles.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.Article,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = stringResource(R.string.news_no_results),
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+            // Articles Area with Animation
+            AnimatedContent(
+                targetState = Triple(filteredArticles, selectedCategory, selectedAgencyId),
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(300, delayMillis = 50)) + 
+                     slideInVertically(initialOffsetY = { 20 }))
+                    .togetherWith(fadeOut(animationSpec = tween(200)))
+                },
+                label = "NewsListAnimation"
+            ) { (articles, _, _) ->
+                if (articles.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.Article,
+                                contentDescription = null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(R.string.news_no_results),
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp)
-                ) {
-                    items(filteredArticles, key = { it.id }) { article ->
-                        val isBookmarked = bookmarkedIds.contains(article.id)
-                        NewsArticleCard(
-                            article = article,
-                            isBookmarked = isBookmarked,
-                            onBookmarkToggle = {
-                                bookmarkedIds = if (isBookmarked) {
-                                    bookmarkedIds - article.id
-                                } else {
-                                    bookmarkedIds + article.id
+                } else {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        items(articles, key = { it.id }) { article ->
+                            val isBookmarked = bookmarkedIds.contains(article.id)
+                            NewsArticleCard(
+                                article = article,
+                                isEnglish = isEnglish,
+                                isBookmarked = isBookmarked,
+                                onBookmarkToggle = {
+                                    bookmarkedIds = if (isBookmarked) {
+                                        bookmarkedIds - article.id
+                                    } else {
+                                        bookmarkedIds + article.id
+                                    }
+                                },
+                                onShare = {
+                                    val shareIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
+                                        type = "text/plain"
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, article.title))
+                                },
+                                onClick = {
+                                    selectedArticleForDetail = article
                                 }
-                            },
-                            onShare = {
-                                val shareIntent = Intent().apply {
-                                    action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
-                                    type = "text/plain"
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, article.title))
-                            },
-                            onClick = {
-                                selectedArticleForDetail = article
-                            }
-                        )
+                            )
+                        }
                     }
                 }
             }
@@ -303,7 +335,7 @@ fun NewsScreen(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = article.agency.nameFa,
+                            text = if (isEnglish) article.agency.nameEn else article.agency.nameFa,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = article.agency.brandColor,
@@ -311,7 +343,7 @@ fun NewsScreen(
                         )
                     }
                     Text(
-                        text = article.timeAgo,
+                        text = formatTimeAgo(context, article.pubTimestamp),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -388,11 +420,13 @@ fun NewsScreen(
 @Composable
 fun NewsArticleCard(
     article: NewsArticle,
+    isEnglish: Boolean,
     isBookmarked: Boolean,
     onBookmarkToggle: () -> Unit,
     onShare: () -> Unit,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -418,14 +452,14 @@ fun NewsArticleCard(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = article.agency.nameFa,
+                        text = if (isEnglish) article.agency.nameEn else article.agency.nameFa,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = article.agency.brandColor
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "•  ${article.timeAgo}",
+                        text = "•  ${formatTimeAgo(context, article.pubTimestamp)}",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                     )

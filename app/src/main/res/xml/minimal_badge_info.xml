@@ -9,7 +9,5 @@
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen|keyguard"
     android:previewImage="@drawable/widget3"
-    android:initialLayout="@layout/glance_default_loading_layout"
-    android:configure="com.mmdparsadev.cheghad.widget.WidgetConfigActivity"
-    android:widgetFeatures="reconfigurable|configuration_optional">
+    android:initialLayout="@layout/glance_default_loading_layout">
 </appwidget-provider>

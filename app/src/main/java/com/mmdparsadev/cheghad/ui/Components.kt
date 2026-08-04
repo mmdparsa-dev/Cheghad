@@ -80,7 +80,7 @@ fun ExpressiveConnectedButtonGroup(
 @Composable
 fun ConnectivityStatusBanner(uiState: CurrencyUiState) {
     AnimatedVisibility(
-        visible = uiState.IsOffline,
+        visible = uiState.isOffline,
         enter = expandVertically() + fadeIn(),
         exit = shrinkVertically() + fadeOut()
     ) {
@@ -102,7 +102,7 @@ fun ConnectivityStatusBanner(uiState: CurrencyUiState) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     text = stringResource(
-                        if (uiState.IsLoading) R.string.status_updating
+                        if (uiState.isLoading) R.string.status_updating
                         else R.string.status_offline_mode
                     ),
                     style = MaterialTheme.typography.labelMedium

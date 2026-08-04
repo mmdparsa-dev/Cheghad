@@ -7,6 +7,7 @@ import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
+import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
@@ -56,11 +57,11 @@ object ApiClient {
             val tgjuTask = java.util.concurrent.CompletableFuture.runAsync({
                 try {
                     // Fetch real rates from tgju.org
-                    val client = okhttp3.OkHttpClient.Builder()
+                    val client = OkHttpClient.Builder()
                         .connectTimeout(6, TimeUnit.SECONDS)
                         .readTimeout(6, TimeUnit.SECONDS)
                         .build()
-                    val request = okhttp3.Request.Builder()
+                    val request = Request.Builder()
                         .url("https://www.tgju.org/currency")
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
@@ -68,7 +69,7 @@ object ApiClient {
                         .build()
                     val response = client.newCall(request).execute()
                     if (response.isSuccessful) {
-                        val html = response.body?.string() ?: ""
+                        val html = response.body.string()
                         
                         // 1. Parse table row prices and change percentages
                         val rowRegex = """data-market-row="([^"]+)"[^>]*>.*?<td[^>]*>([^<]+)</td>\s*<td[^>]*>(.*?)</td>""".toRegex(RegexOption.DOT_MATCHES_ALL)
@@ -117,16 +118,16 @@ object ApiClient {
 
             val bitpinTask = java.util.concurrent.CompletableFuture.runAsync({
                 try {
-                    val bitpinClient = okhttp3.OkHttpClient.Builder()
+                    val bitpinClient = OkHttpClient.Builder()
                         .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
                         .readTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
                         .build()
-                    val bitpinRequest = okhttp3.Request.Builder()
+                    val bitpinRequest = Request.Builder()
                         .url("https://api.bitpin.ir/v1/mkt/markets/")
                         .build()
                     val bitpinResponse = bitpinClient.newCall(bitpinRequest).execute()
                     if (bitpinResponse.isSuccessful) {
-                        val body = bitpinResponse.body?.string() ?: ""
+                        val body = bitpinResponse.body.string()
                         val json = org.json.JSONObject(body)
                         val results = json.optJSONArray("results")
                         if (results != null) {

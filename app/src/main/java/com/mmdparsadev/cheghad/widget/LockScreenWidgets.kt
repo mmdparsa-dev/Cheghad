@@ -33,6 +33,8 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.compose.ui.graphics.Color
+import androidx.glance.LocalSize
+import androidx.glance.appwidget.SizeMode
 import com.mmdparsadev.cheghad.ui.theme.AppThemeColor
 import com.mmdparsadev.cheghad.data.repository.dataStore
 import kotlinx.coroutines.flow.first
@@ -46,6 +48,11 @@ import com.mmdparsadev.cheghad.data.models.CurrencyItem
 import com.mmdparsadev.cheghad.formatPercent
 import com.mmdparsadev.cheghad.formatPrice
 import com.mmdparsadev.cheghad.worker.CurrencySyncWorker
+import kotlin.math.min
+
+private fun fixedColorProvider(color: Color): ColorProvider = object : ColorProvider {
+    override fun getColor(context: Context): Color = color
+}
 
 /**
  * Receiver for the Minimal Currency Badge widget.
@@ -85,6 +92,7 @@ class PriceDeltaWidgetReceiver : GlanceAppWidgetReceiver() {
  * Minimal Currency Badge Widget (1x1)
  */
 class MinimalBadgeWidget : GlanceAppWidget() {
+    override val sizeMode = SizeMode.Exact
     override val stateDefinition = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -95,14 +103,15 @@ class MinimalBadgeWidget : GlanceAppWidget() {
         val appColorSeedName = appSettings[dsStringPreferencesKey("color_seed")] ?: "DEFAULT"
         val appColorSeed = AppThemeColor.entries.find { it.name == appColorSeedName } ?: AppThemeColor.DEFAULT
 
+        // Read Lock Screen specific settings from App's main DataStore
+        val selectedId = appSettings[dsStringPreferencesKey("lockscreen_widget_currency_id")] ?: "USD"
+        val widgetTheme = appSettings[dsStringPreferencesKey("lockscreen_widget_theme")] ?: "glassy"
+
         provideContent {
-            val prefs = currentState<Preferences>()
-            val selectedId = prefs[stringPreferencesKey("selected_currency_id")]
-            val theme = prefs[stringPreferencesKey("widget_theme")] ?: "glassy"
-            val displayItem = currencies.find { it.Id == selectedId } ?: currencies.firstOrNull()
+            val displayItem = currencies.find { it.id == selectedId } ?: currencies.firstOrNull()
             
             GlanceTheme {
-                MinimalBadgeLayout(displayItem, theme, appColorSeed)
+                MinimalBadgeLayout(displayItem, widgetTheme, appColorSeed)
             }
         }
     }
@@ -112,6 +121,7 @@ class MinimalBadgeWidget : GlanceAppWidget() {
  * Price Delta Bar Widget (2x1)
  */
 class PriceDeltaWidget : GlanceAppWidget() {
+    override val sizeMode = androidx.glance.appwidget.SizeMode.Exact
     override val stateDefinition = PreferencesGlanceStateDefinition
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -122,14 +132,15 @@ class PriceDeltaWidget : GlanceAppWidget() {
         val appColorSeedName = appSettings[dsStringPreferencesKey("color_seed")] ?: "DEFAULT"
         val appColorSeed = AppThemeColor.entries.find { it.name == appColorSeedName } ?: AppThemeColor.DEFAULT
 
+        // Read Lock Screen specific settings from App's main DataStore
+        val selectedId = appSettings[dsStringPreferencesKey("lockscreen_widget_currency_id")] ?: "USD"
+        val widgetTheme = appSettings[dsStringPreferencesKey("lockscreen_widget_theme")] ?: "glassy"
+
         provideContent {
-            val prefs = currentState<Preferences>()
-            val selectedId = prefs[stringPreferencesKey("selected_currency_id")]
-            val theme = prefs[stringPreferencesKey("widget_theme")] ?: "glassy"
-            val displayItem = currencies.find { it.Id == selectedId } ?: currencies.firstOrNull()
+            val displayItem = currencies.find { it.id == selectedId } ?: currencies.firstOrNull()
 
             GlanceTheme {
-                PriceDeltaLayout(displayItem, theme, appColorSeed)
+                PriceDeltaLayout(displayItem, widgetTheme, appColorSeed)
             }
         }
     }
@@ -141,33 +152,36 @@ fun MinimalBadgeLayout(item: CurrencyItem?, theme: String, appColorSeed: AppThem
     val isEnglish = isAppEnglish(context)
     val digitType = if (isEnglish) "en" else "fa"
 
-    val isNegative = (item?.ChangePercentage ?: 0.0) < 0
-    val isZeroChange = Math.abs(item?.ChangePercentage ?: 0.0) < 0.001
+    val isNegative = (item?.changePercentage ?: 0.0) < 0
+    val isZeroChange = Math.abs(item?.changePercentage ?: 0.0) < 0.001
 
     val backgroundModifier = when (theme) {
-        "dark" -> GlanceModifier.background(ColorProvider(R.color.widget_dark_bg))
-        "light" -> GlanceModifier.background(ColorProvider(R.color.white))
+        "dark" -> GlanceModifier.background(fixedColorProvider(Color(context.getColor(R.color.widget_dark_bg))))
+        "light" -> GlanceModifier.background(fixedColorProvider(Color.White))
         "trend" -> {
             val colorRes = when {
                 isZeroChange -> R.color.widget_trend_neutral
                 isNegative -> R.color.widget_trend_negative
                 else -> R.color.widget_trend_positive
             }
-            GlanceModifier.background(ColorProvider(colorRes))
+            GlanceModifier.background(fixedColorProvider(Color(context.getColor(colorRes))))
         }
         "app_color" -> {
-            GlanceModifier.background(ColorProvider(appColorSeed.seedColor))
+            GlanceModifier.background(fixedColorProvider(appColorSeed.seedColor))
         }
         else -> GlanceModifier
     }
 
-    val contentColor = if (theme == "light") ColorProvider(R.color.black) else ColorProvider(R.color.white)
-    val secondaryColor = if (theme == "light") ColorProvider(R.color.widget_secondary_light) else ColorProvider(R.color.widget_secondary_dark)
+    val size = LocalSize.current
+    val minSide = min(size.width.value, size.height.value)
+    
+    val contentColor = if (theme == "light") fixedColorProvider(Color.Black) else fixedColorProvider(Color.White)
+    val secondaryColor = if (theme == "light") fixedColorProvider(Color(context.getColor(R.color.widget_secondary_light))) else fixedColorProvider(Color(context.getColor(R.color.widget_secondary_dark)))
 
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .cornerRadius(16.dp)
+            .cornerRadius(if (minSide > 60) 16.dp else 12.dp)
             .then(backgroundModifier)
             .clickable(actionStartActivity(Intent(context, MainActivity::class.java))),
         contentAlignment = Alignment.Center
@@ -177,18 +191,18 @@ fun MinimalBadgeLayout(item: CurrencyItem?, theme: String, appColorSeed: AppThem
         } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = item.Symbol.uppercase(),
+                    text = item.symbol.uppercase(),
                     style = TextStyle(
                         color = if (theme == "glassy") GlanceTheme.colors.onSurface else contentColor,
-                        fontSize = 12.sp,
+                        fontSize = (minSide * 0.28f).sp,
                         fontWeight = FontWeight.Bold
                     )
                 )
                 Text(
-                    text = formatPrice(item.CurrentPrice, digitType, item.Symbol),
+                    text = formatPrice(item.currentPrice, digitType, item.symbol),
                     style = TextStyle(
                         color = if (theme == "glassy") GlanceTheme.colors.onSurfaceVariant else secondaryColor,
-                        fontSize = 10.sp
+                        fontSize = (minSide * 0.22f).sp
                     )
                 )
             }
@@ -202,28 +216,31 @@ fun PriceDeltaLayout(item: CurrencyItem?, theme: String, appColorSeed: AppThemeC
     val isEnglish = isAppEnglish(context)
     val digitType = if (isEnglish) "en" else "fa"
 
-    val isNegative = (item?.ChangePercentage ?: 0.0) < 0
-    val isZeroChange = Math.abs(item?.ChangePercentage ?: 0.0) < 0.001
+    val isNegative = (item?.changePercentage ?: 0.0) < 0
+    val isZeroChange = Math.abs(item?.changePercentage ?: 0.0) < 0.001
 
     val backgroundModifier = when (theme) {
-        "dark" -> GlanceModifier.background(ColorProvider(R.color.widget_dark_bg))
-        "light" -> GlanceModifier.background(ColorProvider(R.color.white))
+        "dark" -> GlanceModifier.background(fixedColorProvider(Color(context.getColor(R.color.widget_dark_bg))))
+        "light" -> GlanceModifier.background(fixedColorProvider(Color.White))
         "trend" -> {
             val colorRes = when {
                 isZeroChange -> R.color.widget_trend_neutral
                 isNegative -> R.color.widget_trend_negative
                 else -> R.color.widget_trend_positive
             }
-            GlanceModifier.background(ColorProvider(colorRes))
+            GlanceModifier.background(fixedColorProvider(Color(context.getColor(colorRes))))
         }
         "app_color" -> {
-            GlanceModifier.background(ColorProvider(appColorSeed.seedColor))
+            GlanceModifier.background(fixedColorProvider(appColorSeed.seedColor))
         }
         else -> GlanceModifier
     }
 
-    val contentColor = if (theme == "light") ColorProvider(R.color.black) else ColorProvider(R.color.white)
-    val secondaryColor = if (theme == "light") ColorProvider(R.color.widget_secondary_light) else ColorProvider(R.color.widget_secondary_dark)
+    val size = LocalSize.current
+    val minSide = min(size.width.value, size.height.value)
+    
+    val contentColor = if (theme == "light") fixedColorProvider(Color.Black) else fixedColorProvider(Color.White)
+    val secondaryColor = if (theme == "light") fixedColorProvider(Color(context.getColor(R.color.widget_secondary_light))) else fixedColorProvider(Color(context.getColor(R.color.widget_secondary_dark)))
 
     Box(
         modifier = GlanceModifier
@@ -237,42 +254,42 @@ fun PriceDeltaLayout(item: CurrencyItem?, theme: String, appColorSeed: AppThemeC
             Text(text = "...", style = TextStyle(color = GlanceTheme.colors.onSurface))
         } else {
             Row(
-                modifier = GlanceModifier.padding(horizontal = 8.dp),
+                modifier = GlanceModifier.padding(horizontal = (size.width.value * 0.05f).dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = GlanceModifier.defaultWeight()) {
                     Text(
-                        text = getWidgetLocalizedTitle(item.Symbol, item.Title, isEnglish),
+                        text = getWidgetLocalizedTitle(item.symbol, item.title, isEnglish),
                         style = TextStyle(
                             color = if (theme == "glassy") GlanceTheme.colors.onSurface else contentColor,
-                            fontSize = 14.sp,
+                            fontSize = (minSide * 0.32f).sp,
                             fontWeight = FontWeight.Bold
                         ),
                         maxLines = 1
                     )
                     Text(
-                        text = formatPrice(item.CurrentPrice, digitType, item.Symbol),
+                        text = formatPrice(item.currentPrice, digitType, item.symbol),
                         style = TextStyle(
                             color = if (theme == "glassy") GlanceTheme.colors.onSurfaceVariant else secondaryColor,
-                            fontSize = 12.sp
+                            fontSize = (minSide * 0.26f).sp
                         )
                     )
                 }
                 
-                Spacer(modifier = GlanceModifier.width(8.dp))
+                Spacer(modifier = GlanceModifier.width((size.width.value * 0.05f).dp))
                 
                 val percentColor = when {
                     theme == "trend" -> contentColor
                     theme == "glassy" -> if (isNegative) GlanceTheme.colors.error else GlanceTheme.colors.primary
-                    isNegative -> ColorProvider(R.color.widget_negative_red)
-                    else -> ColorProvider(R.color.widget_positive_green)
+                    isNegative -> fixedColorProvider(Color(context.getColor(R.color.widget_negative_red)))
+                    else -> fixedColorProvider(Color(context.getColor(R.color.widget_positive_green)))
                 }
                 
                 Text(
-                    text = formatPercent(item.ChangePercentage, digitType),
+                    text = formatPercent(item.changePercentage, digitType),
                     style = TextStyle(
                         color = percentColor,
-                        fontSize = 12.sp,
+                        fontSize = (minSide * 0.26f).sp,
                         fontWeight = FontWeight.Medium
                     )
                 )

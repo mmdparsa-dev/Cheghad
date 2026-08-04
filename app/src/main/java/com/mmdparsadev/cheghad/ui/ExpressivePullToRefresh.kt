@@ -10,7 +10,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
+import com.mmdparsadev.cheghad.R
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -114,11 +116,11 @@ fun ExpressivePullToRefreshIndicator(
                     Spacer(modifier = Modifier.width(10.dp))
 
                     Text(
-                        text = if (isRefreshing) "در حال به‌روزرسانی..." else if (distanceFraction >= 1f) "رها کنید" else "بکشید برای به‌روزرسانی",
+                        text = if (isRefreshing) stringResource(R.string.pull_refresh_updating) else if (distanceFraction >= 1f) stringResource(R.string.pull_refresh_release) else stringResource(R.string.pull_refresh_pull),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
-                        fontFamily = getFontFamilyForText("به‌روزرسانی")
+                        fontFamily = getFontFamilyForText(stringResource(R.string.pull_refresh_updating))
                     )
                 }
             }

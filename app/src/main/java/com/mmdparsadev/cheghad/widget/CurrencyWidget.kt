@@ -50,6 +50,18 @@ import androidx.datastore.preferences.core.Preferences as DataStorePreferences
 import androidx.datastore.preferences.core.stringPreferencesKey as dsStringPreferencesKey
 import kotlin.math.min
 
+import androidx.glance.appwidget.updateAll
+
+suspend fun updateAllWidgets(context: Context) {
+    try {
+        CurrencyWidget().updateAll(context)
+        MinimalBadgeWidget().updateAll(context)
+        PriceDeltaWidget().updateAll(context)
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
 class CurrencyWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = CurrencyWidget()
 
@@ -157,7 +169,7 @@ class CurrencyWidget : GlanceAppWidget() {
             val selectedId = prefs[stringPreferencesKey("selected_currency_id")]
             val theme = prefs[stringPreferencesKey("widget_theme")] ?: "glassy"
             
-            val displayItem = currencies.find { it.Id == selectedId } ?: currencies.firstOrNull()
+            val displayItem = currencies.find { it.id == selectedId } ?: currencies.firstOrNull()
 
             GlanceTheme {
                 WidgetLayout(displayItem, theme, appColorSeed)
@@ -214,8 +226,8 @@ fun renderWidgetBitmap(
     val padding = squareSide * 0.085f
     val cornerRadius = squareSide * 0.15f
 
-    val isNegative = (item?.ChangePercentage ?: 0.0) < 0
-    val isZeroChange = Math.abs(item?.ChangePercentage ?: 0.0) < 0.001
+    val isNegative = (item?.changePercentage ?: 0.0) < 0
+    val isZeroChange = Math.abs(item?.changePercentage ?: 0.0) < 0.001
 
     // 1. Background logic based on theme
     val bgColor = when (theme) {
@@ -255,9 +267,9 @@ fun renderWidgetBitmap(
 
     // Format strings
     val digitType = if (isEnglish) "en" else "fa"
-    val localizedTitle = getWidgetLocalizedTitle(item.Symbol, item.Title, isEnglish)
-    val formattedPrice = formatPrice(item.CurrentPrice, digitType, item.Symbol)
-    val formattedPercent = formatPercent(item.ChangePercentage, digitType)
+    val localizedTitle = getWidgetLocalizedTitle(item.symbol, item.title, isEnglish)
+    val formattedPrice = formatPrice(item.currentPrice, digitType, item.symbol)
+    val formattedPercent = formatPercent(item.changePercentage, digitType)
     val unitText = if (isEnglish) "Toman" else "تومان"
 
     val changeColor = when {
@@ -268,49 +280,49 @@ fun renderWidgetBitmap(
     }
 
     val symbolBadgeIcon = when {
-        item.Symbol.contains("USD", ignoreCase = true) -> "$"
-        item.Symbol.contains("EUR", ignoreCase = true) -> "€"
-        item.Symbol.contains("GBP", ignoreCase = true) -> "£"
-        item.Symbol.contains("BTC", ignoreCase = true) -> "₿"
-        item.Symbol.contains("ETH", ignoreCase = true) -> "Ξ"
-        item.Symbol.contains("USDT", ignoreCase = true) -> "₮"
-        item.Category == CurrencyType.GoldAndCoin -> "🪙"
-        else -> item.Symbol.take(1).uppercase()
+        item.symbol.contains("USD", ignoreCase = true) -> "$"
+        item.symbol.contains("EUR", ignoreCase = true) -> "€"
+        item.symbol.contains("GBP", ignoreCase = true) -> "£"
+        item.symbol.contains("BTC", ignoreCase = true) -> "₿"
+        item.symbol.contains("ETH", ignoreCase = true) -> "Ξ"
+        item.symbol.contains("USDT", ignoreCase = true) -> "₮"
+        item.category == CurrencyType.GoldAndCoin -> "🪙"
+        else -> item.symbol.take(1).uppercase()
     }
 
     // Dynamic scale ratios
-    val badgeRadius = squareSide * 0.12f
+    val badgeRadius = squareSide * 0.11f
     val badgeBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = if (theme == "light") android.graphics.Color.parseColor("#22000000") else android.graphics.Color.parseColor("#33FFFFFF")
         style = Paint.Style.FILL
     }
     val badgeTextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = contentColor
-        textSize = badgeRadius * 0.88f
+        textSize = badgeRadius * 0.85f
         typeface = vazirTypeface
         textAlign = Paint.Align.CENTER
     }
 
     val titlePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = contentColor
-        textSize = squareSide * 0.085f
+        textSize = squareSide * 0.082f
         typeface = Typeface.create(vazirTypeface, Typeface.BOLD)
     }
 
     val symbolPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = secondaryContentColor
-        textSize = squareSide * 0.055f
+        textSize = squareSide * 0.052f
         typeface = vazirTypeface
     }
 
     // 2. Top Header Row Positioning
     val topY = padding
     val badgeY = topY + badgeRadius
-    val availableTitleWidth = w - (padding * 2) - (badgeRadius * 2) - (padding * 0.5f)
+    val availableTitleWidth = w - (padding * 2.2f) - (badgeRadius * 2) - (padding * 0.5f)
 
     // Auto-scale title if needed
-    while (titlePaint.measureText(localizedTitle) > availableTitleWidth && titlePaint.textSize > 10f) {
-        titlePaint.textSize -= 1f
+    while (titlePaint.measureText(localizedTitle) > availableTitleWidth && titlePaint.textSize > squareSide * 0.04f) {
+        titlePaint.textSize -= 0.5f
     }
 
     if (isEnglish) {
@@ -328,7 +340,7 @@ fun renderWidgetBitmap(
         canvas.drawText(localizedTitle, titleX, titleBaselineY, titlePaint)
 
         val symbolBaselineY = titleBaselineY + symbolPaint.textSize + (squareSide * 0.02f)
-        canvas.drawText(item.Symbol.uppercase(), titleX, symbolBaselineY, symbolPaint)
+        canvas.drawText(item.symbol.uppercase(), titleX, symbolBaselineY, symbolPaint)
     } else {
         // RTL Layout: Badge on Left, Title/Symbol on Right
         val badgeX = padding + badgeRadius
@@ -344,34 +356,34 @@ fun renderWidgetBitmap(
         canvas.drawText(localizedTitle, titleX, titleBaselineY, titlePaint)
 
         val symbolBaselineY = titleBaselineY + symbolPaint.textSize + (squareSide * 0.02f)
-        canvas.drawText(item.Symbol.uppercase(), titleX, symbolBaselineY, symbolPaint)
+        canvas.drawText(item.symbol.uppercase(), titleX, symbolBaselineY, symbolPaint)
     }
 
     // 3. Bottom Row Typography & Auto-scaling
     val pricePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = contentColor
-        textSize = squareSide * 0.13f
+        textSize = squareSide * 0.125f
         typeface = Typeface.create(vazirTypeface, Typeface.BOLD)
     }
 
     val unitPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = secondaryContentColor
-        textSize = squareSide * 0.06f
+        textSize = squareSide * 0.058f
         typeface = vazirTypeface
     }
 
     val percentPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
         color = changeColor
-        textSize = squareSide * 0.06f
+        textSize = squareSide * 0.058f
         typeface = Typeface.create(vazirTypeface, Typeface.BOLD)
     }
 
     val percentWidth = percentPaint.measureText(formattedPercent)
-    val maxPriceWidth = w - (padding * 2) - percentWidth - (squareSide * 0.08f)
+    val maxPriceWidth = w - (padding * 2.2f) - percentWidth - (squareSide * 0.08f)
 
     // Auto-fit price text if long
-    while ((pricePaint.measureText(formattedPrice) + unitPaint.measureText(unitText)) > maxPriceWidth && pricePaint.textSize > 12f) {
-        pricePaint.textSize -= 1f
+    while ((pricePaint.measureText(formattedPrice) + unitPaint.measureText(unitText)) > maxPriceWidth && pricePaint.textSize > squareSide * 0.05f) {
+        pricePaint.textSize -= 0.5f
     }
 
     val bottomBaselineY = h - padding - (squareSide * 0.02f)

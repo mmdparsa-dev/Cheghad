@@ -5,12 +5,12 @@ import kotlinx.serialization.SerialName
 
 @Serializable
 data class UdfHistoryResponse(
-    @SerialName("s") val Status: String,
-    @SerialName("t") val Timestamps: List<Long>? = null,
-    @SerialName("o") val Open: List<Double>? = null,
-    @SerialName("h") val High: List<Double>? = null,
-    @SerialName("l") val Low: List<Double>? = null,
-    @SerialName("c") val Close: List<Double>? = null,
-    @SerialName("v") val Volume: List<Double>? = null,
-    @SerialName("errmsg") val ErrorMessage: String? = null
+    @SerialName("s") val status: String,
+    @SerialName("t") val timestamps: List<Long>? = null,
+    @SerialName("o") val open: List<Double>? = null,
+    @SerialName("h") val high: List<Double>? = null,
+    @SerialName("l") val low: List<Double>? = null,
+    @SerialName("c") val close: List<Double>? = null,
+    @SerialName("v") val volume: List<Double>? = null,
+    @SerialName("errmsg") val errorMessage: String? = null
 )

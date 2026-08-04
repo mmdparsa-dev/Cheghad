@@ -2,6 +2,7 @@ package com.mmdparsadev.cheghad.data.models
 
 import androidx.room3.Entity
 import androidx.room3.PrimaryKey
+import androidx.room3.ColumnInfo
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerialName
 
@@ -30,53 +31,65 @@ enum class PriceDirection {
 data class CurrencyItem(
     @PrimaryKey
     @SerialName("id")
-    val Id: String,
+    @ColumnInfo(name = "Id")
+    val id: String,
     
     @SerialName("symbol")
-    val Symbol: String,
+    @ColumnInfo(name = "Symbol")
+    val symbol: String,
     
     @SerialName("title")
-    val Title: String,
+    @ColumnInfo(name = "Title")
+    val title: String,
     
     @SerialName("current_price")
-    val CurrentPrice: Double,
+    @ColumnInfo(name = "CurrentPrice")
+    val currentPrice: Double,
     
     @SerialName("previous_price")
-    val PreviousPrice: Double,
+    @ColumnInfo(name = "PreviousPrice")
+    val previousPrice: Double,
     
     @SerialName("change_amount")
-    val ChangeAmount: Double,
+    @ColumnInfo(name = "ChangeAmount")
+    val changeAmount: Double,
     
     @SerialName("change_percentage")
-    val ChangePercentage: Double,
+    @ColumnInfo(name = "ChangePercentage")
+    val changePercentage: Double,
     
     @SerialName("price_direction")
-    val PriceDirection: PriceDirection,
+    @ColumnInfo(name = "PriceDirection")
+    val priceDirection: PriceDirection,
     
     @SerialName("last_updated_timestamp")
-    val LastUpdatedTimestamp: Long,
+    @ColumnInfo(name = "LastUpdatedTimestamp")
+    val lastUpdatedTimestamp: Long,
     
     @SerialName("icon_url")
-    val IconUrl: String,
+    @ColumnInfo(name = "IconUrl")
+    val iconUrl: String,
     
     @SerialName("category")
-    val Category: CurrencyType,
+    @ColumnInfo(name = "Category")
+    val category: CurrencyType,
 
     @SerialName("hidden_until")
-    val HiddenUntil: Long = 0
+    @ColumnInfo(name = "HiddenUntil")
+    val hiddenUntil: Long = 0
 )
 
 @Serializable
 data class PriceHistoryPoint(
     @SerialName("timestamp")
-    val Timestamp: Long,
+    val timestamp: Long,
     
     @SerialName("price_value")
-    val PriceValue: Double
+    val priceValue: Double
 )
 
 @Serializable
 data class CurrencyResponse(
     @SerialName("items")
-    val Items: List<CurrencyItem>
+    val items: List<CurrencyItem>
 )

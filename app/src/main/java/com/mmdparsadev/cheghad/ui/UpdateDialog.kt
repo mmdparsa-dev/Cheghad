@@ -1,6 +1,5 @@
 package com.mmdparsadev.cheghad.ui
 
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,8 +10,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
@@ -100,7 +99,7 @@ fun UpdateDialog(
 
                 // Title & Version Badge
                 Text(
-                    text = "بروزرسانی جدید موجود است!",
+                    text = stringResource(R.string.update_dialog_title),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -115,7 +114,7 @@ fun UpdateDialog(
                     contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                 ) {
                     Text(
-                        text = "نسخه ${release.tagName}",
+                        text = stringResource(R.string.version_label, release.tagName),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp)
@@ -126,7 +125,7 @@ fun UpdateDialog(
 
                 // Release Notes Body
                 Text(
-                    text = "تغییرات این نسخه:",
+                    text = stringResource(R.string.update_changes_title),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -137,7 +136,7 @@ fun UpdateDialog(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val bodyText = release.body.takeIf { !it.isNull_or_blank() }
-                    ?: "• بهبود عملکرد و رفع مشکلات گزارش‌شده\n• به‌روزرسانی زیرساخت‌های برنامه"
+                    ?: stringResource(R.string.update_no_changelog)
 
                 Surface(
                     modifier = Modifier
@@ -179,7 +178,7 @@ fun UpdateDialog(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "در حال دریافت بروزرسانی: $downloadProgress٪",
+                            text = stringResource(R.string.update_downloading, downloadProgress),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -229,7 +228,7 @@ fun UpdateDialog(
                                             }
                                         },
                                         onFailure = { err ->
-                                            errorMessage = "خطا در دانلود. لطفا از طریق مرورگر اقدام نمایید."
+                                            errorMessage = context.getString(R.string.update_error_download)
                                         }
                                     )
                                 }
@@ -246,13 +245,13 @@ fun UpdateDialog(
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
                         Icon(
-                            imageVector = if (apkAsset != null) Icons.Default.Download else Icons.Default.OpenInNew,
+                            imageVector = if (apkAsset != null) Icons.Default.Download else Icons.AutoMirrored.Filled.OpenInNew,
                             contentDescription = null,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (apkAsset != null) "دانلود و نصب خودکار" else "دانلود از گیت‌هاب",
+                            text = if (apkAsset != null) stringResource(R.string.update_download_auto) else stringResource(R.string.update_download_github),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -272,7 +271,7 @@ fun UpdateDialog(
                         )
                     ) {
                         Text(
-                            text = "الان نه",
+                            text = stringResource(R.string.update_not_now),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant

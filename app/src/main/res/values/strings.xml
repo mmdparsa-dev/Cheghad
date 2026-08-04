@@ -145,4 +145,37 @@
     <string name="calc_toman_amount">Amount in Toman</string>
     <string name="calc_toman_hint">e.g., 10,000,000 Toman</string>
     <string name="calc_equivalents">Equivalent in other currencies:</string>
+    <string name="history_title">History</string>
+    <string name="history_empty">No history found.</string>
+    <string name="clear_history">Clear History</string>
+    <string name="settings_lockscreen_widgets_title">Lock Screen Widgets</string>
+    <string name="settings_lockscreen_widgets_currency_label">Currency to display on lock screen:</string>
+    <string name="settings_lockscreen_widgets_theme_label">Widget appearance theme:</string>
+    <string name="widget_theme_app_color">App Color</string>
+    <string name="settings_update_check_title">Check for Updates</string>
+    <string name="settings_update_checking">Checking GitHub...</string>
+    <string name="settings_update_check_btn">Check and get new version</string>
+
+    <string name="pull_refresh_updating">Updating...</string>
+    <string name="pull_refresh_release">Release to refresh</string>
+    <string name="pull_refresh_pull">Pull to refresh</string>
+    <string name="update_new_version_available">New version of Cheghad is available (%s)</string>
+    <string name="update_ready_to_install">New version %s is ready to download.\n\nChangelog:\n%s</string>
+    <string name="update_no_changelog">Performance improvements and bug fixes</string>
+    <string name="update_download_auto">Download and Install</string>
+    <string name="update_download_github">Download from GitHub</string>
+    <string name="update_not_now">Not now</string>
+    <string name="time_just_now">Just now</string>
+    <string name="time_minutes_ago">%d minutes ago</string>
+    <string name="time_hours_ago">%d hours ago</string>
+    <string name="time_days_ago">%d days ago</string>
+    <string name="time_today">Today</string>
+    <string name="time_latest">Latest news</string>
+    <string name="update_dialog_title">New Update Available!</string>
+    <string name="update_changes_title">Changes in this version:</string>
+    <string name="update_error_download">Download failed. Please try via browser.</string>
+    <string name="update_downloading">Downloading update: %d%%</string>
+    <string name="alarm_direction_above">Above</string>
+    <string name="alarm_direction_below">Below</string>
+    <string name="toast_settings_saved">Settings saved successfully</string>
 </resources>

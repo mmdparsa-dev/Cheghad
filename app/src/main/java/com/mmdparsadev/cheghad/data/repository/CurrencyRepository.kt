@@ -2,6 +2,7 @@ package com.mmdparsadev.cheghad.data.repository
 
 import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.api.CheghadApi
+import com.mmdparsadev.cheghad.data.api.KifpoolApi
 import com.mmdparsadev.cheghad.data.database.CurrencyDao
 import com.mmdparsadev.cheghad.data.models.CurrencyItem
 import kotlinx.coroutines.Dispatchers
@@ -12,8 +13,8 @@ import java.io.IOException
 import java.net.SocketTimeoutException
 
 class CurrencyRepository(
-    private val Api: CheghadApi,
-    private val KifpoolApi: com.mmdparsadev.cheghad.data.api.KifpoolApi,
+    private val api: CheghadApi,
+    private val kifpoolApi: KifpoolApi,
     private val currencyDao: CurrencyDao
 ) {
 
@@ -36,18 +37,18 @@ class CurrencyRepository(
         }
     }
 
-    suspend fun FetchLivePrices(): NetworkResult<List<CurrencyItem>> {
+    suspend fun fetchLivePrices(): NetworkResult<List<CurrencyItem>> {
         return withContext(Dispatchers.IO) {
             try {
-                val response = Api.GetLivePrices()
-                if (response.Items.isNotEmpty()) {
-                    saveCurrenciesToCache(response.Items)
+                val response = api.getLivePrices()
+                if (response.items.isNotEmpty()) {
+                    saveCurrenciesToCache(response.items)
                 }
-                NetworkResult.Success(response.Items, IsFresh = true)
+                NetworkResult.Success(response.items, isFresh = true)
             } catch (e: Exception) {
                 val cached = getCachedCurrencies()
                 if (cached.isNotEmpty()) {
-                    NetworkResult.Success(cached, IsFresh = false)
+                    NetworkResult.Success(cached, isFresh = false)
                 } else {
                     val resId = when (e) {
                         is SocketTimeoutException -> R.string.error_timeout
@@ -60,7 +61,7 @@ class CurrencyRepository(
         }
     }
 
-    suspend fun FetchHistory(
+    suspend fun fetchHistory(
         symbol: String,
         range: String,
         currentPrice: Double? = null,
@@ -95,26 +96,26 @@ class CurrencyRepository(
                     else -> if (symbol.endsWith("IRT")) symbol else "${symbol}IRT"
                 }
                 
-                var response = KifpoolApi.GetHistory(primarySymbol, resolution, from, to)
+                var response = kifpoolApi.getHistory(primarySymbol, resolution, from, to)
                 
                 // Fallback to non-IRT symbol if primary symbol fails
-                if (response.Status != "ok" || response.Close.isNullOrEmpty()) {
+                if (response.status != "ok" || response.close.isNullOrEmpty()) {
                     val fallbackSymbol = symbol.uppercase().replace("IRT", "")
                     if (fallbackSymbol != primarySymbol) {
-                        response = KifpoolApi.GetHistory(fallbackSymbol, resolution, from, to)
+                        response = kifpoolApi.getHistory(fallbackSymbol, resolution, from, to)
                     }
                 }
 
                 // If symbol is not directly on Kifpool (e.g. EUR, GBP, CAD, AED, GOLD, MESGHAL, etc.),
                 // fetch USDTIRT history as baseline trend for exchange rate fluctuations
-                if (response.Status != "ok" || response.Close.isNullOrEmpty()) {
+                if (response.status != "ok" || response.close.isNullOrEmpty()) {
                     if (primarySymbol != "USDTIRT") {
-                        response = KifpoolApi.GetHistory("USDTIRT", resolution, from, to)
+                        response = kifpoolApi.getHistory("USDTIRT", resolution, from, to)
                     }
                 }
 
-                if (response.Status == "ok" && !response.Close.isNullOrEmpty()) {
-                    val rawPrices = response.Close
+                if (response.status == "ok" && !response.close.isNullOrEmpty()) {
+                    val rawPrices = response.close
                     val lastRaw = rawPrices.lastOrNull() ?: 1.0
 
                     if (currentPrice != null && currentPrice > 0) {
@@ -131,16 +132,16 @@ class CurrencyRepository(
                         rawPrices.map { if (it > 10000000000.0) it / 10.0 else it / 10.0 }
                     }
                 } else {
-                    GenerateMockHistory(symbol, range, currentPrice, changePercentage)
+                    generateMockHistory(symbol, range, currentPrice, changePercentage)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                GenerateMockHistory(symbol, range, currentPrice, changePercentage)
+                generateMockHistory(symbol, range, currentPrice, changePercentage)
             }
         }
     }
 
-    private fun GenerateMockHistory(
+    private fun generateMockHistory(
         symbol: String,
         range: String,
         currentPrice: Double?,

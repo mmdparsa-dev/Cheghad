@@ -135,7 +135,7 @@ fun WidgetConfigScreen(appWidgetId: Int, appColorSeed: String, onFinished: () ->
         }
 
         if (selectedCurrencyId.isEmpty() && currencies.isNotEmpty()) {
-            selectedCurrencyId = currencies.first().Id
+            selectedCurrencyId = currencies.first().id
         }
         isLoading = false
     }
@@ -166,8 +166,8 @@ fun WidgetConfigScreen(appWidgetId: Int, appColorSeed: String, onFinished: () ->
                 items(currencies) { item ->
                     CurrencySelectionItem(
                         item = item,
-                        isSelected = item.Id == selectedCurrencyId,
-                        onClick = { selectedCurrencyId = item.Id }
+                        isSelected = item.id == selectedCurrencyId,
+                        onClick = { selectedCurrencyId = item.id }
                     )
                 }
 
@@ -233,7 +233,7 @@ fun WidgetConfigScreen(appWidgetId: Int, appColorSeed: String, onFinished: () ->
 @Composable
 fun CurrencySelectionItem(item: CurrencyItem, isSelected: Boolean, onClick: () -> Unit) {
     val motionScheme = MaterialTheme.motionScheme
-    val title = getLocalizedTitle(item.Symbol, item.Title)
+    val title = getLocalizedTitle(item.symbol, item.title)
     
     val backgroundColor by animateColorAsState(
         targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -276,7 +276,7 @@ fun CurrencySelectionItem(item: CurrencyItem, isSelected: Boolean, onClick: () -
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = item.Symbol.take(1).uppercase(),
+                    text = item.symbol.take(1).uppercase(),
                     color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
@@ -293,7 +293,7 @@ fun CurrencySelectionItem(item: CurrencyItem, isSelected: Boolean, onClick: () -
                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = item.Symbol, 
+                    text = item.symbol, 
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                 )

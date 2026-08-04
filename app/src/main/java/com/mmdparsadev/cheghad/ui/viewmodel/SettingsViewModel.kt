@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.mmdparsadev.cheghad.data.repository.SettingsRepository
 import com.mmdparsadev.cheghad.data.repository.UserSettings
+import com.mmdparsadev.cheghad.widget.MinimalBadgeWidget
+import com.mmdparsadev.cheghad.widget.PriceDeltaWidget
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -15,7 +18,7 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     val settings: StateFlow<UserSettings> = repository.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = UserSettings("system", "DEFAULT", "jalali", "fa", "standard", isLoaded = false)
+        initialValue = UserSettings("system", "DEFAULT", "jalali", "fa", "standard", "USD", "glassy", isLoaded = false)
     )
 
     fun setThemeMode(mode: String) {
@@ -48,10 +51,32 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         }
     }
 
+    fun setLockscreenWidgetCurrencyId(id: String) {
+        viewModelScope.launch {
+            repository.updateLockscreenWidgetCurrencyId(id)
+            // Trigger Glance update for all instances
+            MinimalBadgeWidget().updateAll(repository.context)
+            PriceDeltaWidget().updateAll(repository.context)
+        }
+    }
+
+    fun setLockscreenWidgetTheme(theme: String) {
+        viewModelScope.launch {
+            repository.updateLockscreenWidgetTheme(theme)
+            // Trigger Glance update for all instances
+            MinimalBadgeWidget().updateAll(repository.context)
+            PriceDeltaWidget().updateAll(repository.context)
+        }
+    }
+
     class Factory(private val repository: SettingsRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return SettingsViewModel(repository) as T
         }
+    }
+
+    companion object {
+        fun provideFactory(repository: SettingsRepository): ViewModelProvider.Factory = Factory(repository)
     }
 }

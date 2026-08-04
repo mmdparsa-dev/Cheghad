@@ -146,4 +146,37 @@
     <string name="calc_toman_amount">مبلغ به تومان</string>
     <string name="calc_toman_hint">مثلاً ۱۰,۰۰۰,۰۰۰ تومان</string>
     <string name="calc_equivalents">معادل در سایر ارزها:</string>
+    <string name="history_title">تاریخچه</string>
+    <string name="history_empty">تاریخچه‌ای یافت نشد.</string>
+    <string name="clear_history">پاک کردن</string>
+    <string name="settings_lockscreen_widgets_title">ویجت‌های لاک‌اسکرین</string>
+    <string name="settings_lockscreen_widgets_currency_label">ارز مورد نمایش در ویجت‌های لاک‌اسکرین:</string>
+    <string name="settings_lockscreen_widgets_theme_label">قالب ظاهری ویجت‌ها:</string>
+    <string name="widget_theme_app_color">رنگ برنامه</string>
+    <string name="settings_update_check_title">بررسی بروزرسانی</string>
+    <string name="settings_update_checking">در حال بررسی گیت‌هاب...</string>
+    <string name="settings_update_check_btn">بررسی و دریافت نسخه جدید</string>
+
+    <string name="pull_refresh_updating">در حال به‌روزرسانی...</string>
+    <string name="pull_refresh_release">رها کنید</string>
+    <string name="pull_refresh_pull">بکشید برای بروزرسانی</string>
+    <string name="update_new_version_available">نسخه جدید چقد منتشر شد (%s)</string>
+    <string name="update_ready_to_install">نسخه جدید %s آماده دریافت است.\n\nتغییرات:\n%s</string>
+    <string name="update_no_changelog">بهبود عملکرد و رفع باگ‌ها</string>
+    <string name="update_download_auto">دانلود و نصب خودکار</string>
+    <string name="update_download_github">دانلود از گیت‌هاب</string>
+    <string name="update_not_now">الان نه</string>
+    <string name="time_just_now">لحظاتی پیش</string>
+    <string name="time_minutes_ago">%d دقیقه پیش</string>
+    <string name="time_hours_ago">%d ساعت پیش</string>
+    <string name="time_days_ago">%d روز پیش</string>
+    <string name="time_today">امروز</string>
+    <string name="time_latest">تازه‌ترین خبر</string>
+    <string name="update_dialog_title">بروزرسانی جدید موجود است!</string>
+    <string name="update_changes_title">تغییرات این نسخه:</string>
+    <string name="update_error_download">خطا در دانلود. لطفا از طریق مرورگر اقدام نمایید.</string>
+    <string name="update_downloading">در حال دریافت بروزرسانی: %d%%</string>
+    <string name="alarm_direction_above">بالاتر از</string>
+    <string name="alarm_direction_below">پایین‌تر از</string>
+    <string name="toast_settings_saved">تغییرات با موفقیت ذخیره شد</string>
 </resources>
