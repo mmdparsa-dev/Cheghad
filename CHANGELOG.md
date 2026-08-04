@@ -1,3 +1,42 @@
+## [v0.9.9 - RC] - 2026-08-04
+
+# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
+## The Changes:
+
+- Add Antimation in Calculator 
+- Add History to Calculator
+- Sync Widget with Lastest Update App (Every 15m in background)
+- Optimized Lockscreen Widget for Google Pixels
+- Now for Change Apparace Only lockscreen widget go to settings app
+- Add animation to some sections
+- Faster Update Currency
+- Fix Update Loop
+- Translate Updateing
+- Translate some Sections Calculator
+- Translate News Agencies
+- Translate other Texts
+- Refrector Datamodel & Viewmodels
+- Fix Bugs
+# 🚀 نسسسسسخه جدیییییدددددد!
+## تغییرات:
+
+- اضافه کردن انیمیشن در ماشین حساب
+- اضافه کردن تاریخچه به ماشین حساب
+- همگام سازی ویجت با آخرین بروزرسانی برنامه (هر 15 دقیقه در پس زمینه)
+- بهینه سازی ویجت صفحه قفل برای گوگل پیکسل
+- اکنون برای تغییر ویجت صفحه قفل فقط برای برنامه، به تنظیمات برنامه بروید
+- اضافه کردن انیمیشن به برخی بخش ها
+- بروزرسانی سریعتر ارز
+- رفع حلقه بروزرسانی
+- ترجمه بروزرسانی
+- ترجمه برخی از بخش ها در ماشین حساب
+- ترجمه خبرگزاری ها
+- ترجمه سایر متون
+مدل داده و ViewModel ها اصلاح شده
+- رفع اشکالات
+
+
+
 ## [v0.9.4 - Beta] - 2026-07-31
 
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
