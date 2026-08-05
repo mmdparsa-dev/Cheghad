@@ -21,14 +21,16 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
       - name: Create local.properties
-        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
 
 
       - name: Remove unused dependencies
         run: ./gradlew buildHealth --fix || true
 
       - name: Run Catalog Update
-        run: ./gradlew versionCatalogUpdate
+        run: ./gradlew versionCatalogUpdate --stacktrace --info
 
       # ۵. ساخت Pull Request
       - name: Create Pull Request
