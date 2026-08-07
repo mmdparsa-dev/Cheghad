@@ -7,7 +7,6 @@ converterMoshi = "3.0.0"
 core = "1.7.0"
 coreKtx = "1.19.0"
 composeMaterialIcons = "1.7.8"
-composeMarkdown = "f6ded628a2"
 coreSplashScreen = "1.2.0"
 datastorePreferences = "1.2.1"
 espressoCore = "3.7.0"
@@ -60,7 +59,6 @@ androidx-room3-compiler = { module = "androidx.room3:room3-compiler", version.re
 androidx-room3-runtime = { module = "androidx.room3:room3-runtime", version.ref = "room3" }
 androidx-runner = { module = "androidx.test:runner", version.ref = "runner" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntimeKtx" }
-compose-markdown = { module = "dev.jeziellago:compose-markdown", version.ref = "composeMarkdown" }
 converter-moshi = { module = "com.squareup.retrofit2:converter-moshi", version.ref = "converterMoshi" }
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
