@@ -135,7 +135,6 @@ class CurrencyRepository(
                     generateMockHistory(symbol, range, currentPrice, changePercentage)
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
                 generateMockHistory(symbol, range, currentPrice, changePercentage)
             }
         }

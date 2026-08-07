@@ -5,6 +5,9 @@ import com.mmdparsadev.cheghad.data.models.NewsAgency
 import com.mmdparsadev.cheghad.data.models.NewsArticle
 import com.mmdparsadev.cheghad.data.models.NewsCategory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -51,37 +54,46 @@ class NewsRepository {
         )
     }
 
-    suspend fun fetchLiveNews(): List<NewsArticle> = withContext(Dispatchers.IO) {
-        val fetchedList = mutableListOf<NewsArticle>()
-        
-        for (agency in AGENCIES) {
-            try {
-                val request = Request.Builder()
-                    .url(agency.rssUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    .header("Accept", "application/rss+xml, application/xml, text/xml, */*")
-                    .build()
-                
-                val response = client.newCall(request).execute()
-                if (response.isSuccessful) {
-                    // Sync with server time using Date header
-                    val serverDateStr = response.header("Date")
-                    if (serverDateStr != null) {
-                        val serverTs = parseHttpDate(serverDateStr)
-                        if (serverTs > 0) {
-                            serverTimeOffset = serverTs - System.currentTimeMillis()
-                        }
-                    }
+    suspend fun fetchLiveNews(disabledAgencies: Set<String> = emptySet(), isNewsEnabled: Boolean = true): List<NewsArticle> = withContext(Dispatchers.IO) {
+        if (!isNewsEnabled) return@withContext emptyList<NewsArticle>()
 
-                    val xmlData = response.body.string()
-                    if (xmlData.isNotEmpty()) {
-                        val parsedArticles = parseRssFeed(xmlData, agency)
-                        fetchedList.addAll(parsedArticles)
+        val activeAgencies = AGENCIES.filter { it.id !in disabledAgencies }
+        if (activeAgencies.isEmpty()) return@withContext emptyList<NewsArticle>()
+
+        val fetchedList = mutableListOf<NewsArticle>()
+
+        coroutineScope {
+            val deferreds = activeAgencies.map { agency ->
+                async {
+                    try {
+                        val request = Request.Builder()
+                            .url(agency.rssUrl)
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                            .header("Accept", "application/rss+xml, application/xml, text/xml, */*")
+                            .build()
+                        
+                        val response = client.newCall(request).execute()
+                        if (response.isSuccessful) {
+                            val serverDateStr = response.header("Date")
+                            if (serverDateStr != null) {
+                                val serverTs = parseHttpDate(serverDateStr)
+                                if (serverTs > 0) {
+                                    serverTimeOffset = serverTs - System.currentTimeMillis()
+                                }
+                            }
+
+                            val xmlData = response.body.string()
+                            if (xmlData.isNotEmpty()) {
+                                parseRssFeed(xmlData, agency)
+                            } else emptyList()
+                        } else emptyList()
+                    } catch (e: Exception) {
+                        emptyList<NewsArticle>()
                     }
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
+            val results = deferreds.awaitAll()
+            results.forEach { fetchedList.addAll(it) }
         }
 
         val initialFallback = getInitialNewsArticles()
@@ -226,7 +238,6 @@ class NewsRepository {
                 eventType = parser.next()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
         }
         return articles
     }

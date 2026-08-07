@@ -58,7 +58,6 @@ suspend fun updateAllWidgets(context: Context) {
         MinimalBadgeWidget().updateAll(context)
         PriceDeltaWidget().updateAll(context)
     } catch (e: Exception) {
-        e.printStackTrace()
     }
 }
 

@@ -57,10 +57,17 @@
     <string name="news_bookmarks">اخبار نشان‌شده</string>
     <string name="news_no_results">خبری یافت نشد.</string>
     <string name="news_crawler_badge">کرولر زنده</string>
+    <string name="news_disabled_status">بخش اخبار غیرفعال است</string>
+    <string name="news_enable_description">برای صرفه‌جویی در مصرف اینترنت و منابع، خبرخوان غیرفعال شده است. برای مشاهده اخبار، منابع خبری را فعال کنید.</string>
+    <string name="news_enable_action">فعال‌سازی و مدیریت خبرگزاری‌ها</string>
     <string name="settings_news_categories_title">دسته‌بندی‌های خبری</string>
     <string name="settings_news_categories_subtitle">فعال یا غیرفعال‌سازی دسته‌بندی‌های خبرخوان</string>
     <string name="settings_news_agencies_title">خبرگزاری‌ها</string>
     <string name="settings_news_agencies_subtitle">فعال یا غیرفعال‌سازی منابع خبری</string>
+    <string name="settings_manage_agencies">مدیریت خبرگزاری‌ها</string>
+    <string name="settings_news_enable_all">فعال‌سازی همه</string>
+    <string name="settings_news_disable_all">غیرفعال‌سازی همه</string>
+    <string name="settings_news_master_toggle">نمایش بخش اخبار</string>
     <string name="settings_title">تنظیمات</string>
     <string name="settings_subtitle">تنظیمات و شخصی‌سازی برنامه</string>
     <string name="language">زبان</string>
@@ -127,6 +134,7 @@
     <string name="sort_default">محبوب‌ترین</string>
     <string name="sort_profitable">پرسودترین</string>
     <string name="sort_loss_making">پرضررترین</string>
+    <string name="sort_custom">سفارشی</string>
     <string name="widget_config_title">تنظیمات ویجت</string>
     <string name="widget_config_select_currency">انتخاب ارز برای نمایش</string>
     <string name="widget_config_select_theme">انتخاب تم ظاهری</string>
@@ -178,5 +186,14 @@
     <string name="update_downloading">در حال دریافت بروزرسانی: %d%%</string>
     <string name="alarm_direction_above">بالاتر از</string>
     <string name="alarm_direction_below">پایین‌تر از</string>
+    <string name="settings_update_beta_title">دریافت نسخه‌های آزمایشی (بتا)</string>
+    <string name="settings_update_beta_subtitle">دریافت زودتر ویژگی‌های جدید و بروزرسانی‌های آزمایشی</string>
     <string name="toast_settings_saved">تغییرات با موفقیت ذخیره شد</string>
+    <string name="first_row_customize">ردیف اول</string>
+    <string name="second_row_customize">ردیف دوم</string>
+    <string name="third_row_customize">ردیف سوم</string>
+    <string name="colorful_customize">رنگی</string>
+    <string name="not_colorful_customize">ساده</string>
+    <string name="integration_customize">ادغام</string>
+    <string name="separation_customize">تفکیک</string>
 </resources>

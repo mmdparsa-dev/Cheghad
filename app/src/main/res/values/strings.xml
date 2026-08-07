@@ -56,10 +56,17 @@
     <string name="news_bookmarks">Bookmarked News</string>
     <string name="news_no_results">No news found.</string>
     <string name="news_crawler_badge">Live Crawler</string>
+    <string name="news_disabled_status">News section is disabled</string>
+    <string name="news_enable_description">To save internet and resources, the news feed is disabled. Enable news sources to view latest news.</string>
+    <string name="news_enable_action">Enable &amp; Manage News Agencies</string>
     <string name="settings_news_categories_title">News Categories</string>
     <string name="settings_news_categories_subtitle">Enable or disable categories shown in news feed</string>
     <string name="settings_news_agencies_title">News Agencies</string>
     <string name="settings_news_agencies_subtitle">Enable or disable news agencies sources</string>
+    <string name="settings_manage_agencies">Manage News Agencies</string>
+    <string name="settings_news_enable_all">Enable All</string>
+    <string name="settings_news_disable_all">Disable All</string>
+    <string name="settings_news_master_toggle">Show News Section</string>
     <string name="settings_title">Settings</string>
     <string name="settings_subtitle">App Settings &amp; Customization</string>
     <string name="language">Language</string>
@@ -126,6 +133,7 @@
     <string name="sort_default">Most Popular</string>
     <string name="sort_profitable">Top Gainers</string>
     <string name="sort_loss_making">Top Losers</string>
+    <string name="sort_custom">Custom</string>
     <string name="widget_config_title">Widget Settings</string>
     <string name="widget_config_select_currency">Select Currency</string>
     <string name="widget_config_select_theme">Select Theme</string>
@@ -177,5 +185,14 @@
     <string name="update_downloading">Downloading update: %d%%</string>
     <string name="alarm_direction_above">Above</string>
     <string name="alarm_direction_below">Below</string>
+    <string name="settings_update_beta_title">Download Beta Versions</string>
+    <string name="settings_update_beta_subtitle">Get early access to new features and experimental updates</string>
     <string name="toast_settings_saved">Settings saved successfully</string>
+    <string name="first_row_customize">First row</string>
+    <string name="second_row_customize">Second row</string>
+    <string name="third_row_customize">Second row</string>
+    <string name="colorful_customize">Colorful</string>
+    <string name="not_colorful_customize">Simple</string>
+    <string name="integration_customize">Integration</string>
+    <string name="separation_customize">Separation</string>
 </resources>

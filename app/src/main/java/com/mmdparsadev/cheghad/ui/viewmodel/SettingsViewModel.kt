@@ -69,6 +69,18 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
         }
     }
 
+    fun setDownloadBetaVersions(download: Boolean) {
+        viewModelScope.launch {
+            repository.updateDownloadBetaVersions(download)
+        }
+    }
+
+    fun setNewsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            repository.updateNewsEnabled(enabled)
+        }
+    }
+
     class Factory(private val repository: SettingsRepository) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {

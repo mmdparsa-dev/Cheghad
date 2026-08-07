@@ -68,7 +68,6 @@ class CurrencyViewModel(
     private val jsonFormat = Json { ignoreUnknownKeys = true }
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-        throwable.printStackTrace()
         _uiState.update { it.copy(errorMessageResId = R.string.error_server) }
     }
 
@@ -92,7 +91,6 @@ class CurrencyViewModel(
                 prefs?.edit()?.putString("cached_items_json", json)?.apply()
             }
         } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 
@@ -103,7 +101,6 @@ class CurrencyViewModel(
         observeCurrencies()
         startPeriodicUpdates()
         observeAlarms()
-        fetchNews()
         observeConnectivity()
     }
 
@@ -112,7 +109,7 @@ class CurrencyViewModel(
             viewModelScope.launch(exceptionHandler) {
                 val observer = NetworkConnectivityObserver(ctx)
                 observer.observe()
-                    .catch { e -> e.printStackTrace() }
+                    .catch { }
                     .collect { status ->
                         val isOffline = status != ConnectivityStatus.Available
                         _uiState.update { it.copy(isOffline = isOffline) }
@@ -138,7 +135,7 @@ class CurrencyViewModel(
             
             // Then observe for updates
             repository.getVisibleCurrenciesFlow(System.currentTimeMillis())
-                .catch { e -> e.printStackTrace() }
+                .catch { }
                 .collect { currencies ->
                     if (currencies.isNotEmpty()) {
                         saveCachedItemsToPrefs(currencies)
@@ -161,10 +158,10 @@ class CurrencyViewModel(
         }
     }
 
-    fun fetchNews() {
+    fun fetchNews(disabledAgencies: Set<String> = emptySet(), isNewsEnabled: Boolean = true) {
         viewModelScope.launch(exceptionHandler) {
             _uiState.update { it.copy(isNewsLoading = true) }
-            val news = newsRepository.fetchLiveNews()
+            val news = newsRepository.fetchLiveNews(disabledAgencies, isNewsEnabled)
             _uiState.update { it.copy(newsArticles = news, isNewsLoading = false) }
         }
     }
@@ -185,7 +182,7 @@ class CurrencyViewModel(
     private fun observeAlarms() {
         viewModelScope.launch(exceptionHandler) {
             alarmRepository.allAlarmsFlow
-                .catch { e -> e.printStackTrace() }
+                .catch { }
                 .collect { alarmsList ->
                     _uiState.update { it.copy(alarms = alarmsList) }
                 }

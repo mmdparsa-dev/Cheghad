@@ -3,6 +3,7 @@ package com.mmdparsadev.cheghad.ui
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.*
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -48,7 +50,9 @@ fun NewsScreen(
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     disabledCategories: Set<String> = emptySet(),
-    disabledAgencies: Set<String> = emptySet()
+    disabledAgencies: Set<String> = emptySet(),
+    newsEnabled: Boolean = true,
+    onOpenAgenciesSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val isEnglish = digitType == "en"
@@ -58,6 +62,10 @@ fun NewsScreen(
     var showOnlyBookmarks by remember { mutableStateOf(false) }
     var bookmarkedIds by remember { mutableStateOf(setOf<String>()) }
     var selectedArticleForDetail by remember { mutableStateOf<NewsArticle?>(null) }
+
+    val allAgenciesDisabled = remember(disabledAgencies) {
+        disabledAgencies.size >= NewsRepository.AGENCIES.size
+    }
 
     // Filter articles based on category, agency, search query, bookmarks, and disabled settings
     val filteredArticles = remember(newsArticles, selectedCategory, selectedAgencyId, searchQuery, showOnlyBookmarks, bookmarkedIds, disabledCategories, disabledAgencies) {
@@ -76,233 +84,288 @@ fun NewsScreen(
         }.sortedByDescending { it.pubTimestamp }
     }
 
-    ExpressivePullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(innerPadding)
-    ) {
-        Column(
+    if (!newsEnabled || allAgenciesDisabled) {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(innerPadding)
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Header Title
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
-                Column {
-                    Text(
-                        text = stringResource(R.string.news_title),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = stringResource(R.string.news_subtitle),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Newspaper,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                )
 
-                // Bookmark toggle button
-                IconButton(
-                    onClick = { showOnlyBookmarks = !showOnlyBookmarks },
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(
-                            if (showOnlyBookmarks) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant
-                        )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = stringResource(R.string.news_disabled_status),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = stringResource(R.string.news_enable_description),
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 22.sp
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Button(
+                    onClick = onOpenAgenciesSettings,
+                    shape = RoundedCornerShape(16.dp),
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
                 ) {
-                    Icon(
-                        imageVector = if (showOnlyBookmarks) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = stringResource(R.string.news_bookmarks),
-                        tint = if (showOnlyBookmarks) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.news_enable_action))
                 }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+        }
+    } else {
+        ExpressivePullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp)),
-                placeholder = {
-                    Text(
-                        stringResource(R.string.news_search_placeholder),
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear")
-                        }
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Header Title
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = stringResource(R.string.news_title),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = stringResource(R.string.news_subtitle),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
+                        )
                     }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                )
-            )
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Category Chips Row (Expressive Connected Button Group)
-            val categories = remember(disabledCategories) {
-                listOf(
-                    NewsCategory.All to R.string.news_category_all,
-                    NewsCategory.Economic to R.string.news_category_economic,
-                    NewsCategory.CurrencyGold to R.string.news_category_currency,
-                    NewsCategory.Bourse to R.string.news_category_bourse,
-                    NewsCategory.Crypto to R.string.news_category_crypto,
-                    NewsCategory.World to R.string.news_category_world
-                ).filter { (cat, _) -> cat == NewsCategory.All || !disabledCategories.contains(cat.name) }
-            }
-
-            // Reset selected category if it's no longer available
-            LaunchedEffect(categories) {
-                if (categories.none { it.first == selectedCategory }) {
-                    selectedCategory = NewsCategory.All
-                }
-            }
-
-            val selectedCategoryIndex = categories.indexOfFirst { it.first == selectedCategory }.coerceAtLeast(0)
-
-            ExpressiveConnectedButtonGroup(
-                itemsCount = categories.size,
-                selectedIndex = selectedCategoryIndex,
-                onSelect = { selectedCategory = categories[it].first },
-                scrollable = true,
-                height = 40.dp,
-                spacing = 4.dp
-            ) { index, isSelected ->
-                Text(
-                    text = stringResource(categories[index].second),
-                    fontSize = 12.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Agencies Filter Row (Expressive Connected Button Group)
-            val activeAgencies = remember(disabledAgencies) {
-                NewsRepository.AGENCIES.filter { agency -> !disabledAgencies.contains(agency.id) }
-            }
-            val agencyItems = listOf(null to stringResource(R.string.news_agency_all)) + activeAgencies.map { 
-                it.id to if (isEnglish) it.nameEn else it.nameFa 
-            }
-
-            // Reset selected agency if it's no longer available
-            LaunchedEffect(agencyItems) {
-                if (selectedAgencyId != null && agencyItems.none { it.first == selectedAgencyId }) {
-                    selectedAgencyId = null
-                }
-            }
-
-            val selectedAgencyIndex = agencyItems.indexOfFirst { it.first == selectedAgencyId }.coerceAtLeast(0)
-
-            ExpressiveConnectedButtonGroup(
-                itemsCount = agencyItems.size,
-                selectedIndex = selectedAgencyIndex,
-                onSelect = { selectedAgencyId = agencyItems[it].first },
-                scrollable = true,
-                height = 36.dp,
-                spacing = 4.dp
-            ) { index, isSelected ->
-                Text(
-                    text = agencyItems[index].second,
-                    fontSize = 11.sp,
-                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Articles Area with Animation
-            AnimatedContent(
-                targetState = Triple(filteredArticles, selectedCategory, selectedAgencyId),
-                transitionSpec = {
-                    (fadeIn(animationSpec = tween(300, delayMillis = 50)) + 
-                     slideInVertically(initialOffsetY = { 20 }))
-                    .togetherWith(fadeOut(animationSpec = tween(200)))
-                },
-                label = "NewsListAnimation"
-            ) { (articles, _, _) ->
-                if (articles.isEmpty()) {
-                    Box(
+                    // Bookmark toggle button
+                    IconButton(
+                        onClick = { showOnlyBookmarks = !showOnlyBookmarks },
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(32.dp),
-                        contentAlignment = Alignment.Center
+                            .clip(CircleShape)
+                            .background(
+                                if (showOnlyBookmarks) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.Article,
-                                contentDescription = null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = stringResource(R.string.news_no_results),
-                                fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Icon(
+                            imageVector = if (showOnlyBookmarks) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                            contentDescription = stringResource(R.string.news_bookmarks),
+                            tint = if (showOnlyBookmarks) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
-                } else {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(bottom = 24.dp)
-                    ) {
-                        items(articles, key = { it.id }) { article ->
-                            val isBookmarked = bookmarkedIds.contains(article.id)
-                            NewsArticleCard(
-                                article = article,
-                                isEnglish = isEnglish,
-                                isBookmarked = isBookmarked,
-                                onBookmarkToggle = {
-                                    bookmarkedIds = if (isBookmarked) {
-                                        bookmarkedIds - article.id
-                                    } else {
-                                        bookmarkedIds + article.id
-                                    }
-                                },
-                                onShare = {
-                                    val shareIntent = Intent().apply {
-                                        action = Intent.ACTION_SEND
-                                        putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
-                                        type = "text/plain"
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, article.title))
-                                },
-                                onClick = {
-                                    selectedArticleForDetail = article
-                                }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Search Bar
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp)),
+                    placeholder = {
+                        Text(
+                            stringResource(R.string.news_search_placeholder),
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Category Chips Row (Expressive Connected Button Group)
+                val categories = remember(disabledCategories) {
+                    listOf(
+                        NewsCategory.All to R.string.news_category_all,
+                        NewsCategory.Economic to R.string.news_category_economic,
+                        NewsCategory.CurrencyGold to R.string.news_category_currency,
+                        NewsCategory.Bourse to R.string.news_category_bourse,
+                        NewsCategory.Crypto to R.string.news_category_crypto,
+                        NewsCategory.World to R.string.news_category_world
+                    ).filter { (cat, _) -> cat == NewsCategory.All || !disabledCategories.contains(cat.name) }
+                }
+
+                // Reset selected category if it's no longer available
+                LaunchedEffect(categories) {
+                    if (categories.none { it.first == selectedCategory }) {
+                        selectedCategory = NewsCategory.All
+                    }
+                }
+
+                val selectedCategoryIndex = categories.indexOfFirst { it.first == selectedCategory }.coerceAtLeast(0)
+
+                ExpressiveConnectedButtonGroup(
+                    itemsCount = categories.size,
+                    selectedIndex = selectedCategoryIndex,
+                    onSelect = { selectedCategory = categories[it].first },
+                    scrollable = true,
+                    height = 40.dp,
+                    spacing = 4.dp
+                ) { index, isSelected ->
+                    Text(
+                        text = stringResource(categories[index].second),
+                        fontSize = 12.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Agencies Filter Row (Expressive Connected Button Group)
+                val activeAgencies = remember(disabledAgencies) {
+                    NewsRepository.AGENCIES.filter { agency -> !disabledAgencies.contains(agency.id) }
+                }
+                val agencyItems = listOf(null to stringResource(R.string.news_agency_all)) + activeAgencies.map {
+                    it.id to if (isEnglish) it.nameEn else it.nameFa
+                }
+
+                // Reset selected agency if it's no longer available
+                LaunchedEffect(agencyItems) {
+                    if (selectedAgencyId != null && agencyItems.none { it.first == selectedAgencyId }) {
+                        selectedAgencyId = null
+                    }
+                }
+
+                val selectedAgencyIndex = agencyItems.indexOfFirst { it.first == selectedAgencyId }.coerceAtLeast(0)
+
+                ExpressiveConnectedButtonGroup(
+                    itemsCount = agencyItems.size,
+                    selectedIndex = selectedAgencyIndex,
+                    onSelect = { selectedAgencyId = agencyItems[it].first },
+                    scrollable = true,
+                    height = 36.dp,
+                    spacing = 4.dp
+                ) { index, isSelected ->
+                    Text(
+                        text = agencyItems[index].second,
+                        fontSize = 11.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Articles Area with Animation
+                AnimatedContent(
+                    targetState = Triple(filteredArticles, selectedCategory, selectedAgencyId),
+                    transitionSpec = {
+                        val emphasizedEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+                        (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.05f).toInt() } + fadeIn(animationSpec = tween(300)))
+                            .togetherWith(
+                                slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.05f).toInt() } + fadeOut(animationSpec = tween(150))
                             )
+                    },
+                    label = "NewsListAnimation"
+                ) { (articles, _, _) ->
+                    if (articles.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(32.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Article,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = stringResource(R.string.news_no_results),
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp)
+                        ) {
+                            items(articles, key = { it.id }) { article ->
+                                val isBookmarked = bookmarkedIds.contains(article.id)
+                                NewsArticleCard(
+                                    article = article,
+                                    isEnglish = isEnglish,
+                                    isBookmarked = isBookmarked,
+                                    onBookmarkToggle = {
+                                        bookmarkedIds = if (isBookmarked) {
+                                            bookmarkedIds - article.id
+                                        } else {
+                                            bookmarkedIds + article.id
+                                        }
+                                    },
+                                    onShare = {
+                                        val shareIntent = Intent().apply {
+                                            action = Intent.ACTION_SEND
+                                            putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
+                                            type = "text/plain"
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, article.title))
+                                    },
+                                    onClick = {
+                                        selectedArticleForDetail = article
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -384,7 +447,6 @@ fun NewsScreen(
                                 val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(article.link))
                                 context.startActivity(browserIntent)
                             } catch (e: Exception) {
-                                e.printStackTrace()
                             }
                         },
                         modifier = Modifier.weight(1f).height(48.dp),

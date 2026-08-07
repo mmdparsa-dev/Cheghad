@@ -131,7 +131,6 @@ fun WidgetConfigScreen(appWidgetId: Int, appColorSeed: String, onFinished: () ->
             selectedCurrencyId = state[stringPreferencesKey("selected_currency_id")] ?: ""
             selectedTheme = state[stringPreferencesKey("widget_theme")] ?: "glassy"
         } catch (e: Exception) {
-            e.printStackTrace()
         }
 
         if (selectedCurrencyId.isEmpty() && currencies.isNotEmpty()) {
@@ -216,7 +215,6 @@ fun WidgetConfigScreen(appWidgetId: Int, appColorSeed: String, onFinished: () ->
                             Toast.makeText(context, R.string.widget_config_success, Toast.LENGTH_SHORT).show()
                             onFinished()
                         } catch (e: Exception) {
-                            e.printStackTrace()
                             Toast.makeText(context, "Error saving settings", Toast.LENGTH_SHORT).show()
                         }
                     }

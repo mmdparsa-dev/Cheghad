@@ -15,6 +15,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import kotlinx.coroutines.launch
@@ -32,6 +33,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
@@ -73,6 +76,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
+import com.mmdparsadev.cheghad.utils.HapticUtils
+import com.mmdparsadev.cheghad.utils.HapticType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -95,11 +100,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.mmdparsadev.cheghad.data.repository.NewsRepository
 import com.mmdparsadev.cheghad.data.update.GitHubRelease
 import com.mmdparsadev.cheghad.data.update.UpdateManager
 import com.mmdparsadev.cheghad.data.update.UpdateWorker
@@ -107,11 +117,15 @@ import com.mmdparsadev.cheghad.ui.ConnectivityStatusBanner
 import com.mmdparsadev.cheghad.ui.ExpressivePullToRefreshBox
 import com.mmdparsadev.cheghad.ui.UpdateDialog
 import com.mmdparsadev.cheghad.ui.viewmodel.SettingsViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.yield
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+val LocalAdaptiveDpScale = staticCompositionLocalOf { 1.0f }
+val LocalAdaptiveSpScale = staticCompositionLocalOf { 1.0f }
 
 enum class TimeRange(val stringRes: Int, val id: String) {
     HOUR(R.string.range_hour, "HOUR"),
@@ -157,137 +171,181 @@ class MainActivity : AppCompatActivity() {
             val userSettings by settingsViewModel.settings.collectAsStateWithLifecycle()
             if (!userSettings.isLoaded) return@setContent
 
-            val appThemeMode = userSettings.themeMode
-            val calendarType = userSettings.calendarType
-            val colorSchemeMode = userSettings.colorSchemeMode
-            val digitType = userSettings.digitType
-            val colorSeedName = userSettings.colorSeed
-            val selectedAppColor = AppThemeColor.entries.find { it.name == colorSeedName } ?: AppThemeColor.DEFAULT
+            val configuration = LocalConfiguration.current
+            val screenWidthDp = configuration.screenWidthDp
+            
+            val dpScale = remember(screenWidthDp) {
+                when {
+                    screenWidthDp >= 1200 -> 1.50f
+                    screenWidthDp >= 840 -> 1.35f
+                    screenWidthDp >= 600 -> 1.12f
+                    screenWidthDp <= 320 -> 0.80f
+                    screenWidthDp <= 360 -> 0.88f
+                    else -> 1.0f
+                }
+            }
+            
+            val spScale = remember(screenWidthDp) {
+                when {
+                    screenWidthDp >= 1200 -> 1.50f
+                    screenWidthDp >= 840 -> 1.30f
+                    screenWidthDp >= 600 -> 1.10f
+                    screenWidthDp <= 320 -> 0.78f
+                    screenWidthDp <= 360 -> 0.85f
+                    else -> 0.95f
+                }
+            }
 
-            var isFirstLaunch by remember { mutableStateOf(sharedPrefs.getBoolean("first_launch", true)) }
-            var currentScreen by remember { mutableStateOf("home") }
+            CompositionLocalProvider(
+                LocalAdaptiveDpScale provides dpScale,
+                LocalAdaptiveSpScale provides spScale
+            ) {
+                val appThemeMode = userSettings.themeMode
+                val calendarType = userSettings.calendarType
+                val colorSchemeMode = userSettings.colorSchemeMode
+                val digitType = userSettings.digitType
+                val colorSeedName = userSettings.colorSeed
+                val selectedAppColor = AppThemeColor.entries.find { it.name == colorSeedName } ?: AppThemeColor.DEFAULT
 
-            val uiState by viewModel.uiState.collectAsState()
-            val context = LocalContext.current
-            var isEditingHome by remember { mutableStateOf(false) }
-            var bottomListSortOrder by remember { mutableStateOf("default") } // "default", "profitable", "loss-making"
+                var isFirstLaunch by remember { mutableStateOf(sharedPrefs.getBoolean("first_launch", true)) }
+                var currentScreen by remember { mutableStateOf("home") }
 
-            var selectedItemForDetail by remember { mutableStateOf<CurrencyItem?>(null) }
-            var selectedAlarmForEdit by remember { mutableStateOf<AlarmEntity?>(null) }
+                val uiState by viewModel.uiState.collectAsState()
+                val context = LocalContext.current
+                var isEditingHome by remember { mutableStateOf(false) }
+                var isEditingCustomSort by remember { mutableStateOf(false) }
+                var marketCustomOrder by remember {
+                    mutableStateOf(
+                        sharedPrefs.getString("market_custom_order", "")?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
+                    )
+                }
+                var bottomListSortOrder by remember { mutableStateOf("default") } // "default", "profitable", "loss-making", "custom"
 
-            LaunchedEffect(Unit) {
-                viewModel.triggeredAlarmFlow.collect { (alarm, currentPrice) ->
-                    val directionText = if (alarm.isAbove) context.getString(R.string.alarm_direction_above) else context.getString(R.string.alarm_direction_below)
-                    val message = "قیمت ${alarm.title} (${alarm.symbol}) به $directionText ${alarm.targetPrice} تومان رسید (قیمت فعلی: $currentPrice)"
+                var selectedItemForDetail by remember { mutableStateOf<CurrencyItem?>(null) }
+                var selectedAlarmForEdit by remember { mutableStateOf<AlarmEntity?>(null) }
 
-                    try {
-                        val channelId = "price_alerts_channel"
-                        val channelName = "Price Alerts"
+                LaunchedEffect(Unit) {
+                    viewModel.triggeredAlarmFlow.collect { (alarm, currentPrice) ->
+                        val directionText = if (alarm.isAbove) context.getString(R.string.alarm_direction_above) else context.getString(R.string.alarm_direction_below)
+                        val message = "قیمت ${alarm.title} (${alarm.symbol}) به $directionText ${alarm.targetPrice} تومان رسید (قیمت فعلی: $currentPrice)"
 
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            val channel = NotificationChannel(
-                                channelId,
-                                channelName,
-                                NotificationManager.IMPORTANCE_HIGH
-                            ).apply {
-                                description = "Channel for asset price alerts"
+                        try {
+                            val channelId = "price_alerts_channel"
+                            val channelName = "Price Alerts"
+
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                val channel = NotificationChannel(
+                                    channelId,
+                                    channelName,
+                                    NotificationManager.IMPORTANCE_HIGH
+                                ).apply {
+                                    description = "Channel for asset price alerts"
+                                }
+                                val notificationManager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                                notificationManager.createNotificationChannel(channel)
                             }
+
                             val notificationManager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                            notificationManager.createNotificationChannel(channel)
+                            val notificationBuilder = NotificationCompat.Builder(context, channelId)
+                                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                                .setContentTitle(context.getString(R.string.alarm_triggered_title))
+                                .setContentText(message)
+                                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                                .setAutoCancel(true)
+
+                            notificationManager.notify(alarm.id.toInt(), notificationBuilder.build())
+                        } catch (e: Exception) {
                         }
 
-                        val notificationManager = context.getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                        val notificationBuilder = NotificationCompat.Builder(context, channelId)
-                            .setSmallIcon(android.R.drawable.ic_dialog_info)
-                            .setContentTitle(context.getString(R.string.alarm_triggered_title))
-                            .setContentText(message)
-                            .setPriority(NotificationCompat.PRIORITY_HIGH)
-                            .setAutoCancel(true)
-
-                        notificationManager.notify(alarm.id.toInt(), notificationBuilder.build())
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-
-                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-                }
-            }
-            var homeItemSymbols by remember {
-                mutableStateOf(
-                    (sharedPrefs.getString("home_items", "USD,EUR,GOLD,BTC,ETH") ?: "USD,EUR,GOLD,BTC,ETH").split(",")
-                )
-            }
-
-            var timeRangeOrder by remember {
-                mutableStateOf(
-                    (sharedPrefs.getString("time_range_order", "DAY,WEEK,MONTH,YEAR") ?: "DAY,WEEK,MONTH,YEAR")
-                        .split(",")
-                        .mapNotNull { id -> TimeRange.entries.find { it.id == id } }
-                        .let { if (it.isEmpty()) listOf(TimeRange.DAY, TimeRange.WEEK, TimeRange.MONTH, TimeRange.YEAR) else it }
-                )
-            }
-
-            var disabledNewsCategories by remember {
-                mutableStateOf(sharedPrefs.getStringSet("disabled_news_categories", emptySet<String>()) ?: emptySet<String>())
-            }
-
-            var disabledNewsAgencies by remember {
-                mutableStateOf(sharedPrefs.getStringSet("disabled_news_agencies", emptySet<String>()) ?: emptySet<String>())
-            }
-
-            var availableUpdateRelease by remember { mutableStateOf<GitHubRelease?>(null) }
-            var isCheckingUpdatesManually by remember { mutableStateOf(false) }
-
-            val permissionLauncher = rememberLauncherForActivityResult(
-                androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-            ) {}
-
-            LaunchedEffect(Unit) {
-                // Request notification permission for Android 13+
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                    if (androidx.core.content.ContextCompat.checkSelfPermission(
-                            context,
-                            Manifest.permission.POST_NOTIFICATIONS
-                        ) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                     }
                 }
+                var homeItemSymbols by remember {
+                    mutableStateOf(
+                        (sharedPrefs.getString("home_items", "USD,EUR,GOLD,BTC,ETH") ?: "USD,EUR,GOLD,BTC,ETH").split(",")
+                    )
+                }
 
-                // Schedule background WorkManager periodic check
-                UpdateWorker.schedulePeriodicCheck(context)
+                var timeRangeOrder by remember {
+                    mutableStateOf(
+                        (sharedPrefs.getString("time_range_order", "DAY,WEEK,MONTH,YEAR") ?: "DAY,WEEK,MONTH,YEAR")
+                            .split(",")
+                            .mapNotNull { id -> TimeRange.entries.find { it.id == id } }
+                            .let { if (it.isEmpty()) listOf(TimeRange.DAY, TimeRange.WEEK, TimeRange.MONTH, TimeRange.YEAR) else it }
+                    )
+                }
 
-                val currentVersion = BuildConfig.VERSION_NAME
-                UpdateManager.checkForUpdate(currentVersion).onSuccess { release ->
-                    if (release != null) {
-                        availableUpdateRelease = release
-                        UpdateWorker.sendUpdateNotification(context, release)
+                var disabledNewsCategories by remember {
+                    mutableStateOf(sharedPrefs.getStringSet("disabled_news_categories", emptySet<String>()) ?: emptySet<String>())
+                }
+
+                var disabledNewsAgencies by remember {
+                    mutableStateOf(sharedPrefs.getStringSet("disabled_news_agencies", emptySet<String>()) ?: emptySet<String>())
+                }
+
+                var showAgenciesSheet by remember { mutableStateOf(false) }
+
+                var availableUpdateRelease by remember { mutableStateOf<GitHubRelease?>(null) }
+                var isCheckingUpdatesManually by remember { mutableStateOf(false) }
+
+                val permissionLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.RequestPermission()
+                ) {}
+
+                LaunchedEffect(Unit) {
+                    delay(1500) // Delay startup tasks to improve initial UI responsiveness
+                    
+                    // Request notification permission for Android 13+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        if (ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+
+                    // Schedule background WorkManager periodic check
+                    UpdateWorker.schedulePeriodicCheck(context)
+
+                    val currentVersion = BuildConfig.VERSION_NAME
+                    UpdateManager.checkForUpdate(currentVersion, userSettings.downloadBetaVersions).onSuccess { release ->
+                        if (release != null) {
+                            availableUpdateRelease = release
+                            UpdateWorker.sendUpdateNotification(context, release)
+                        }
                     }
                 }
-            }
 
-            LaunchedEffect(uiState.showSuccessMessage) {
-                if (uiState.showSuccessMessage) {
-                    Toast.makeText(context, context.getString(R.string.success_updated), Toast.LENGTH_SHORT).show()
-                    viewModel.clearSuccessMessage()
+                LaunchedEffect(currentScreen, userSettings.newsEnabled, disabledNewsAgencies) {
+                    if (currentScreen == "news" && userSettings.newsEnabled) {
+                        viewModel.fetchNews(disabledNewsAgencies, userSettings.newsEnabled)
+                    }
                 }
-            }
 
-            LaunchedEffect(uiState.errorMessageResId) {
-                uiState.errorMessageResId?.let { errorId ->
-                    Toast.makeText(context, context.getString(errorId), Toast.LENGTH_LONG).show()
-                    viewModel.clearErrorMessage()
+                LaunchedEffect(uiState.showSuccessMessage) {
+                    if (uiState.showSuccessMessage) {
+                        Toast.makeText(context, context.getString(R.string.success_updated), Toast.LENGTH_SHORT).show()
+                        viewModel.clearSuccessMessage()
+                    }
                 }
-            }
 
-            val homeScrollState = rememberScrollState()
-            val coroutineScope = rememberCoroutineScope()
+                LaunchedEffect(uiState.errorMessageResId) {
+                    uiState.errorMessageResId?.let { errorId ->
+                        Toast.makeText(context, context.getString(errorId), Toast.LENGTH_LONG).show()
+                        viewModel.clearErrorMessage()
+                    }
+                }
 
-            MyApplicationTheme(
-                themeMode = appThemeMode,
-                seedColor = if (selectedAppColor == AppThemeColor.DEFAULT) null else selectedAppColor.seedColor,
-                animate = false
-            ) {
+                val homeScrollState = rememberLazyListState()
+                val coroutineScope = rememberCoroutineScope()
+
+                MyApplicationTheme(
+                    themeMode = appThemeMode,
+                    seedColor = if (selectedAppColor == AppThemeColor.DEFAULT) null else selectedAppColor.seedColor,
+                    animate = false
+                ) {
                 val motionScheme = MaterialTheme.motionScheme
                 if (isFirstLaunch) {
                     WelcomeScreen(
@@ -314,228 +372,409 @@ class MainActivity : AppCompatActivity() {
                         AnimatedContent(
                             targetState = currentScreen,
                             transitionSpec = {
-                                (fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                                        slideInHorizontally(animationSpec = motionScheme.defaultSpatialSpec(), initialOffsetX = { fullWidth -> fullWidth / 4 })) togetherWith
-                                        (fadeOut(animationSpec = motionScheme.defaultEffectsSpec()) +
-                                                slideOutHorizontally(animationSpec = motionScheme.defaultSpatialSpec(), targetOffsetX = { fullWidth -> -fullWidth / 4 }))
+                                val screenOrder = listOf("home", "calculator", "news", "portfolio", "settings")
+                                val initialIndex = screenOrder.indexOf(initialState)
+                                val targetIndex = screenOrder.indexOf(targetState)
+                                val emphasizedEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+
+                                if (targetIndex > initialIndex) {
+                                    (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.1f).toInt() } + fadeIn(animationSpec = tween(300))).togetherWith(
+                                        slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.1f).toInt() } + fadeOut(animationSpec = tween(150))
+                                    )
+                                } else {
+                                    (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.1f).toInt() } + fadeIn(animationSpec = tween(300))).togetherWith(
+                                        slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.1f).toInt() } + fadeOut(animationSpec = tween(150))
+                                    )
+                                }
                             },
                             label = "ScreenTransition"
                         ) { screen ->
                             if (screen == "home") {
+                                var draggedItemId by remember { mutableStateOf<String?>(null) }
+                                var initialIndex by remember { mutableStateOf<Int?>(null) }
+                                var totalDragY by remember { mutableStateOf(0f) }
+                                
+                                var itemHeightPx by remember { mutableStateOf(0f) }
+                                val density = LocalDensity.current
+
+                                // Auto-scroll state
+                                var pointerYInViewport by remember { mutableStateOf(0f) }
+                                var listViewportHeight by remember { mutableStateOf(0f) }
+                                var listTopOnScreen by remember { mutableStateOf(0f) }
+
+                                val selectedCat = uiState.selectedCategory
+                                val filteredItems = uiState.items.filter { item ->
+                                    when (selectedCat) {
+                                        "currency" -> item.category == CurrencyType.Currency
+                                        "gold_and_coin" -> item.category == CurrencyType.GoldAndCoin
+                                        "crypto" -> item.category == CurrencyType.Crypto
+                                        else -> true
+                                    }
+                                }
+
+                                val sortedItems = remember(bottomListSortOrder, marketCustomOrder, filteredItems) {
+                                    when (bottomListSortOrder) {
+                                        "profitable" -> filteredItems.sortedByDescending { it.changePercentage }
+                                        "loss-making" -> filteredItems.sortedBy { it.changePercentage }
+                                        "custom" -> {
+                                            val orderMap = marketCustomOrder.withIndex().associate { it.value to it.index }
+                                            filteredItems.sortedBy { orderMap[it.id] ?: Int.MAX_VALUE }
+                                        }
+                                        else -> filteredItems
+                                    }
+                                }
+
+                                // Critical fix: Ensure drag logic sees the LATEST state
+                                val currentSortedItemsState = rememberUpdatedState(sortedItems)
+                                val currentMarketOrderState = rememberUpdatedState(marketCustomOrder)
+
+                                // Auto-scroll logic when dragging near edges
+                                LaunchedEffect(draggedItemId, pointerYInViewport, listViewportHeight) {
+                                    if (draggedItemId != null && listViewportHeight > 0) {
+                                        val threshold = with(density) { 80.dp.toPx() }
+                                        val maxScrollSpeed = 15f
+                                        
+                                        while (true) {
+                                            var scrollAmount = 0f
+                                            if (pointerYInViewport < threshold && pointerYInViewport > 0) {
+                                                // Scroll UP
+                                                val strength = (threshold - pointerYInViewport) / threshold
+                                                scrollAmount = -maxScrollSpeed * strength
+                                            } else if (pointerYInViewport > listViewportHeight - threshold) {
+                                                // Scroll DOWN
+                                                val strength = (pointerYInViewport - (listViewportHeight - threshold)) / threshold
+                                                scrollAmount = maxScrollSpeed * strength
+                                            }
+                                            
+                                            if (scrollAmount != 0f) {
+                                                homeScrollState.dispatchRawDelta(scrollAmount)
+                                                totalDragY += scrollAmount
+                                            }
+                                            yield()
+                                            delay(10)
+                                        }
+                                    }
+                                }
+
                                 ExpressivePullToRefreshBox(
                                     isRefreshing = uiState.isLoading,
                                     onRefresh = { viewModel.refreshData() },
                                     modifier = Modifier.fillMaxSize().padding(innerPadding)
                                 ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(horizontal = adaptiveDp(16f))
-                                            .verticalScroll(homeScrollState)
+                                    LazyColumn(
+                                        state = homeScrollState,
+                                        modifier = Modifier.fillMaxSize().onGloballyPositioned { 
+                                            listViewportHeight = it.size.height.toFloat()
+                                            listTopOnScreen = it.localToWindow(Offset.Zero).y
+                                        }
                                     ) {
-                                        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
-                                        TopAppBar(
-                                            uiState = uiState,
-                                            isEditingHome = isEditingHome,
-                                            calendarType = calendarType,
-                                            digitType = digitType,
-                                            onRefresh = { viewModel.refreshData() },
-                                            onEditHome = { isEditingHome = !isEditingHome }
-                                        )
-                                        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
-                                        BentoGrid(
-                                            items = uiState.items,
-                                            homeSymbols = homeItemSymbols,
-                                            isEditing = isEditingHome,
-                                            colorSchemeMode = colorSchemeMode,
-                                            digitType = digitType,
-                                            onSymbolsChanged = { newSymbols ->
-                                                homeItemSymbols = newSymbols
-                                                sharedPrefs.edit().putString("home_items", newSymbols.joinToString(",")).apply()
-                                            },
-                                            onClickItem = { item ->
-                                                selectedItemForDetail = item
-                                            }
-                                        )
-                                        Spacer(modifier = Modifier.height(adaptiveDp(20f)))
-                                        CategoryChips(
-                                            selectedCategory = uiState.selectedCategory,
-                                            onCategorySelected = { cat ->
-                                                viewModel.setCategory(cat)
-                                                coroutineScope.launch {
-                                                    homeScrollState.animateScrollTo(500)
-                                                }
-                                            }
-                                        )
-                                        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
-
-                                            AnimatedContent(
-                                                targetState = uiState.selectedCategory,
-                                                transitionSpec = {
-                                                    (fadeIn(animationSpec = motionScheme.defaultEffectsSpec()) +
-                                                            slideInVertically(animationSpec = motionScheme.defaultSpatialSpec(), initialOffsetY = { 30 }))
-                                                        .togetherWith(
-                                                            fadeOut(animationSpec = motionScheme.fastEffectsSpec())
-                                                        )
+                                        item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
+                                        item {
+                                            TopAppBar(
+                                                uiState = uiState,
+                                                isEditingHome = isEditingHome,
+                                                calendarType = calendarType,
+                                                digitType = digitType,
+                                                onRefresh = { viewModel.refreshData() },
+                                                onEditHome = { isEditingHome = !isEditingHome },
+                                                modifier = Modifier.padding(horizontal = adaptiveDp(16f))
+                                            )
+                                        }
+                                        item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
+                                        item {
+                                            BentoGrid(
+                                                items = uiState.items,
+                                                homeSymbols = homeItemSymbols,
+                                                isEditing = isEditingHome,
+                                                colorSchemeMode = colorSchemeMode,
+                                                digitType = digitType,
+                                                onSymbolsChanged = { newSymbols ->
+                                                    homeItemSymbols = newSymbols
+                                                    sharedPrefs.edit().putString("home_items", newSymbols.joinToString(",")).apply()
                                                 },
-                                                label = "CategoryTransition"
-                                            ) { selectedCat ->
-                                            val categoryTitleRes = when(selectedCat) {
-                                                "currency" -> R.string.category_currency
-                                                "gold_and_coin" -> R.string.category_gold_and_coin
-                                                "crypto" -> R.string.category_crypto
-                                                else -> R.string.all_markets
-                                            }
-                                            val categoryFilter = when (selectedCat) {
-                                                "currency" -> com.mmdparsadev.cheghad.data.models.CurrencyType.Currency
-                                                "gold_and_coin" -> com.mmdparsadev.cheghad.data.models.CurrencyType.GoldAndCoin
-                                                "crypto" -> com.mmdparsadev.cheghad.data.models.CurrencyType.Crypto
-                                                else -> null
-                                            }
-                                            val filteredItems = if (categoryFilter == null) uiState.items else uiState.items.filter { it.category == categoryFilter }
-
-                                            Column {
-                                                Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text = androidx.compose.ui.res.stringResource(categoryTitleRes),
-                                                        fontSize = 18.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onBackground,
-                                                        fontFamily = getFontFamilyForText(androidx.compose.ui.res.stringResource(categoryTitleRes))
-                                                    )
-
-                                                    var isSortMenuExpanded by remember { mutableStateOf(false) }
-                                                    val currentSortStringRes = when (bottomListSortOrder) {
-                                                        "profitable" -> R.string.sort_profitable
-                                                        "loss-making" -> R.string.sort_loss_making
-                                                        else -> R.string.sort_default
+                                                onClickItem = { item ->
+                                                    selectedItemForDetail = item
+                                                },
+                                                modifier = Modifier.padding(horizontal = adaptiveDp(16f))
+                                            )
+                                        }
+                                        item { Spacer(modifier = Modifier.height(adaptiveDp(20f))) }
+                                        item {
+                                            CategoryChips(
+                                                selectedCategory = uiState.selectedCategory,
+                                                onCategorySelected = { cat ->
+                                                    viewModel.setCategory(cat)
+                                                    coroutineScope.launch {
+                                                        homeScrollState.animateScrollToItem(6)
                                                     }
-                                                    val currentSortText = androidx.compose.ui.res.stringResource(currentSortStringRes)
-                                                    val rotationAngle by animateFloatAsState(
-                                                        targetValue = if (isSortMenuExpanded) 180f else 0f,
-                                                        animationSpec = motionScheme.defaultSpatialSpec(),
-                                                        label = "SortArrowRotation"
-                                                    )
+                                                },
+                                                modifier = Modifier.padding(horizontal = adaptiveDp(16f))
+                                            )
+                                        }
+                                        item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
 
-                                                    Box {
-                                                        Surface(
-                                                            onClick = { isSortMenuExpanded = true },
-                                                            shape = CircleShape,
-                                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                            contentColor = MaterialTheme.colorScheme.primary,
-                                                            tonalElevation = 2.dp,
-                                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                                                        ) {
-                                                            Row(
-                                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                                                verticalAlignment = Alignment.CenterVertically,
-                                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector = Icons.AutoMirrored.Filled.Sort,
-                                                                    contentDescription = "Sort",
-                                                                    tint = MaterialTheme.colorScheme.primary,
-                                                                    modifier = Modifier.size(16.dp)
-                                                                )
-                                                                Text(
-                                                                    text = currentSortText,
-                                                                    fontSize = 12.sp,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    color = MaterialTheme.colorScheme.onSurface,
-                                                                    fontFamily = getFontFamilyForText(currentSortText)
-                                                                )
-                                                                Icon(
-                                                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                                                    contentDescription = null,
-                                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                    modifier = Modifier
-                                                                        .size(18.dp)
-                                                                        .graphicsLayer { rotationZ = rotationAngle }
-                                                                )
-                                                            }
-                                                        }
+                                        val categoryTitleRes = when(selectedCat) {
+                                            "currency" -> R.string.category_currency
+                                            "gold_and_coin" -> R.string.category_gold_and_coin
+                                            "crypto" -> R.string.category_crypto
+                                            else -> R.string.all_markets
+                                        }
 
-                                                        MaterialTheme(
-                                                            shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(20.dp))
+                                        item(key = "cat_header_$selectedCat") {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().padding(horizontal = adaptiveDp(16f)),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                val title = stringResource(categoryTitleRes)
+                                                Text(
+                                                    text = title,
+                                                    fontSize = 18.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onBackground,
+                                                    fontFamily = getFontFamilyForText(title)
+                                                )
+
+                                                var isSortMenuExpanded by remember { mutableStateOf(false) }
+                                                val currentSortStringRes = when (bottomListSortOrder) {
+                                                    "profitable" -> R.string.sort_profitable
+                                                    "loss-making" -> R.string.sort_loss_making
+                                                    "custom" -> R.string.sort_custom
+                                                    else -> R.string.sort_default
+                                                }
+                                                val currentSortText = stringResource(currentSortStringRes)
+                                                val rotationAngle by animateFloatAsState(
+                                                    targetValue = if (isSortMenuExpanded) 180f else 0f,
+                                                    animationSpec = motionScheme.defaultSpatialSpec(),
+                                                    label = "SortArrowRotation"
+                                                )
+
+                                                Box {
+                                                    val isSortActive = bottomListSortOrder != "default"
+                                                    Surface(
+                                                        onClick = { isSortMenuExpanded = true },
+                                                        shape = CircleShape,
+                                                        color = if (isSortActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                        contentColor = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                                                        tonalElevation = 2.dp,
+                                                        border = BorderStroke(1.dp, if (isSortActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                         ) {
-                                                            DropdownMenu(
-                                                                expanded = isSortMenuExpanded,
-                                                                onDismissRequest = { isSortMenuExpanded = false },
-                                                                modifier = Modifier
-                                                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                                                    .width(180.dp)
-                                                            ) {
-                                                                listOf(
-                                                                    "default" to R.string.sort_default,
-                                                                    "profitable" to R.string.sort_profitable,
-                                                                    "loss-making" to R.string.sort_loss_making
-                                                                ).forEach { (mode, stringRes) ->
-                                                                    val isSelected = bottomListSortOrder == mode
-                                                                    val itemText = androidx.compose.ui.res.stringResource(stringRes)
-                                                                    DropdownMenuItem(
-                                                                        text = {
-                                                                            Text(
-                                                                                text = itemText,
-                                                                                fontSize = 13.sp,
-                                                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                                                                fontFamily = getFontFamilyForText(itemText)
-                                                                            )
-                                                                        },
-                                                                        onClick = {
-                                                                            bottomListSortOrder = mode
-                                                                            isSortMenuExpanded = false
-                                                                        },
-                                                                        leadingIcon = {
-                                                                            if (isSelected) {
-                                                                                Icon(
-                                                                                    imageVector = Icons.Default.Check,
-                                                                                    contentDescription = "Selected",
-                                                                                    tint = MaterialTheme.colorScheme.primary,
-                                                                                    modifier = Modifier.size(18.dp)
-                                                                                )
-                                                                            } else {
-                                                                                Spacer(modifier = Modifier.size(18.dp))
-                                                                            }
-                                                                        },
-                                                                        modifier = Modifier
-                                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                                            .clip(RoundedCornerShape(12.dp))
-                                                                            .then(
-                                                                                if (isSelected) {
-                                                                                    Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f))
-                                                                                } else Modifier
-                                                                            )
+                                                            Icon(
+                                                                imageVector = Icons.AutoMirrored.Filled.Sort,
+                                                                contentDescription = "Sort",
+                                                                tint = if (isSortActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                            Text(
+                                                                text = currentSortText,
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                                                fontFamily = getFontFamilyForText(currentSortText)
+                                                            )
+                                                            if (bottomListSortOrder == "custom") {
+                                                                Surface(
+                                                                    onClick = { isEditingCustomSort = !isEditingCustomSort },
+                                                                    shape = CircleShape,
+                                                                    color = if (isEditingCustomSort) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
+                                                                    modifier = Modifier.size(24.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = Icons.Default.Edit,
+                                                                        contentDescription = "Edit Custom Sort",
+                                                                        tint = if (isEditingCustomSort) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                        modifier = Modifier.padding(5.dp).size(14.dp)
                                                                     )
                                                                 }
                                                             }
+                                                            Icon(
+                                                                imageVector = Icons.Default.KeyboardArrowDown,
+                                                                contentDescription = null,
+                                                                tint = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                modifier = Modifier
+                                                                    .size(18.dp)
+                                                                    .graphicsLayer { rotationZ = rotationAngle }
+                                                            )
+                                                        }
+                                                    }
+
+                                                    MaterialTheme(
+                                                        shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(20.dp))
+                                                    ) {
+                                                        DropdownMenu(
+                                                            expanded = isSortMenuExpanded,
+                                                            onDismissRequest = { isSortMenuExpanded = false },
+                                                            modifier = Modifier
+                                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                                                .width(180.dp)
+                                                        ) {
+                                                            listOf(
+                                                                "default" to R.string.sort_default,
+                                                                "profitable" to R.string.sort_profitable,
+                                                                "loss-making" to R.string.sort_loss_making,
+                                                                "custom" to R.string.sort_custom
+                                                            ).forEach { (mode, stringRes) ->
+                                                                val isSelected = bottomListSortOrder == mode
+                                                                val itemText = stringResource(stringRes)
+                                                                DropdownMenuItem(
+                                                                    text = {
+                                                                        Text(
+                                                                            text = itemText,
+                                                                            fontSize = 13.sp,
+                                                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                                            fontFamily = getFontFamilyForText(itemText)
+                                                                        )
+                                                                    },
+                                                                    onClick = {
+                                                                        bottomListSortOrder = mode
+                                                                        isSortMenuExpanded = false
+                                                                    },
+                                                                    leadingIcon = {
+                                                                        if (isSelected) {
+                                                                            Icon(
+                                                                                imageVector = Icons.Default.Check,
+                                                                                contentDescription = "Selected",
+                                                                                tint = MaterialTheme.colorScheme.primary,
+                                                                                modifier = Modifier.size(18.dp)
+                                                                            )
+                                                                        } else {
+                                                                            Spacer(modifier = Modifier.size(18.dp))
+                                                                        }
+                                                                    },
+                                                                    modifier = Modifier
+                                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                        .clip(RoundedCornerShape(12.dp))
+                                                                        .then(
+                                                                            if (isSelected) {
+                                                                                Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f))
+                                                                            } else Modifier
+                                                                        )
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
-                                                Spacer(modifier = Modifier.height(12.dp))
-
-                                                val sortedItems = when (bottomListSortOrder) {
-                                                    "profitable" -> filteredItems.sortedByDescending { it.changePercentage }
-                                                    "loss-making" -> filteredItems.sortedBy { it.changePercentage }
-                                                    else -> filteredItems
-                                                }
-
-                                                sortedItems.forEach { item ->
-                                                    AssetListItem(
-                                                        item = item,
-                                                        colorSchemeMode = colorSchemeMode,
-                                                        digitType = digitType,
-                                                        onClick = { selectedItemForDetail = item },
-                                                        onLongClick = { viewModel.hideCurrencyForItem(item.id) }
-                                                    )
-                                                    Spacer(modifier = Modifier.height(8.dp))
-                                                }
                                             }
                                         }
+
+                                        item { Spacer(modifier = Modifier.height(12.dp)) }
+
+                                        itemsIndexed(sortedItems, key = { _, item -> item.id }) { index, item ->
+                                            val isDragging = draggedItemId == item.id
+                                            var itemTopInWindow by remember { mutableStateOf(0f) }
+                                            
+                                            // Compensation offset to keep item under finger after swap
+                                            val dragOffset = if (isDragging && itemHeightPx > 0 && initialIndex != null) {
+                                                totalDragY - (index - initialIndex!!) * itemHeightPx
+                                            } else 0f
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(horizontal = adaptiveDp(16f))
+                                                    .zIndex(if (isDragging) 100f else 1f)
+                                                    .graphicsLayer {
+                                                        if (isDragging) {
+                                                            translationY = dragOffset
+                                                            scaleX = 1.06f
+                                                            scaleY = 1.06f
+                                                            shadowElevation = 16.dp.toPx()
+                                                        } else {
+                                                            translationY = 0f
+                                                            scaleX = 1f
+                                                            scaleY = 1f
+                                                            shadowElevation = 0f
+                                                        }
+                                                    }
+                                                    .animateItem()
+                                            ) {
+                                                AssetListItem(
+                                                    item = item,
+                                                    colorSchemeMode = colorSchemeMode,
+                                                    digitType = digitType,
+                                                    onClick = { selectedItemForDetail = item },
+                                                    onLongClick = { viewModel.hideCurrencyForItem(item.id) },
+                                                    isReordering = isEditingCustomSort,
+                                                    isDragging = isDragging,
+                                                    modifier = Modifier.pointerInput(item.id, isEditingCustomSort, bottomListSortOrder) {
+                                                        if (isEditingCustomSort && bottomListSortOrder == "custom") {
+                                                            detectDragGesturesAfterLongPress(
+                                                                onDragStart = { offset ->
+                                                                    HapticUtils.vibrate(context, HapticType.MEDIUM)
+                                                                    draggedItemId = item.id
+                                                                    initialIndex = currentSortedItemsState.value.indexOfFirst { it.id == item.id }
+                                                                    totalDragY = 0f
+                                                                    
+                                                                    pointerYInViewport = offset.y + (itemTopInWindow - listTopOnScreen)
+                                                                },
+                                                                onDrag = { change, dragAmount ->
+                                                                    change.consume()
+                                                                    totalDragY += dragAmount.y
+                                                                    
+                                                                    // Update pointer Y in viewport
+                                                                    pointerYInViewport += dragAmount.y
+                                                                    
+                                                                    if (itemHeightPx > 0) {
+                                                                        val latestList = currentSortedItemsState.value
+                                                                        val nowIdx = latestList.indexOfFirst { it.id == item.id }
+                                                                        val startIdx = initialIndex ?: nowIdx
+                                                                        
+                                                                        val targetIdx = (startIdx + (totalDragY / itemHeightPx).roundToInt()).coerceIn(0, latestList.lastIndex)
+                                                                        
+                                                                        if (targetIdx != nowIdx) {
+                                                                            HapticUtils.vibrate(context, HapticType.LIGHT)
+                                                                            val newList = currentMarketOrderState.value.toMutableList()
+                                                                            filteredItems.forEach { if (it.id !in newList) newList.add(it.id) }
+                                                                            
+                                                                            val id1 = item.id
+                                                                            val id2 = latestList[targetIdx].id
+                                                                            val idx1 = newList.indexOf(id1)
+                                                                            val idx2 = newList.indexOf(id2)
+                                                                            
+                                                                            if (idx1 != -1 && idx2 != -1) {
+                                                                                val tmp = newList[idx1]
+                                                                                newList[idx1] = newList[idx2]
+                                                                                newList[idx2] = tmp
+                                                                                marketCustomOrder = newList
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                },
+                                                                onDragEnd = {
+                                                                    sharedPrefs.edit().putString("market_custom_order", marketCustomOrder.joinToString(",")).apply()
+                                                                    draggedItemId = null
+                                                                    initialIndex = null
+                                                                    totalDragY = 0f
+                                                                    pointerYInViewport = 0f
+                                                                    HapticUtils.vibrate(context, HapticType.SUCCESS)
+                                                                },
+                                                                onDragCancel = {
+                                                                    draggedItemId = null
+                                                                    initialIndex = null
+                                                                    totalDragY = 0f
+                                                                    pointerYInViewport = 0f
+                                                                }
+                                                            )
+                                                        }
+                                                    }
+                                                    .onGloballyPositioned { coords ->
+                                                        itemTopInWindow = coords.localToWindow(Offset.Zero).y
+                                                        if (itemHeightPx == 0f || !isDragging) {
+                                                            itemHeightPx = coords.size.height.toFloat() + with(density) { 8.dp.toPx() }
+                                                        }
+                                                    }
+                                                )
+                                            }
+                                            if (index < sortedItems.size - 1) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                            }
+                                        }
+                                        item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
                                     }
                                 }
                             } else if (screen == "news") {
@@ -544,9 +783,15 @@ class MainActivity : AppCompatActivity() {
                                     digitType = digitType,
                                     newsArticles = uiState.newsArticles,
                                     isRefreshing = uiState.isNewsLoading,
-                                    onRefresh = { viewModel.fetchNews() },
+                                    onRefresh = { viewModel.fetchNews(disabledNewsAgencies, userSettings.newsEnabled) },
                                     disabledCategories = disabledNewsCategories,
-                                    disabledAgencies = disabledNewsAgencies
+                                    disabledAgencies = disabledNewsAgencies,
+                                    newsEnabled = userSettings.newsEnabled,
+                                    onOpenAgenciesSettings = {
+                                        settingsViewModel.setNewsEnabled(true)
+                                        showAgenciesSheet = true
+                                        currentScreen = "settings"
+                                    }
                                 )
                             } else if (screen == "calculator") {
                                 CurrencyCalculatorScreen(
@@ -587,12 +832,16 @@ class MainActivity : AppCompatActivity() {
                                         disabledNewsAgencies = newSet
                                         sharedPrefs.edit().putStringSet("disabled_news_agencies", newSet).apply()
                                     },
+                                    newsEnabled = userSettings.newsEnabled,
+                                    onNewsEnabledChanged = { settingsViewModel.setNewsEnabled(it) },
+                                    showAgenciesSheet = showAgenciesSheet,
+                                    onShowAgenciesSheetChanged = { showAgenciesSheet = it },
                                     isCheckingUpdates = isCheckingUpdatesManually,
                                     onCheckForUpdates = {
                                         isCheckingUpdatesManually = true
                                         coroutineScope.launch {
                                             val currentVersion = BuildConfig.VERSION_NAME
-                                            val result = UpdateManager.checkForUpdate(currentVersion)
+                                            val result = UpdateManager.checkForUpdate(currentVersion, userSettings.downloadBetaVersions)
                                             isCheckingUpdatesManually = false
                                             result.fold(
                                                 onSuccess = { release ->
@@ -609,6 +858,8 @@ class MainActivity : AppCompatActivity() {
                                             )
                                         }
                                     },
+                                    downloadBetaVersions = userSettings.downloadBetaVersions,
+                                    onDownloadBetaVersionsChanged = { settingsViewModel.setDownloadBetaVersions(it) },
                                     lockscreenWidgetCurrencyId = userSettings.lockscreenWidgetCurrencyId,
                                     onLockscreenWidgetCurrencySelected = { settingsViewModel.setLockscreenWidgetCurrencyId(it) },
                                     lockscreenWidgetTheme = userSettings.lockscreenWidgetTheme,
@@ -632,59 +883,58 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
+                }
 
-                    // Detail view Dialog
-                    selectedItemForDetail?.let { item ->
-                        AssetDetailDialog(
-                            item = item,
-                            timeRangeOrder = timeRangeOrder,
-                            historyPoints = uiState.historyPoints[item.symbol] ?: emptyList(),
-                            isHistoryLoading = uiState.isHistoryLoading,
-                            calendarType = calendarType,
-                            colorSchemeMode = colorSchemeMode,
-                            digitType = digitType,
-                            onFetchHistory = { range -> viewModel.fetchHistory(item.symbol, range.id, item.currentPrice, item.changePercentage) },
-                            onDismiss = { selectedItemForDetail = null },
-                            onSaveAlarm = { price, isAbove ->
-                                viewModel.addAlarm(
-                                    symbol = item.symbol,
-                                    title = item.title,
-                                    targetPrice = price,
-                                    isAbove = isAbove
-                                )
-                                selectedItemForDetail = null
-                                Toast.makeText(context, context.getString(R.string.alarm_created_success), Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                    }
+                // Detail view Dialog
+                selectedItemForDetail?.let { item ->
+                    AssetDetailDialog(
+                        item = item,
+                        timeRangeOrder = timeRangeOrder,
+                        historyPoints = uiState.historyPoints[item.symbol] ?: emptyList(),
+                        isHistoryLoading = uiState.isHistoryLoading,
+                        calendarType = calendarType,
+                        colorSchemeMode = colorSchemeMode,
+                        digitType = digitType,
+                        onFetchHistory = { range -> viewModel.fetchHistory(item.symbol, range.id, item.currentPrice, item.changePercentage) },
+                        onDismiss = { selectedItemForDetail = null },
+                        onSaveAlarm = { price, isAbove ->
+                            viewModel.addAlarm(
+                                symbol = item.symbol,
+                                title = item.title,
+                                targetPrice = price,
+                                isAbove = isAbove
+                            )
+                            selectedItemForDetail = null
+                            Toast.makeText(context, context.getString(R.string.alarm_created_success), Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
 
-                    // Edit alarm Dialog
-                    selectedAlarmForEdit?.let { alarm ->
-                        EditAlarmDialog(
-                            alarm = alarm,
-                            onDismiss = { selectedAlarmForEdit = null },
-                            onSaveAlarm = { updatedAlarm ->
-                                viewModel.updateAlarm(updatedAlarm)
-                                selectedAlarmForEdit = null
-                                Toast.makeText(context, context.getString(R.string.toast_settings_saved), Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                    }
+                // Edit alarm Dialog
+                selectedAlarmForEdit?.let { alarm ->
+                    EditAlarmDialog(
+                        alarm = alarm,
+                        onDismiss = { selectedAlarmForEdit = null },
+                        onSaveAlarm = { updatedAlarm ->
+                            viewModel.updateAlarm(updatedAlarm)
+                            selectedAlarmForEdit = null
+                            Toast.makeText(context, context.getString(R.string.toast_settings_saved), Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
 
-                    // Update Dialog
-                    availableUpdateRelease?.let { release ->
-                        UpdateDialog(
-                            release = release,
-                            digitType = digitType,
-                            onDismiss = { availableUpdateRelease = null }
-                        )
-                    }
-
-
+                // Update Dialog
+                availableUpdateRelease?.let { release ->
+                    UpdateDialog(
+                        release = release,
+                        digitType = digitType,
+                        onDismiss = { availableUpdateRelease = null }
+                    )
                 }
             }
         }
     }
+}
 
     private fun setupBackgroundSync() {
         try {
@@ -702,7 +952,6 @@ class MainActivity : AppCompatActivity() {
                 syncRequest
             )
         } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 }
@@ -907,32 +1156,12 @@ fun getLocalizedTitle(symbol: String, rawTitle: String): String {
 
 @Composable
 fun adaptiveSp(baseSp: Float): TextUnit {
-    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val screenWidthDp = configuration.screenWidthDp
-    val scale = when {
-        screenWidthDp >= 1200 -> 1.50f
-        screenWidthDp >= 840 -> 1.30f
-        screenWidthDp >= 600 -> 1.10f
-        screenWidthDp <= 320 -> 0.78f
-        screenWidthDp <= 360 -> 0.85f
-        else -> 0.95f
-    }
-    return (baseSp * scale).sp
+    return (baseSp * LocalAdaptiveSpScale.current).sp
 }
 
 @Composable
-fun adaptiveDp(baseDp: Float): androidx.compose.ui.unit.Dp {
-    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-    val screenWidthDp = configuration.screenWidthDp
-    val scale = when {
-        screenWidthDp >= 1200 -> 1.50f
-        screenWidthDp >= 840 -> 1.35f
-        screenWidthDp >= 600 -> 1.12f
-        screenWidthDp <= 320 -> 0.80f
-        screenWidthDp <= 360 -> 0.88f
-        else -> 1.0f
-    }
-    return (baseDp * scale).dp
+fun adaptiveDp(baseDp: Float): Dp {
+    return (baseDp * LocalAdaptiveDpScale.current).dp
 }
 
 @Composable
@@ -1047,6 +1276,7 @@ fun WaveformSyncButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val cornerRadius by androidx.compose.animation.core.animateDpAsState(
         targetValue = if (isLoading) 24.dp else 16.dp,
         animationSpec = androidx.compose.animation.core.spring(
@@ -1068,7 +1298,10 @@ fun WaveformSyncButton(
             .size(48.dp)
             .clip(RoundedCornerShape(cornerRadius))
             .background(bgColor)
-            .clickable(onClick = onClick),
+            .clickable(onClick = {
+                HapticUtils.vibrate(context, HapticType.MEDIUM)
+                onClick()
+            }),
         contentAlignment = Alignment.Center
     ) {
         androidx.compose.animation.AnimatedContent(
@@ -1109,7 +1342,8 @@ fun TopAppBar(
     calendarType: String = "jalali",
     digitType: String = "fa",
     onRefresh: () -> Unit,
-    onEditHome: () -> Unit
+    onEditHome: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val motionScheme = MaterialTheme.motionScheme
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -1140,7 +1374,7 @@ fun TopAppBar(
     }
 
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1215,8 +1449,13 @@ fun TopAppBar(
 }
 
 @Composable
-fun CategoryChips(selectedCategory: String, onCategorySelected: (String) -> Unit) {
+fun CategoryChips(
+    selectedCategory: String,
+    onCategorySelected: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val categories = listOf("all", "currency", "gold_and_coin", "crypto")
+    val context = LocalContext.current
     val categoryLabels = listOf(
         R.string.all_markets,
         R.string.category_currency,
@@ -1226,9 +1465,13 @@ fun CategoryChips(selectedCategory: String, onCategorySelected: (String) -> Unit
     val selectedIndex = categories.indexOf(selectedCategory).coerceAtLeast(0)
 
     ExpressiveConnectedButtonGroup(
+        modifier = modifier,
         itemsCount = categories.size,
         selectedIndex = selectedIndex,
-        onSelect = { onCategorySelected(categories[it]) },
+        onSelect = { 
+            HapticUtils.vibrate(context, HapticType.LIGHT)
+            onCategorySelected(categories[it]) 
+        },
         spacing = 4.dp,
         height = 42.dp
     ) { index, isSelected ->
@@ -1242,13 +1485,17 @@ fun CategoryChips(selectedCategory: String, onCategorySelected: (String) -> Unit
 
 @Composable
 fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
+    val context = LocalContext.current
     val backgroundColor by animateColorAsState(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer, tween(300), label = "bg_color")
     val textColor by animateColorAsState(if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer, tween(300), label = "text_color")
     Row(
         modifier = Modifier
             .clip(CircleShape)
             .background(backgroundColor)
-            .clickable { onClick() }
+            .clickable { 
+                HapticUtils.vibrate(context, HapticType.LIGHT)
+                onClick() 
+            }
             .padding(horizontal = 20.dp, vertical = 8.dp)
             .animateContentSize(),
         verticalAlignment = Alignment.CenterVertically
@@ -1283,6 +1530,7 @@ fun RenderCard(
     downColor: Color,
     coloredCardsMode: Boolean
 ) {
+    val context = LocalContext.current
     val motionScheme = MaterialTheme.motionScheme
     if (style == "hero" && isMerged) {
         val usdChange = item?.changePercentage ?: 0.0
@@ -1372,7 +1620,14 @@ fun RenderCard(
                 .clip(RoundedCornerShape(adaptiveDp(32f)))
                 .background(heroBgColor)
                 .border(adaptiveDp(1f), heroBorderColor, RoundedCornerShape(adaptiveDp(32f)))
-                .clickable { if (!isEditing) { item?.let { onClickItem(it) } } }
+                .clickable { 
+                if (!isEditing) { 
+                    item?.let { 
+                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                        onClickItem(it) 
+                    } 
+                } 
+            }
                 .padding(adaptiveDp(24f))
         ) {
             Column {
@@ -1508,7 +1763,14 @@ fun RenderCard(
         )
 
         SmallCard(
-            modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
+            modifier = Modifier.fillMaxWidth().clickable { 
+        if (!isEditing) { 
+            item?.let { 
+                HapticUtils.vibrate(context, HapticType.LIGHT)
+                onClickItem(it) 
+            } 
+        } 
+    },
             icon = iconStr,
             value = if (item != null) formatPrice(item.currentPrice, digitType, item.symbol) else "------",
             trend = if (item != null) formatPercent(item.changePercentage, digitType) else "------",
@@ -1584,7 +1846,14 @@ fun RenderCard(
         )
 
         SecondaryCard(
-            modifier = Modifier.fillMaxWidth().clickable { if (!isEditing) { item?.let { onClickItem(it) } } },
+            modifier = Modifier.fillMaxWidth().clickable { 
+        if (!isEditing) { 
+            item?.let { 
+                HapticUtils.vibrate(context, HapticType.LIGHT)
+                onClickItem(it) 
+            } 
+        } 
+    },
             title = getLocalizedTitle(item?.symbol ?: "GOLD", item?.title ?: "سکه امامی"),
             subtitle = if (item?.symbol == "GOLD") {
                 if (isEngCard) "Emami Coin / New Design" else "سکه امامی / طرح جدید"
@@ -1611,7 +1880,8 @@ fun BentoGrid(
     colorSchemeMode: String = "standard",
     digitType: String = "fa",
     onSymbolsChanged: (List<String>) -> Unit = {},
-    onClickItem: (com.mmdparsadev.cheghad.data.models.CurrencyItem) -> Unit = {}
+    onClickItem: (CurrencyItem) -> Unit = {},
+    modifier: Modifier = Modifier
 ) {
     val motionScheme = MaterialTheme.motionScheme
     val context = LocalContext.current
@@ -1714,18 +1984,37 @@ fun BentoGrid(
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
     var replaceSlotIndex by remember { mutableStateOf<Int?>(null) }
 
+    // Logic to track item positions for smooth swapping
+    val itemDisplacements = remember { mutableStateMapOf<String, Offset>() }
+
     var parentCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val slotCoordinates = remember { mutableStateListOf<LayoutCoordinates?>().apply { repeat(10) { add(null) } } }
 
     @Composable
     fun DraggableCardContainer(
         slotIndex: Int,
+        symbol: String?,
         shape: RoundedCornerShape,
         modifier: Modifier = Modifier,
         content: @Composable BoxScope.() -> Unit
     ) {
         val motionScheme = MaterialTheme.motionScheme
         val isDragging = draggedIndex == slotIndex
+        
+        // Calculate where the item should be visually
+        val targetDisplacement = if (isDragging) dragOffset else (itemDisplacements[symbol ?: ""] ?: Offset.Zero)
+        
+        val animatedOffset by animateOffsetAsState(
+            targetValue = targetDisplacement,
+            animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioLowBouncy),
+            label = "CardPosition",
+            finishedListener = {
+                if (!isDragging && symbol != null) {
+                    itemDisplacements.remove(symbol)
+                }
+            }
+        )
+
         Box(
             modifier = modifier
                 .onGloballyPositioned { coords ->
@@ -1733,14 +2022,21 @@ fun BentoGrid(
                         slotCoordinates[slotIndex] = coords
                     }
                 }
-                .zIndex(if (isDragging) 10f else 1f)
+                .zIndex(if (isDragging) 100f else 1f)
                 .graphicsLayer {
+                    translationX = animatedOffset.x
+                    translationY = animatedOffset.y
+                    
                     if (isDragging) {
-                        translationX = dragOffset.x
-                        translationY = dragOffset.y
-                        scaleX = 1.05f
-                        scaleY = 1.05f
-                        alpha = 0.9f
+                        scaleX = 1.08f
+                        scaleY = 1.08f
+                        shadowElevation = 16.dp.toPx()
+                        alpha = 0.95f
+                    } else {
+                        scaleX = 1f
+                        scaleY = 1f
+                        shadowElevation = 0f
+                        alpha = 1f
                     }
                 }
                 .then(
@@ -1748,17 +2044,17 @@ fun BentoGrid(
                         Modifier.border(
                             width = adaptiveDp(1.5f),
                             color = if (isDragging) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
                             shape = shape
                         )
                     } else Modifier
                 )
         ) {
             content()
-            androidx.compose.animation.AnimatedVisibility(
+            AnimatedVisibility(
                 visible = isEditing,
-                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.7f),
-                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.7f),
+                enter = fadeIn() + scaleIn(initialScale = 0.7f),
+                exit = fadeOut() + scaleOut(targetScale = 0.7f),
                 modifier = Modifier.align(Alignment.TopEnd)
             ) {
                 Box(
@@ -1779,8 +2075,8 @@ fun BentoGrid(
 
             androidx.compose.animation.AnimatedVisibility(
                 visible = isEditing,
-                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.scaleIn(initialScale = 0.7f),
-                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.scaleOut(targetScale = 0.7f),
+                enter = fadeIn() + scaleIn(initialScale = 0.7f),
+                exit = fadeOut() + scaleOut(targetScale = 0.7f),
                 modifier = Modifier.align(Alignment.TopStart)
             ) {
                 Box(
@@ -1805,7 +2101,7 @@ fun BentoGrid(
     }
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .onGloballyPositioned { coords ->
                 parentCoordinates = coords
@@ -1849,15 +2145,24 @@ fun BentoGrid(
                                                     val otherBounds = activeParentCoords.localBoundingBoxOf(otherCoords)
                                                     if (otherBounds.contains(draggedCenter)) {
                                                         val newList = finalHomeSymbols.toMutableList()
-                                                        val temp = newList[activeDraggedIndex]
-                                                        newList[activeDraggedIndex] = newList[j]
-                                                        newList[j] = temp
-                                                        onSymbolsChanged(newList)
-
+                                                        val idDragged = newList[activeDraggedIndex]
+                                                        val idOther = newList[j]
+                                                        
+                                                        newList[activeDraggedIndex] = idOther
+                                                        newList[j] = idDragged
+                                                        
                                                         val originalCenterI = otherBounds.center
                                                         val originalCenterJ = draggedBounds.center
-                                                        dragOffset -= (originalCenterI - originalCenterJ)
-
+                                                        val jumpOffset = originalCenterI - originalCenterJ
+                                                        
+                                                        // Important: Give the 'other' item a displacement so it can animate back
+                                                        itemDisplacements[idOther] = -jumpOffset
+                                                        
+                                                        // Adjust dragged item offset to keep it under finger
+                                                        dragOffset -= jumpOffset
+                                                        
+                                                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                                                        onSymbolsChanged(newList)
                                                         draggedIndex = j
                                                         break
                                                     }
@@ -1898,11 +2203,13 @@ fun BentoGrid(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = when (rowConfig.id) {
-                                1 -> "ردیف اول"
-                                2 -> "ردیف دوم"
-                                else -> "ردیف سوم"
-                            },
+                            text = stringResource(
+                                id = when (rowConfig.id) {
+                                    1 -> R.string.first_row_customize
+                                    2 -> R.string.second_row_customize
+                                    else -> R.string.third_row_customize
+                                }
+                            ),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold
@@ -1914,6 +2221,7 @@ fun BentoGrid(
                         ) {
                             TextButton(
                                 onClick = {
+                                    HapticUtils.vibrate(context, HapticType.LIGHT)
                                     onRowColorToggled(rowConfig.id, !rowConfig.isColored)
                                 },
                                 contentPadding = PaddingValues(horizontal = adaptiveDp(8f), vertical = adaptiveDp(4f)),
@@ -1927,15 +2235,26 @@ fun BentoGrid(
                                 )
                                 Spacer(modifier = Modifier.width(adaptiveDp(4f)))
                                 Text(
-                                    text = if (rowConfig.isColored) "رنگی" else "ساده",
+                                    text = stringResource(
+                                        id = if (rowConfig.isColored) {
+                                            R.string.colorful_customize
+                                        } else {
+                                            R.string.not_colorful_customize
+                                        }
+                                    ),
                                     fontSize = adaptiveSp(11f),
                                     fontWeight = FontWeight.Bold,
-                                    color = if (rowConfig.isColored) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (rowConfig.isColored) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
                                 )
                             }
 
                             TextButton(
                                 onClick = {
+                                    HapticUtils.vibrate(context, HapticType.LIGHT)
                                     onRowMergeToggled(rowConfig.id, !rowConfig.isMerged)
                                 },
                                 contentPadding = PaddingValues(horizontal = adaptiveDp(8f), vertical = adaptiveDp(4f)),
@@ -1948,7 +2267,13 @@ fun BentoGrid(
                                 )
                                 Spacer(modifier = Modifier.width(adaptiveDp(4f)))
                                 Text(
-                                    text = if (rowConfig.isMerged) "تفکیک" else "ادغام",
+                                    text = stringResource(
+                                        id = if (rowConfig.isMerged) {
+                                            R.string.integration_customize
+                                        } else {
+                                            R.string.separation_customize
+                                        }
+                                    ),
                                     fontSize = adaptiveSp(11f),
                                     fontWeight = FontWeight.Bold
                                 )
@@ -1984,6 +2309,7 @@ fun BentoGrid(
 
                         DraggableCardContainer(
                             slotIndex = slotIdx,
+                            symbol = symbol,
                             shape = RoundedCornerShape(adaptiveDp(28f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -2011,6 +2337,7 @@ fun BentoGrid(
 
                                 DraggableCardContainer(
                                     slotIndex = slotIdx,
+                                    symbol = symbol,
                                     shape = RoundedCornerShape(adaptiveDp(28f)),
                                     modifier = Modifier.weight(1f)
                                 ) {
@@ -2119,7 +2446,10 @@ fun BentoGrid(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { replaceSlotIndex = null }) {
+                TextButton(onClick = {
+                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                    replaceSlotIndex = null
+                }) {
                     Text(androidx.compose.ui.res.stringResource(R.string.cancel), color = MaterialTheme.colorScheme.error)
                 }
             }
@@ -2277,6 +2607,7 @@ fun BottomNavigationBar(currentScreen: String, onScreenSelected: (String) -> Uni
 
 @Composable
 fun NavBarItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isSelected: Boolean, onClick: () -> Unit) {
+    val context = LocalContext.current
     val alphaAnim by androidx.compose.animation.core.animateFloatAsState(targetValue = if (isSelected) 1f else 0.6f, label = "AlphaAnim")
     val bgColor by androidx.compose.animation.animateColorAsState(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, label = "BgColorAnim")
     val iconColor by androidx.compose.animation.animateColorAsState(if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface, label = "IconColorAnim")
@@ -2288,7 +2619,10 @@ fun NavBarItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVec
             .clickable(
                 interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                 indication = null, // Disable default ripple for cleaner pill animation
-                onClick = onClick
+                onClick = {
+                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                    onClick()
+                }
             )
             .alpha(alphaAnim)
     ) {
@@ -2311,30 +2645,46 @@ fun NavBarItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVec
 @Composable
 fun AssetListItem(
     item: com.mmdparsadev.cheghad.data.models.CurrencyItem,
+    modifier: Modifier = Modifier,
     colorSchemeMode: String = "standard",
     digitType: String = "fa",
     onClick: () -> Unit = {},
-    onLongClick: () -> Unit = {}
+    onLongClick: () -> Unit = {},
+    isReordering: Boolean = false,
+    isDragging: Boolean = false
 ) {
+    val context = LocalContext.current
     val motionScheme = MaterialTheme.motionScheme
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface)
             .border(adaptiveDp(1f), MaterialTheme.colorScheme.outlineVariant, CircleShape)
             .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
+                enabled = !isReordering,
+                onClick = {
+                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                    onClick()
+                },
+                onLongClick = {
+                    HapticUtils.vibrate(context, HapticType.MEDIUM)
+                    onLongClick()
+                }
             )
-            .padding(horizontal = adaptiveDp(24f), vertical = adaptiveDp(14f))
-            .animateContentSize(
-                animationSpec = motionScheme.defaultSpatialSpec()
-            ),
+            .padding(horizontal = adaptiveDp(24f), vertical = adaptiveDp(14f)),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            if (isReordering) {
+                Icon(
+                    imageVector = Icons.Default.Reorder,
+                    contentDescription = "Reorder",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = adaptiveDp(12f)).size(adaptiveDp(20f))
+                )
+            }
             Box(
                 modifier = Modifier
                     .size(adaptiveDp(40f))
@@ -2378,6 +2728,7 @@ fun AssetListItem(
 
 @Composable
 fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
+    val context = LocalContext.current
     var selectedLang by remember { mutableStateOf("fa") }
     var selectedTheme by remember { mutableStateOf("system") }
     val scrollState = rememberScrollState()
@@ -2506,7 +2857,10 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                             }
                             RadioButton(
                                 selected = selectedLang == "fa",
-                                onClick = { selectedLang = "fa" },
+                                onClick = {
+                                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                                    selectedLang = "fa"
+                                },
                                 colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
                             )
                         }
@@ -2553,7 +2907,10 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                             }
                             RadioButton(
                                 selected = selectedLang == "en",
-                                onClick = { selectedLang = "en" },
+                                onClick = {
+                                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                                    selectedLang = "en"
+                                },
                                 colors = RadioButtonDefaults.colors(selectedColor = MaterialTheme.colorScheme.primary)
                             )
                         }
@@ -2598,7 +2955,10 @@ fun WelcomeScreen(onComplete: (lang: String, theme: String) -> Unit) {
                     Spacer(modifier = Modifier.height(adaptiveDp(28f)))
 
                     Button(
-                        onClick = { onComplete(selectedLang, selectedTheme) },
+                        onClick = {
+                            HapticUtils.vibrate(context, HapticType.LIGHT)
+                            onComplete(selectedLang, selectedTheme)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(adaptiveDp(56f)),
@@ -2637,6 +2997,7 @@ fun EditHomeBottomSheet(
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
     var selectedSymbols by remember { mutableStateOf(currentSymbols) }
 
@@ -2873,7 +3234,10 @@ fun EditHomeBottomSheet(
             Spacer(modifier = Modifier.height(16.dp))
 
             FilledTonalButton(
-                onClick = { onSave(selectedSymbols) },
+                onClick = {
+                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                    onSave(selectedSymbols)
+                },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 enabled = selectedSymbols.size == 5,
                 shape = RoundedCornerShape(20.dp)
@@ -2954,14 +3318,19 @@ fun SettingsSwitchRow(
     isChecked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     description: String? = null,
-    badgeColor: Color? = null
+    badgeColor: Color? = null,
+    shape: Shape = RoundedCornerShape(adaptiveDp(24f))
 ) {
+    val context = LocalContext.current
     Surface(
-        onClick = { onCheckedChange(!isChecked) },
+        onClick = { 
+            HapticUtils.vibrate(context, HapticType.LIGHT)
+            onCheckedChange(!isChecked) 
+        },
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(adaptiveDp(24f))),
-        shape = RoundedCornerShape(adaptiveDp(24f)),
+            .clip(shape),
+        shape = shape,
         color = if (isChecked) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         border = BorderStroke(
             width = if (isChecked) adaptiveDp(2f) else adaptiveDp(1f),
@@ -3003,7 +3372,10 @@ fun SettingsSwitchRow(
 
             Switch(
                 checked = isChecked,
-                onCheckedChange = onCheckedChange,
+                onCheckedChange = {
+                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                    onCheckedChange(it)
+                },
                 thumbContent = if (isChecked) {
                     {
                         Icon(
@@ -3020,6 +3392,7 @@ fun SettingsSwitchRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     innerPadding: PaddingValues,
@@ -3040,14 +3413,111 @@ fun SettingsScreen(
     onDisabledNewsCategoriesChanged: (Set<String>) -> Unit = {},
     disabledNewsAgencies: Set<String> = emptySet(),
     onDisabledNewsAgenciesChanged: (Set<String>) -> Unit = {},
+    newsEnabled: Boolean = false,
+    onNewsEnabledChanged: (Boolean) -> Unit = {},
+    showAgenciesSheet: Boolean = false,
+    onShowAgenciesSheetChanged: (Boolean) -> Unit = {},
     isCheckingUpdates: Boolean = false,
     onCheckForUpdates: () -> Unit = {},
+    downloadBetaVersions: Boolean = false,
+    onDownloadBetaVersionsChanged: (Boolean) -> Unit = {},
     lockscreenWidgetCurrencyId: String = "USD",
     onLockscreenWidgetCurrencySelected: (String) -> Unit = {},
     lockscreenWidgetTheme: String = "glassy",
     onLockscreenWidgetThemeSelected: (String) -> Unit = {},
     allCurrencies: List<CurrencyItem> = emptyList()
 ) {
+    val context = LocalContext.current
+
+    if (showAgenciesSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { onShowAgenciesSheetChanged(false) },
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = adaptiveDp(8f)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = adaptiveDp(20f))
+                    .padding(bottom = adaptiveDp(32f))
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_news_agencies_title),
+                    fontSize = adaptiveSp(20f),
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(bottom = adaptiveDp(4f))
+                )
+                Text(
+                    text = stringResource(R.string.settings_news_agencies_subtitle),
+                    fontSize = adaptiveSp(12f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(bottom = adaptiveDp(20f))
+                )
+
+                val agencies = NewsRepository.AGENCIES
+                val isEnglish = digitType == "en"
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = adaptiveDp(16f)),
+                    horizontalArrangement = Arrangement.spacedBy(adaptiveDp(8f))
+                ) {
+                    FilledTonalButton(
+                        onClick = {
+                            HapticUtils.vibrate(context, HapticType.MEDIUM)
+                            onDisabledNewsAgenciesChanged(emptySet())
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(stringResource(R.string.settings_news_enable_all), fontSize = adaptiveSp(11f))
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            HapticUtils.vibrate(context, HapticType.MEDIUM)
+                            onDisabledNewsAgenciesChanged(agencies.map { it.id }.toSet())
+                        },
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(0.dp),
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Text(stringResource(R.string.settings_news_disable_all), fontSize = adaptiveSp(11f))
+                    }
+                }
+
+                agencies.forEachIndexed { index, agency ->
+                    val isChecked = !disabledNewsAgencies.contains(agency.id)
+                    val shape = when (index) {
+                        0 -> RoundedCornerShape(topStart = adaptiveDp(24f), topEnd = adaptiveDp(24f), bottomStart = adaptiveDp(4f), bottomEnd = adaptiveDp(4f))
+                        agencies.lastIndex -> RoundedCornerShape(topStart = adaptiveDp(4f), topEnd = adaptiveDp(4f), bottomStart = adaptiveDp(24f), bottomEnd = adaptiveDp(24f))
+                        else -> RoundedCornerShape(adaptiveDp(4f))
+                    }
+                    SettingsSwitchRow(
+                        title = if (isEnglish) agency.nameEn else agency.nameFa,
+                        isChecked = isChecked,
+                        badgeColor = agency.brandColor,
+                        shape = shape,
+                        onCheckedChange = { checked ->
+                            HapticUtils.vibrate(context, HapticType.LIGHT)
+                            val newSet = if (checked) disabledNewsAgencies - agency.id else disabledNewsAgencies + agency.id
+                            onDisabledNewsAgenciesChanged(newSet)
+                        }
+                    )
+                    if (index < agencies.lastIndex) {
+                        Spacer(modifier = Modifier.height(adaptiveDp(3f)))
+                    }
+                }
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -3487,6 +3957,17 @@ fun SettingsScreen(
             subtitle = androidx.compose.ui.res.stringResource(R.string.settings_news_categories_subtitle),
             icon = Icons.Default.Category
         ) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings_news_master_toggle),
+                isChecked = newsEnabled,
+                onCheckedChange = {
+                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                    onNewsEnabledChanged(it)
+                }
+            )
+
+            Spacer(modifier = Modifier.height(adaptiveDp(8f)))
+
             val categories = listOf(
                 com.mmdparsadev.cheghad.data.models.NewsCategory.Economic to R.string.news_category_economic,
                 com.mmdparsadev.cheghad.data.models.NewsCategory.CurrencyGold to R.string.news_category_currency,
@@ -3497,16 +3978,23 @@ fun SettingsScreen(
 
             categories.forEachIndexed { index, (cat, titleRes) ->
                 val isChecked = !disabledNewsCategories.contains(cat.name)
+                val shape = when (index) {
+                    0 -> RoundedCornerShape(topStart = adaptiveDp(24f), topEnd = adaptiveDp(24f), bottomStart = adaptiveDp(4f), bottomEnd = adaptiveDp(4f))
+                    categories.lastIndex -> RoundedCornerShape(topStart = adaptiveDp(4f), topEnd = adaptiveDp(4f), bottomStart = adaptiveDp(24f), bottomEnd = adaptiveDp(24f))
+                    else -> RoundedCornerShape(adaptiveDp(4f))
+                }
                 SettingsSwitchRow(
-                    title = androidx.compose.ui.res.stringResource(titleRes),
+                    title = stringResource(titleRes),
                     isChecked = isChecked,
+                    shape = shape,
                     onCheckedChange = { checked ->
+                        HapticUtils.vibrate(context, HapticType.LIGHT)
                         val newSet = if (checked) disabledNewsCategories - cat.name else disabledNewsCategories + cat.name
                         onDisabledNewsCategoriesChanged(newSet)
                     }
                 )
                 if (index < categories.lastIndex) {
-                    Spacer(modifier = Modifier.height(adaptiveDp(8f)))
+                    Spacer(modifier = Modifier.height(adaptiveDp(3f)))
                 }
             }
         }
@@ -3519,22 +4007,32 @@ fun SettingsScreen(
             subtitle = androidx.compose.ui.res.stringResource(R.string.settings_news_agencies_subtitle),
             icon = Icons.Default.Newspaper
         ) {
-            val agencies = com.mmdparsadev.cheghad.data.repository.NewsRepository.AGENCIES
-            val isEnglish = digitType == "en"
-
-            agencies.forEachIndexed { index, agency ->
-                val isChecked = !disabledNewsAgencies.contains(agency.id)
-                SettingsSwitchRow(
-                    title = if (isEnglish) agency.nameEn else agency.nameFa,
-                    isChecked = isChecked,
-                    badgeColor = agency.brandColor,
-                    onCheckedChange = { checked ->
-                        val newSet = if (checked) disabledNewsAgencies - agency.id else disabledNewsAgencies + agency.id
-                        onDisabledNewsAgenciesChanged(newSet)
-                    }
-                )
-                if (index < agencies.lastIndex) {
-                    Spacer(modifier = Modifier.height(adaptiveDp(8f)))
+            Surface(
+                onClick = { onShowAgenciesSheetChanged(true) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(adaptiveDp(24f))),
+                shape = RoundedCornerShape(adaptiveDp(24f)),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                border = BorderStroke(adaptiveDp(1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = adaptiveDp(16f), vertical = adaptiveDp(12f)),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_manage_agencies),
+                        fontSize = adaptiveSp(13f),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(adaptiveDp(14f))
+                    )
                 }
             }
         }
@@ -3547,52 +4045,63 @@ fun SettingsScreen(
             subtitle = stringResource(R.string.version_label, BuildConfig.VERSION_NAME),
             icon = Icons.Default.SystemUpdate
         ) {
-            Surface(
-                onClick = onCheckForUpdates,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
-            ) {
-                Row(
+            Column {
+                SettingsSwitchRow(
+                    title = stringResource(R.string.settings_update_beta_title),
+                    description = stringResource(R.string.settings_update_beta_subtitle),
+                    isChecked = downloadBetaVersions,
+                    onCheckedChange = onDownloadBetaVersionsChanged
+                )
+
+                Spacer(modifier = Modifier.height(adaptiveDp(16f)))
+
+                Surface(
+                    onClick = onCheckForUpdates,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .clip(RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isCheckingUpdates) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isCheckingUpdates) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = if (isCheckingUpdates) stringResource(R.string.settings_update_checking) else stringResource(R.string.settings_update_check_btn),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = if (isCheckingUpdates) androidx.compose.ui.res.stringResource(R.string.settings_update_checking) else stringResource(R.string.settings_update_check_btn),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
-
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(14.dp)
-                    )
                 }
             }
         }
@@ -3890,6 +4399,7 @@ fun AssetDetailDialog(
     onDismiss: () -> Unit,
     onSaveAlarm: (targetPrice: Double, isAbove: Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     val motionScheme = MaterialTheme.motionScheme
     var targetPriceStr by remember { mutableStateOf(formatTargetPrice(item.currentPrice)) }
     var isAbove by remember { mutableStateOf(true) }
@@ -4262,8 +4772,10 @@ fun AssetDetailDialog(
                         onClick = {
                             val price = parseTargetPrice(targetPriceStr)
                             if (price == null || price <= 0.0) {
+                                HapticUtils.vibrate(context, HapticType.ERROR)
                                 Toast.makeText(context, context.getString(R.string.alarm_invalid_price), Toast.LENGTH_SHORT).show()
                             } else {
+                                HapticUtils.vibrate(context, HapticType.SUCCESS)
                                 onSaveAlarm(price, isAbove)
                             }
                         },
@@ -4286,6 +4798,7 @@ fun EditAlarmDialog(
     onDismiss: () -> Unit,
     onSaveAlarm: (updatedAlarm: com.mmdparsadev.cheghad.data.models.AlarmEntity) -> Unit
 ) {
+    val context = LocalContext.current
     var targetPriceStr by remember { mutableStateOf(formatTargetPrice(alarm.targetPrice)) }
     var isAbove by remember { mutableStateOf(alarm.isAbove) }
 
@@ -4313,7 +4826,10 @@ fun EditAlarmDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onBackground
                     )
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = {
+                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                        onDismiss()
+                    }) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
                     }
                 }
@@ -4429,6 +4945,7 @@ fun AlarmsScreen(
     onDeleteAlarm: (com.mmdparsadev.cheghad.data.models.AlarmEntity) -> Unit,
     onEditAlarm: (com.mmdparsadev.cheghad.data.models.AlarmEntity) -> Unit
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -4518,6 +5035,7 @@ fun AlarmItemCard(
     onDelete: () -> Unit,
     onEdit: () -> Unit
 ) {
+    val context = LocalContext.current
     val formattedPrice = formatPrice(alarm.targetPrice, digitType, alarm.symbol)
 
     Card(
@@ -4612,7 +5130,10 @@ fun AlarmItemCard(
                 }
 
                 // Edit button
-                IconButton(onClick = onEdit) {
+                IconButton(onClick = {
+                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                    onEdit()
+                }) {
                     Icon(
                         imageVector = Icons.Default.Edit,
                         contentDescription = "Edit Alarm",
@@ -4622,7 +5143,10 @@ fun AlarmItemCard(
                 }
 
                 // Delete button
-                IconButton(onClick = onDelete) {
+                IconButton(onClick = {
+                    HapticUtils.vibrate(context, HapticType.LIGHT)
+                    onDelete()
+                }) {
                     Icon(
                         imageVector = Icons.Default.Delete,
                         contentDescription = "Delete Alarm",
@@ -4650,6 +5174,7 @@ fun CurrencyCalculatorScreen(
     digitType: String,
     innerPadding: PaddingValues
 ) {
+    val context = LocalContext.current
     var calcSelectedItemId by rememberSaveable { mutableStateOf(items.firstOrNull()?.id ?: "") }
     val selectedItem = items.find { it.id == calcSelectedItemId } ?: items.firstOrNull()
 
@@ -4681,7 +5206,9 @@ fun CurrencyCalculatorScreen(
     }
 
     val scope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState()
+    val sheetState = rememberBottomSheetState(
+        initialValue = SheetValue.Hidden
+    )
     var showHistorySheet by remember { mutableStateOf(false) }
 
     Column(
@@ -4794,6 +5321,7 @@ fun CurrencyCalculatorScreen(
                         )
                         if (historyList.isNotEmpty()) {
                             TextButton(onClick = {
+                                HapticUtils.vibrate(context, HapticType.LIGHT)
                                 scope.launch { sheetState.hide() }.invokeOnCompletion {
                                     if (!sheetState.isVisible) {
                                         showHistorySheet = false
@@ -4897,10 +5425,15 @@ fun CurrencyCalculatorScreen(
         AnimatedContent(
             targetState = calculationMode,
             transitionSpec = {
+                val emphasizedEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
                 if (targetState > initialState) {
-                    (slideInHorizontally { width -> width } + fadeIn()).togetherWith(slideOutHorizontally { width -> -width } + fadeOut())
+                    (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.1f).toInt() } + fadeIn(animationSpec = tween(300))).togetherWith(
+                        slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.1f).toInt() } + fadeOut(animationSpec = tween(150))
+                    )
                 } else {
-                    (slideInHorizontally { width -> -width } + fadeIn()).togetherWith(slideOutHorizontally { width -> width } + fadeOut())
+                    (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.1f).toInt() } + fadeIn(animationSpec = tween(300))).togetherWith(
+                        slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.1f).toInt() } + fadeOut(animationSpec = tween(150))
+                    )
                 }.using(
                     SizeTransform(clip = false)
                 )
@@ -5026,6 +5559,7 @@ fun CurrencyCalculatorScreen(
                                 FilledTonalIconButton(
                                     onClick = {
                                         if (quantityInput.isNotEmpty()) {
+                                            HapticUtils.vibrate(context, HapticType.MEDIUM)
                                             addToHistory(
                                                 selectedItem?.symbol ?: "",
                                                 quantityInput,
@@ -5072,6 +5606,7 @@ fun CurrencyCalculatorScreen(
                             trailingIcon = {
                                 if (tomanInput.isNotEmpty()) {
                                     IconButton(onClick = {
+                                        HapticUtils.vibrate(context, HapticType.MEDIUM)
                                         addToHistory("", tomanInput, tomanInput, 1)
                                     }) {
                                         Icon(Icons.Default.Add, contentDescription = "Save")
@@ -5154,7 +5689,10 @@ fun CurrencyCalculatorScreen(
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                                TextButton(onClick = { historyJson = "[]" }) {
+                                TextButton(onClick = { 
+                                    HapticUtils.vibrate(context, HapticType.MEDIUM)
+                                    historyJson = "[]" 
+                                }) {
                                     Text(stringResource(R.string.clear_history), fontSize = 12.sp)
                                 }
                             }

@@ -20,6 +20,8 @@ class SettingsRepository(val context: Context) {
         val COLOR_SCHEME_MODE = stringPreferencesKey("color_scheme_mode")
         val LOCKSCREEN_WIDGET_CURRENCY_ID = stringPreferencesKey("lockscreen_widget_currency_id")
         val LOCKSCREEN_WIDGET_THEME = stringPreferencesKey("lockscreen_widget_theme")
+        val DOWNLOAD_BETA_VERSIONS = booleanPreferencesKey("download_beta_versions")
+        val NEWS_ENABLED = booleanPreferencesKey("news_enabled")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data
@@ -38,6 +40,8 @@ class SettingsRepository(val context: Context) {
             val colorSchemeMode = preferences[PreferencesKeys.COLOR_SCHEME_MODE] ?: "standard"
             val lockscreenWidgetCurrencyId = preferences[PreferencesKeys.LOCKSCREEN_WIDGET_CURRENCY_ID] ?: "USD"
             val lockscreenWidgetTheme = preferences[PreferencesKeys.LOCKSCREEN_WIDGET_THEME] ?: "glassy"
+            val downloadBetaVersions = preferences[PreferencesKeys.DOWNLOAD_BETA_VERSIONS] ?: false
+            val newsEnabled = preferences[PreferencesKeys.NEWS_ENABLED] ?: false
 
             UserSettings(
                 themeMode = themeMode,
@@ -47,7 +51,9 @@ class SettingsRepository(val context: Context) {
                 colorSchemeMode = colorSchemeMode,
                 lockscreenWidgetCurrencyId = lockscreenWidgetCurrencyId,
                 lockscreenWidgetTheme = lockscreenWidgetTheme,
-                isLoaded = true
+                downloadBetaVersions = downloadBetaVersions,
+                newsEnabled = newsEnabled,
+                isLoaded = true,
             )
         }
 
@@ -92,6 +98,18 @@ class SettingsRepository(val context: Context) {
             preferences[PreferencesKeys.LOCKSCREEN_WIDGET_THEME] = theme
         }
     }
+
+    suspend fun updateDownloadBetaVersions(download: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DOWNLOAD_BETA_VERSIONS] = download
+        }
+    }
+
+    suspend fun updateNewsEnabled(enabled: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.NEWS_ENABLED] = enabled
+        }
+    }
 }
 
 data class UserSettings(
@@ -102,5 +120,7 @@ data class UserSettings(
     val colorSchemeMode: String,
     val lockscreenWidgetCurrencyId: String = "USD",
     val lockscreenWidgetTheme: String = "glassy",
+    val downloadBetaVersions: Boolean = false,
+    val newsEnabled: Boolean = false,
     val isLoaded: Boolean = false
 )

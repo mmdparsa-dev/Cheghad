@@ -17,6 +17,10 @@ import androidx.work.WorkerParameters
 import com.mmdparsadev.cheghad.BuildConfig
 import com.mmdparsadev.cheghad.MainActivity
 import com.mmdparsadev.cheghad.R
+import com.mmdparsadev.cheghad.data.repository.dataStore
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 
 class UpdateWorker(
@@ -26,8 +30,12 @@ class UpdateWorker(
 
     override suspend fun doWork(): Result {
         return try {
+            val downloadBeta = appContext.dataStore.data.map { 
+                it[booleanPreferencesKey("download_beta_versions")] ?: false 
+            }.first()
+            
             val currentVersion = BuildConfig.VERSION_NAME
-            val result = UpdateManager.checkForUpdate(currentVersion)
+            val result = UpdateManager.checkForUpdate(currentVersion, downloadBeta)
             val release = result.getOrNull()
 
             if (release != null) {
@@ -42,7 +50,6 @@ class UpdateWorker(
             }
             Result.success()
         } catch (e: Exception) {
-            e.printStackTrace()
             Result.retry()
         }
     }
@@ -69,7 +76,6 @@ class UpdateWorker(
                     updateWorkRequest
                 )
             } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
 
@@ -119,7 +125,6 @@ class UpdateWorker(
 
                 notificationManager.notify(NOTIFICATION_ID, notification)
             } catch (e: Exception) {
-                e.printStackTrace()
             }
         }
     }

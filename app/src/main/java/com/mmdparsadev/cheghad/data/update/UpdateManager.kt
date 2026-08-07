@@ -22,6 +22,7 @@ data class GitHubRelease(
     @SerialName("tag_name") val tagName: String = "",
     @SerialName("name") val name: String? = null,
     @SerialName("body") val body: String? = null,
+    @SerialName("prerelease") val prerelease: Boolean = false,
     @SerialName("html_url") val htmlUrl: String = "",
     @SerialName("assets") val assets: List<GitHubAsset> = emptyList()
 )
@@ -46,7 +47,7 @@ object UpdateManager {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    suspend fun checkForUpdate(currentVersionName: String): Result<GitHubRelease?> = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdate(currentVersionName: String, downloadBeta: Boolean = false): Result<GitHubRelease?> = withContext(Dispatchers.IO) {
         runCatching {
             val request = Request.Builder()
                 .url(GITHUB_API_URL)
@@ -65,8 +66,20 @@ object UpdateManager {
                 return@runCatching null
             }
 
-            val latestRelease = releases.first()
-            if (isVersionNewer(currentVersionName, latestRelease.tagName)) {
+            val latestRelease = if (downloadBeta) {
+                releases.first()
+            } else {
+                // Find first release that is not a prerelease and doesn't have "beta" or "alpha" in name/tag
+                releases.find { release ->
+                    !release.prerelease && 
+                    !(release.name?.contains("beta", ignoreCase = true) ?: false) &&
+                    !(release.name?.contains("alpha", ignoreCase = true) ?: false) &&
+                    !release.tagName.contains("beta", ignoreCase = true) &&
+                    !release.tagName.contains("alpha", ignoreCase = true)
+                }
+            }
+
+            if (latestRelease != null && isVersionNewer(currentVersionName, latestRelease.tagName)) {
                 latestRelease
             } else {
                 null
@@ -172,7 +185,6 @@ object UpdateManager {
             context.startActivity(intent)
             true
         } catch (e: Exception) {
-            e.printStackTrace()
             false
         }
     }
@@ -184,7 +196,6 @@ object UpdateManager {
             }
             context.startActivity(intent)
         } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 }

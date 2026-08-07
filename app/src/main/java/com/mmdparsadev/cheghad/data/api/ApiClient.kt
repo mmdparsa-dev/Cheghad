@@ -10,7 +10,6 @@ import okhttp3.Protocol
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import java.util.concurrent.TimeUnit
 
@@ -112,7 +111,6 @@ object ApiClient {
                         }
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
                 }
             }, executor)
 
@@ -149,14 +147,12 @@ object ApiClient {
                         }
                     }
                 } catch (e: Exception) {
-                    e.printStackTrace()
                 }
             }, executor)
 
             try {
                 java.util.concurrent.CompletableFuture.allOf(tgjuTask, bitpinTask).get(7, java.util.concurrent.TimeUnit.SECONDS)
             } catch (e: Exception) {
-                e.printStackTrace()
             } finally {
                 executor.shutdown()
             }
@@ -356,9 +352,6 @@ object ApiClient {
 
     private val OkHttpClientInstance = OkHttpClient.Builder()
         .addInterceptor(MockInterceptor)
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        })
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
@@ -377,9 +370,6 @@ object ApiClient {
     }
 
     private val KifpoolOkHttpClient = OkHttpClient.Builder()
-        .addInterceptor(HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
-        })
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()

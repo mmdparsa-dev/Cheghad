@@ -45,7 +45,6 @@ class CurrencySyncWorker(
                 }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
             Result.failure()
         }
     }
@@ -124,7 +123,6 @@ class CurrencySyncWorker(
 
             notificationManager.notify(alarm.id.toInt(), notification)
         } catch (e: Exception) {
-            e.printStackTrace()
         }
     }
 }
