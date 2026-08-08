@@ -1,8 +1,10 @@
+# Cheghad Changelog
+
 ## [v1.0.0 - Stable] - 2026-08-08
 
-# 🚀 نسسسسسخه جدیییییدددددد!
-## تغییرات:
-## 🎉 این اولین ورژن پایدار هست
+### 🚀 نسسسسسخه جدیییییدددددد!
+### تغییرات:
+### 🎉 این اولین ورژن پایدار هست
 - اضافه کردن مجوز VIBRATE به AndroidManifest
 - ایجاد کلاس ابزار HapticUtils با پشتیبانی از ارتعاشات سبک، متوسط، موفقیت، خطا
 - ادغام بازخورد لمسی در تمام کلیک‌ها، دکمه‌های تغییر وضعیت، دیالوگ‌ها و اقدامات کشیدن رابط کاربری
@@ -10,7 +12,7 @@
 - معرفی LocalAdaptiveDpScale و LocalAdaptiveSpScale برای طراحی واکنش‌گرا در دستگاه‌ها
 - بازسازی انیمیشن‌های انتقال صفحه با استفاده از CubicBezierEasing
 - بهبود فیزیک کشیدن BentoGrid با انیمیشن‌های فنری و ارتفاع پویا
-- اضافه کردن منابع رشته‌ای محلی برای سفارشی‌سازی ردیف Bento Grid
+- اضافه کردن منابع رشته���ای محلی برای سفارشی‌سازی ردیف Bento Grid
 - اضافه کردن کلید اصلی در تنظیمات DataStore برای فعال/غیرفعال کردن کامل اخبار
 - اضافه کردن دکمه‌های اقدام جمعی 'فعال کردن همه' و 'غیرفعال کردن همه' برای خبرگزاری‌ها
 - طراحی صفحه نمایش وضعیت خالی سفارشی با دکمه اقدام مستقیم برای فید خبری غیرفعال
@@ -23,13 +25,10 @@
 - پیکربندی قوانین ProGuard برای حذف تمام فراخوانی‌های متد android.util.Log
 - پاکسازی کدبیس با حذف فراخوانی‌های HttpLoggingInterceptor و printStackTrace
 - ارتقاء Gradle Wrapper به ۹.۷.۰، KSP به ۲.۳.۱۱ و افزایش حافظه هیپ JVM به -Xmx4g
------
 
-# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
-## The Changes: 
-## 🎉 This is First Version Stable
-
-
+### 🚀 NEEEWWW VEERRRSSSIIIIOOONNNNNNNN
+### The Changes: 
+### 🎉 This is First Version Stable
 - Add VIBRATE permission to AndroidManifest
 - Create HapticUtils utility class supporting Light, Medium, Success, Error vibrations
 - Integrate haptic feedback into all UI clicks, toggles, dialogs, and drag actions
@@ -51,12 +50,10 @@
 - Clean up codebase by removing HttpLoggingInterceptor and printStackTrace calls
 - Upgrade Gradle Wrapper to 9.7.0, KSP to 2.3.11, and bump JVM heap memory to -Xmx4g
 
-
 ## [v0.9.9 - RC] - 2026-08-04
 
-# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
-## The Changes:
-
+### 🚀 NEEEWWW VEERRRSSSIIIIOOONNNNNNNN
+### The Changes:
 - Add Antimation in Calculator 
 - Add History to Calculator
 - Sync Widget with Lastest Update App (Every 15m in background)
@@ -71,9 +68,9 @@
 - Translate other Texts
 - Refrector Datamodel & Viewmodels
 - Fix Bugs
-# 🚀 نسسسسسخه جدیییییدددددد!
-## تغییرات:
 
+### 🚀 نسسسسسخه جدیییییدددددد!
+### تغییرات:
 - اضافه کردن انیمیشن در ماشین حساب
 - اضافه کردن تاریخچه به ماشین حساب
 - همگام سازی ویجت با آخرین بروزرسانی برنامه (هر 15 دقیقه در پس زمینه)
@@ -86,16 +83,13 @@
 - ترجمه برخی از بخش ها در ماشین حساب
 - ترجمه خبرگزاری ها
 - ترجمه سایر متون
-مدل داده و ViewModel ها اصلاح شده
+- مدل داده و ViewModel ها اصلاح شده
 - رفع اشکالات
-
-
 
 ## [v0.9.4 - Beta] - 2026-07-31
 
-# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
-## The Changes:
-
+### 🚀 NEEEWWW VEERRRSSSIIIIOOONNNNNNNN
+### The Changes:
 - Fix Slow app Boot
 - Re-writed some section by Material Design 3 Experessive
 - Add Color app
@@ -108,9 +102,9 @@
 - Button "Select Asset / Currency" Re-writed by Material Design 3 Experessive
 - Respansived Widgets
 - Fix Bugs
-# 🚀 نسسسسسخه جدیییییدددددد!
-## تغییرات:
 
+### 🚀 نسسسسسخه جدیییییدددددد!
+### تغییرات:
 - رفع مشکل کندی در اجرای اولیه برنامه
 - بازنویسی بخش‌هایی از برنامه با استفاده از استانداردهای Material Design 3 Expressive
 - افزودن قابلیت انتخاب رنگ برای برنامه
@@ -124,12 +118,10 @@
 - بهینه‌سازی ویجت‌ها برای نمایش واکنش‌گرا
 - برطرف کردن باگ ها
 
-
 ## [v0.8.6 - Beta] - 2026-07-27
 
-# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
-## The Changes:
-
+### 🚀 NEEEWWW VEERRRSSSIIIIOOONNNNNNNN
+### The Changes:
 - Fix problem Update
 - Updates Component
 - Add Edit in widgets
@@ -140,9 +132,9 @@
 - Re-writed Animations by Material 3 Experrssive
 - Add Gold Ouns
 - Fix Bugs
-# 🚀 نسسسسسخه جدیییییدددددد!
-## تغییرات:
 
+### 🚀 نسسسسسخه جدیییییدددددد!
+### تغییرات:
 - رفع مشکل به‌روزرسانی
 - به‌روزرسانی کامپوننت
 - افزودن قابلیت ویرایش به ویجت‌ها
@@ -155,35 +147,33 @@
 - فیکس باگ‌ها
 
 ## [v0.7.9 - Beta] - 2026-07-25
-# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
-## The Changes:
 
+### 🚀 NEEEWWW VEERRRSSSIIIIOOONNNNNNNN
+### The Changes:
 - Correct the App Version in Settings
 - Fix Loop Update
 - Fix Bugs
-# 🚀 نسسسسسخه جدیییییدددددد!
-## تغییرات:
 
+### 🚀 نسسسسسخه جدیییییدددددد!
+### تغییرات:
 - درست کردن ورژن اپ در تنظیمات
 - حل مشکل اپدیت پشت سرهم
 - فیکس کردن باگ ها
 
-# 0.7.8
-# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
-## The Changes:
+## [v0.7.8]
 
+### 🚀 NEEEWWW VEERRRSSSIIIIOOONNNNNNNN
+### The Changes:
 - Fix Update Problem
-# 🚀 نسسسسسخه جدیییییدددددد!
-## تغییرات:
 
+### 🚀 نسسسسسخه جدیییییدددددد!
+### تغییرات:
 - حل مشکل آپدیت
 
+## [v0.7.7]
 
-# 0.7.7
-
-# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
-## The Changes:
-
+### 🚀 NEEEWWW VEERRRSSSIIIIOOONNNNNNNN
+### The Changes:
 - Add USOON
 - Rewrited by Material 3 Expressive
 - Smoother Animations
@@ -199,9 +189,8 @@
 - Delete Not Used Files
 - Fix Bugs
 
-# 🚀 نسسسسسخه جدیییییدددددد!
-## تغییرات:
-
+### 🚀 نسسسسسخه جدیییییدددددد!
+### تغییرات:
 - افزودن USOON
 - بازنویسی بر اساس Material 3 Expressive
 - انیمیشن‌های روان‌تر
@@ -217,22 +206,22 @@
 - حذف فایل‌های استفاده نشده
 - رفع باگ‌ها
 
-### v0.7.0
+## [v0.7.0]
 
 ### The First Release Of Cheghad App🚀
 
 If app has Bug Tell me from Issues
 
-⚠️Warning:This Verison is Beta & Can has bug
+⚠️ Warning: This Version is Beta & Can has bug
 
------
+---
 
 ### اولین نسخه از اپ چقد🚀
 
 اگر اپ باگی داشت از طریق Issue بهم اطلاع بدید
 
-⚠️هشدار:این نسخه بتا هست و ممکنه باگ داشته باشه
+⚠️ هشدار: این نسخه بتا هست و ممکنه باگ داشته باشه
 
------
+---
 
 Developed By **mmdparsa**
