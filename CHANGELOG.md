@@ -52,6 +52,60 @@
 - Upgrade Gradle Wrapper to 9.7.0, KSP to 2.3.11, and bump JVM heap memory to -Xmx4g
 
 
+## [v1.0.0 - Stable] - 2026-08-08
+
+# 🚀 نسسسسسخه جدیییییدددددد!
+## تغییرات:
+## 🎉 این اولین ورژن پایدار هست
+- اضافه کردن مجوز VIBRATE به AndroidManifest
+- ایجاد کلاس ابزار HapticUtils با پشتیبانی از ارتعاشات سبک، متوسط، موفقیت، خطا
+- ادغام بازخورد لمسی در تمام کلیک‌ها، دکمه‌های تغییر وضعیت، دیالوگ‌ها و اقدامات کشیدن رابط کاربری
+- پیاده‌سازی مرتب‌سازی سفارشی کشیدن و رها کردن برای اقلام بازار با پایداری
+- معرفی LocalAdaptiveDpScale و LocalAdaptiveSpScale برای طراحی واکنش‌گرا در دستگاه‌ها
+- بازسازی انیمیشن‌های انتقال صفحه با استفاده از CubicBezierEasing
+- بهبود فیزیک کشیدن BentoGrid با انیمیشن‌های فنری و ارتفاع پویا
+- اضافه کردن منابع رشته‌ای محلی برای سفارشی‌سازی ردیف Bento Grid
+- اضافه کردن کلید اصلی در تنظیمات DataStore برای فعال/غیرفعال کردن کامل اخبار
+- اضافه کردن دکمه‌های اقدام جمعی 'فعال کردن همه' و 'غیرفعال کردن همه' برای خبرگزاری‌ها
+- طراحی صفحه نمایش وضعیت خالی سفارشی با دکمه اقدام مستقیم برای فید خبری غیرفعال
+- بهینه‌سازی NewsRepository برای اجرای همزمان دریافت‌های RSS از طریق کوروتین‌های async/awaitAll
+- انتقال‌های انیمیشن روان بین حالت‌های محاسبه
+- پیاده‌سازی تأخیر بارگذاری اولیه ۱۵۰۰ میلی‌ثانیه برای افزایش پاسخگویی رابط کاربری هنگام راه‌اندازی
+- اضافه کردن اولویت انتخاب به‌روزرسانی بتا/آلفا در تنظیمات
+- بهبود UpdateManager برای تمایز دقیق نسخه‌های پایدار از پیش‌نسخه‌ها
+- فعال کردن کوچک‌سازی R8 و کاهش منابع برای نوع ساخت نسخه
+- پیکربندی قوانین ProGuard برای حذف تمام فراخوانی‌های متد android.util.Log
+- پاکسازی کدبیس با حذف فراخوانی‌های HttpLoggingInterceptor و printStackTrace
+- ارتقاء Gradle Wrapper به ۹.۷.۰، KSP به ۲.۳.۱۱ و افزایش حافظه هیپ JVM به -Xmx4g
+-----
+
+# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
+## The Changes: 
+## 🎉 This is First Version Stable
+
+
+- Add VIBRATE permission to AndroidManifest
+- Create HapticUtils utility class supporting Light, Medium, Success, Error vibrations
+- Integrate haptic feedback into all UI clicks, toggles, dialogs, and drag actions
+- Implement custom Drag & Drop sorting for market items with persistence
+- Introduce LocalAdaptiveDpScale & LocalAdaptiveSpScale for responsive design across devices
+- Refactor screen transition animations using CubicBezierEasing
+- Enhance BentoGrid drag physics with spring animations & dynamic elevation
+- Add localized string resources for Bento Grid row customization
+- Add master toggle in Settings DataStore to completely enable/disable news
+- Add 'Enable All' and 'Disable All' mass action buttons for news agencies
+- Design custom Empty State screen with direct action button for disabled news feed
+- Optimize NewsRepository to execute concurrent RSS fetches via async/awaitAll coroutines
+- Smooth animation transitions between calculation modes
+- Implement 1500ms initial load delay to boost launch UI responsiveness
+- Add Beta/Alpha update opt-in preference in settings
+- Enhance UpdateManager to strictly distinguish stable releases from prereleases
+- Enable R8 minification and resource shrinking for release build type
+- Configure ProGuard rules to strip all android.util.Log method calls
+- Clean up codebase by removing HttpLoggingInterceptor and printStackTrace calls
+- Upgrade Gradle Wrapper to 9.7.0, KSP to 2.3.11, and bump JVM heap memory to -Xmx4g
+
+
 ## [v0.9.9 - RC] - 2026-08-04
 
 # NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
