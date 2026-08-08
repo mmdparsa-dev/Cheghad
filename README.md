@@ -1,5 +1,5 @@
 # Cheghad (چقد) 🪙
-# ⚠️ این اپ هنوز تو فاز آزمایشی هست و ممکنه مشکلاتی داشته باشه ولی بازم قابل استفاده هست.اگه مشکلی دیدید از طریق Issues اطلاع بدید.
+
 [فارسی](#فارسی) | [English](#english)
 
 ---
@@ -34,7 +34,6 @@
 ---
 
 ## English
-# ⚠️ This app is in an experimental stage and may be unstable, but it is still usable. Please report any bugs via GitHub Issues.
 ### About The Project
 **Cheghad** is a modern, open-source, and lightweight Android application designed for real-time currency exchange monitoring. Built using the latest Android development standards and **Material 3 Expressive** design, it provides an intuitive, beautiful, and fast user experience.
 
