@@ -59,6 +59,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -4150,7 +4152,34 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+        val uriHandler = LocalUriHandler.current
+
+        Spacer(modifier = Modifier.height(adaptiveDp(24f)))
+
+        // Footer
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = stringResource(R.string.settings_footer_made_by),
+                fontSize = adaptiveSp(12f),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(adaptiveDp(4f)))
+            Text(
+                text = stringResource(R.string.settings_footer_github),
+                fontSize = adaptiveSp(11f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable {
+                    uriHandler.openUri("https://github.com/mmdparsa-dev/Cheghad")
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(adaptiveDp(48f)))
     }
 }
 

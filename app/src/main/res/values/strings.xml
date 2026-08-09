@@ -195,4 +195,6 @@
     <string name="not_colorful_customize">Simple</string>
     <string name="integration_customize">Integration</string>
     <string name="separation_customize">Separation</string>
+    <string name="settings_footer_made_by">Made with ❤️ by mmdparsa</string>
+    <string name="settings_footer_github">https://github.com/mmdparsa-dev/Cheghad</string>
 </resources>
