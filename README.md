@@ -61,5 +61,15 @@ Check the Releses or Download From app
 
 ### 📄 License
 Distributed under the MIT License. See `LICENSE` for more information.
+### preview (پیش نمایش)
+
+<img width="1080" height="2400" alt="Screenshot_20260808_131215" src="https://github.com/user-attachments/assets/57eaa32a-a325-4257-ba98-35d8bf0e4113" />
+<img width="1080" height="2172" alt="Screenshot_20260808_131205" src="https://github.com/user-attachments/assets/9e1ac9f0-0958-46f9-ad22-f24b63845c48" />
+<img width="1080" height="2400" alt="Screenshot_20260808_131139" src="https://github.com/user-attachments/assets/3da521d8-5b6a-4f07-8abc-f9dc59fe2988" />
+<img width="1080" height="2400" alt="Screenshot_20260808_131336" src="https://github.com/user-attachments/assets/af648733-bf37-4e5c-ad34-518140621c5b" />
+<img width="1080" height="2400" alt="Screenshot_20260808_131308" src="https://github.com/user-attachments/assets/182b2632-800c-47ae-923d-90d3eb5a7cf9" />
+<img width="1080" height="2400" alt="Screenshot_20260808_131242" src="https://github.com/user-attachments/assets/9a8740cf-361f-42e1-bc20-27f15732ebad" />
+<img width="1080" height="2400" alt="Screenshot_20260808_131235" src="https://github.com/user-attachments/assets/3fdd0db9-9cf7-4bb7-a8ab-3249d738b0bd" />
+<img width="1080" height="2400" alt="Screenshot_20260808_131226" src="https://github.com/user-attachments/assets/0ef75ded-566e-4bd9-9692-0aa27442f3e6" />
 
 Developed with ❤️ by **mmdparsa**
