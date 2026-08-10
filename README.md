@@ -63,13 +63,18 @@ Check the Releses or Download From app
 Distributed under the MIT License. See `LICENSE` for more information.
 ### preview (پیش نمایش)
 
-<img width="1080" height="2400" alt="Screenshot_20260808_131215" src="https://github.com/user-attachments/assets/57eaa32a-a325-4257-ba98-35d8bf0e4113" />
-<img width="1080" height="2172" alt="Screenshot_20260808_131205" src="https://github.com/user-attachments/assets/9e1ac9f0-0958-46f9-ad22-f24b63845c48" />
-<img width="1080" height="2400" alt="Screenshot_20260808_131139" src="https://github.com/user-attachments/assets/3da521d8-5b6a-4f07-8abc-f9dc59fe2988" />
-<img width="1080" height="2400" alt="Screenshot_20260808_131336" src="https://github.com/user-attachments/assets/af648733-bf37-4e5c-ad34-518140621c5b" />
-<img width="1080" height="2400" alt="Screenshot_20260808_131308" src="https://github.com/user-attachments/assets/182b2632-800c-47ae-923d-90d3eb5a7cf9" />
-<img width="1080" height="2400" alt="Screenshot_20260808_131242" src="https://github.com/user-attachments/assets/9a8740cf-361f-42e1-bc20-27f15732ebad" />
-<img width="1080" height="2400" alt="Screenshot_20260808_131235" src="https://github.com/user-attachments/assets/3fdd0db9-9cf7-4bb7-a8ab-3249d738b0bd" />
-<img width="1080" height="2400" alt="Screenshot_20260808_131226" src="https://github.com/user-attachments/assets/0ef75ded-566e-4bd9-9692-0aa27442f3e6" />
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/57eaa32a-a325-4257-ba98-35d8bf0e4113" width="210" alt="Cheghad Screenshot 1" />
+  <img src="https://github.com/user-attachments/assets/9e1ac9f0-0958-46f9-ad22-f24b63845c48" width="210" alt="Cheghad Screenshot 2" />
+  <img src="https://github.com/user-attachments/assets/3da521d8-5b6a-4f07-8abc-f9dc59fe2988" width="210" alt="Cheghad Screenshot 3" />
+  <img src="https://github.com/user-attachments/assets/af648733-bf37-4e5c-ad34-518140621c5b" width="210" alt="Cheghad Screenshot 4" />
+</p>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/182b2632-800c-47ae-923d-90d3eb5a7cf9" width="210" alt="Cheghad Screenshot 5" />
+  <img src="https://github.com/user-attachments/assets/9a8740cf-361f-42e1-bc20-27f15732ebad" width="210" alt="Cheghad Screenshot 6" />
+  <img src="https://github.com/user-attachments/assets/3fdd0db9-9cf7-4bb7-a8ab-3249d738b0bd" width="210" alt="Cheghad Screenshot 7" />
+  <img src="https://github.com/user-attachments/assets/0ef75ded-566e-4bd9-9692-0aa27442f3e6" width="210" alt="Cheghad Screenshot 8" />
+</p>
 
 Developed with ❤️ by **mmdparsa**
