@@ -95,7 +95,7 @@ fun PriceCard(
             .scale(animatedScale)
             .then(
                 if (isTvMode) {
-                    Modifier.width(280.dp) // عرض مناسب برای افقی چیده شدن در TV
+                    Modifier.width(280.dp).fillMaxHeight() // عرض مناسب برای افقی چیده شدن در TV
                 } else {
                     Modifier.fillMaxWidth() // عرض کامل برای لیست عمودی موبایل
                 }
@@ -103,9 +103,15 @@ fun PriceCard(
     ) {
         Column(
             modifier = Modifier
-                .padding(cardPadding)
-                .fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(if (isTvMode) 12.dp else 8.dp)
+                .padding(
+                    top = cardPadding,
+                    bottom = if (isTvMode) 48.dp else cardPadding,
+                    start = cardPadding,
+                    end = cardPadding
+                )
+                .fillMaxWidth()
+                .fillMaxHeight(),
+            verticalArrangement = if (isTvMode) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp)
         ) {
             // هدر کارت: عنوان ارز و نماد
             Row(
@@ -133,8 +139,6 @@ fun PriceCard(
                     )
                 }
             }
-
-            Spacer(modifier = Modifier.height(2.dp))
 
             // بخش قیمت فعلی و درصد تغییرات
             Row(
@@ -180,6 +184,8 @@ fun PriceCard(
                     }
                 }
             }
+            
+            if (isTvMode) Spacer(modifier = Modifier.height(10.dp))
         }
     }
 }

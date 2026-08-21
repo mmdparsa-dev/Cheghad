@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import com.mmdparsadev.cheghad.R
+import com.mmdparsadev.cheghad.isTvDevice
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -139,20 +140,26 @@ fun ExpressivePullToRefreshBox(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val state = rememberPullToRefreshState()
+    val isTv = isTvDevice()
 
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
-        modifier = modifier,
-        state = state,
-        indicator = {
-            ExpressivePullToRefreshIndicator(
-                state = state,
-                isRefreshing = isRefreshing,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
-        },
-        content = content
-    )
+    if (isTv) {
+        Box(modifier = modifier, content = content)
+    } else {
+        val state = rememberPullToRefreshState()
+
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = modifier,
+            state = state,
+            indicator = {
+                ExpressivePullToRefreshIndicator(
+                    state = state,
+                    isRefreshing = isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
+            },
+            content = content
+        )
+    }
 }

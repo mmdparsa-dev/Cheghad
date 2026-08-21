@@ -3,9 +3,11 @@ package com.mmdparsadev.cheghad
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.UiModeManager
 import com.mmdparsadev.cheghad.ui.ExpressiveConnectedButtonGroup
 import android.content.Context
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.os.LocaleListCompat
@@ -53,6 +55,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.graphics.vector.ImageVector
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -74,7 +77,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.TextUnit
@@ -105,17 +107,24 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.PlatformTextStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.core.app.NotificationCompat
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.focusable
+
 import androidx.core.content.ContextCompat
 import com.mmdparsadev.cheghad.data.repository.NewsRepository
 import com.mmdparsadev.cheghad.data.update.GitHubRelease
 import com.mmdparsadev.cheghad.data.update.UpdateManager
 import com.mmdparsadev.cheghad.data.update.UpdateWorker
 import com.mmdparsadev.cheghad.ui.ConnectivityStatusBanner
+import com.mmdparsadev.cheghad.ui.ExpressiveLoadingIndicator
 import com.mmdparsadev.cheghad.ui.ExpressivePullToRefreshBox
 import com.mmdparsadev.cheghad.ui.UpdateDialog
 import com.mmdparsadev.cheghad.ui.viewmodel.SettingsViewModel
@@ -128,6 +137,15 @@ import java.util.Locale
 
 val LocalAdaptiveDpScale = staticCompositionLocalOf { 1.0f }
 val LocalAdaptiveSpScale = staticCompositionLocalOf { 1.0f }
+
+@Composable
+fun isTvDevice(): Boolean {
+    val context = LocalContext.current
+    val uiModeManager = remember(context) {
+        context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+    }
+    return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+}
 
 enum class TimeRange(val stringRes: Int, val id: String) {
     HOUR(R.string.range_hour, "HOUR"),
@@ -175,26 +193,36 @@ class MainActivity : AppCompatActivity() {
 
             val configuration = LocalConfiguration.current
             val screenWidthDp = configuration.screenWidthDp
-            
-            val dpScale = remember(screenWidthDp) {
-                when {
-                    screenWidthDp >= 1200 -> 1.50f
-                    screenWidthDp >= 840 -> 1.35f
-                    screenWidthDp >= 600 -> 1.12f
-                    screenWidthDp <= 320 -> 0.80f
-                    screenWidthDp <= 360 -> 0.88f
-                    else -> 1.0f
+
+            val isTv = isTvDevice()
+
+            val dpScale = remember(screenWidthDp, isTv) {
+                if (isTv) {
+                    0.75f
+                } else {
+                    when {
+                        screenWidthDp >= 1200 -> 1.50f
+                        screenWidthDp >= 840 -> 1.35f
+                        screenWidthDp >= 600 -> 1.12f
+                        screenWidthDp <= 320 -> 0.80f
+                        screenWidthDp <= 360 -> 0.88f
+                        else -> 1.0f
+                    }
                 }
             }
-            
-            val spScale = remember(screenWidthDp) {
-                when {
-                    screenWidthDp >= 1200 -> 1.50f
-                    screenWidthDp >= 840 -> 1.30f
-                    screenWidthDp >= 600 -> 1.10f
-                    screenWidthDp <= 320 -> 0.78f
-                    screenWidthDp <= 360 -> 0.85f
-                    else -> 0.95f
+
+            val spScale = remember(screenWidthDp, isTv) {
+                if (isTv) {
+                    0.80f
+                } else {
+                    when {
+                        screenWidthDp >= 1200 -> 1.50f
+                        screenWidthDp >= 840 -> 1.30f
+                        screenWidthDp >= 600 -> 1.10f
+                        screenWidthDp <= 320 -> 0.78f
+                        screenWidthDp <= 360 -> 0.85f
+                        else -> 0.95f
+                    }
                 }
             }
 
@@ -296,7 +324,7 @@ class MainActivity : AppCompatActivity() {
 
                 LaunchedEffect(Unit) {
                     delay(1500) // Delay startup tasks to improve initial UI responsiveness
-                    
+
                     // Request notification permission for Android 13+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         if (ContextCompat.checkSelfPermission(
@@ -348,595 +376,653 @@ class MainActivity : AppCompatActivity() {
                     seedColor = if (selectedAppColor == AppThemeColor.DEFAULT) null else selectedAppColor.seedColor,
                     animate = false
                 ) {
-                val motionScheme = MaterialTheme.motionScheme
-                if (isFirstLaunch) {
-                    WelcomeScreen(
-                        onComplete = { langCode, theme ->
-                            val newDigitType = if (langCode == "en") "en" else "fa"
-                            settingsViewModel.setDigitType(newDigitType)
-                            settingsViewModel.setThemeMode(theme)
-                            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(langCode))
-                            sharedPrefs.edit().putBoolean("first_launch", false).apply()
-                            isFirstLaunch = false
-                        }
-                    )
-                } else {
-                    Scaffold(
-                        modifier = Modifier.fillMaxSize(),
-                        containerColor = MaterialTheme.colorScheme.background,
-                        bottomBar = { 
-                            Column {
-                                ConnectivityStatusBanner(uiState = uiState)
-                                BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it }) 
+                    val motionScheme = MaterialTheme.motionScheme
+                    if (isFirstLaunch) {
+                        WelcomeScreen(
+                            onComplete = { langCode, theme ->
+                                val newDigitType = if (langCode == "en") "en" else "fa"
+                                settingsViewModel.setDigitType(newDigitType)
+                                settingsViewModel.setThemeMode(theme)
+                                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(langCode))
+                                sharedPrefs.edit().putBoolean("first_launch", false).apply()
+                                isFirstLaunch = false
                             }
-                        }
-                    ) { innerPadding ->
-                        AnimatedContent(
-                            targetState = currentScreen,
-                            transitionSpec = {
-                                val screenOrder = listOf("home", "calculator", "news", "portfolio", "settings")
-                                val initialIndex = screenOrder.indexOf(initialState)
-                                val targetIndex = screenOrder.indexOf(targetState)
-                                val emphasizedEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
-
-                                if (targetIndex > initialIndex) {
-                                    (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.1f).toInt() } + fadeIn(animationSpec = tween(300))).togetherWith(
-                                        slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.1f).toInt() } + fadeOut(animationSpec = tween(150))
-                                    )
-                                } else {
-                                    (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.1f).toInt() } + fadeIn(animationSpec = tween(300))).togetherWith(
-                                        slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.1f).toInt() } + fadeOut(animationSpec = tween(150))
-                                    )
+                        )
+                    } else {
+                        val isTv = isTvDevice()
+                        Scaffold(
+                            modifier = Modifier.fillMaxSize(),
+                            containerColor = MaterialTheme.colorScheme.background,
+                            topBar = {
+                                if (isTv) {
+                                    Column {
+                                        ConnectivityStatusBanner(uiState = uiState)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it })
+                                            }
+                                            // دکمه به‌روزرسانی سریع اکسپرسیو مخصوص اندروید تی‌وی
+                                            Surface(
+                                                onClick = { viewModel.refreshData() },
+                                                shape = RoundedCornerShape(24.dp),
+                                                color = MaterialTheme.colorScheme.surface,
+                                                tonalElevation = 4.dp,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                modifier = Modifier
+                                                    .padding(horizontal = 16.dp)
+                                                    .height(44.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    if (uiState.isLoading) {
+                                                        ExpressiveLoadingIndicator(
+                                                            modifier = Modifier.size(20.dp),
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            isRefreshing = true
+                                                        )
+                                                    } else {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Refresh,
+                                                            contentDescription = stringResource(R.string.button_refresh),
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = stringResource(R.string.button_refresh),
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        fontFamily = getFontFamilyForText(stringResource(R.string.button_refresh))
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             },
-                            label = "ScreenTransition"
-                        ) { screen ->
-                            if (screen == "home") {
-                                var draggedItemId by remember { mutableStateOf<String?>(null) }
-                                var initialIndex by remember { mutableStateOf<Int?>(null) }
-                                var totalDragY by remember { mutableStateOf(0f) }
-                                
-                                var itemHeightPx by remember { mutableStateOf(0f) }
-                                val density = LocalDensity.current
-
-                                // Auto-scroll state
-                                var pointerYInViewport by remember { mutableStateOf(0f) }
-                                var listViewportHeight by remember { mutableStateOf(0f) }
-                                var listTopOnScreen by remember { mutableStateOf(0f) }
-
-                                val selectedCat = uiState.selectedCategory
-                                val filteredItems = uiState.items.filter { item ->
-                                    when (selectedCat) {
-                                        "currency" -> item.category == CurrencyType.Currency
-                                        "gold_and_coin" -> item.category == CurrencyType.GoldAndCoin
-                                        "crypto" -> item.category == CurrencyType.Crypto
-                                        else -> true
+                            bottomBar = {
+                                if (!isTv) {
+                                    Column {
+                                        ConnectivityStatusBanner(uiState = uiState)
+                                        BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it })
                                     }
                                 }
+                            }
+                        ) { innerPadding ->
+                            AnimatedContent(
+                                targetState = currentScreen,
+                                transitionSpec = {
+                                    val screenOrder = listOf("home", "calculator", "news", "portfolio", "settings")
+                                    val initialIndex = screenOrder.indexOf(initialState)
+                                    val targetIndex = screenOrder.indexOf(targetState)
+                                    val emphasizedEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
 
-                                val sortedItems = remember(bottomListSortOrder, marketCustomOrder, filteredItems) {
-                                    when (bottomListSortOrder) {
-                                        "profitable" -> filteredItems.sortedByDescending { it.changePercentage }
-                                        "loss-making" -> filteredItems.sortedBy { it.changePercentage }
-                                        "custom" -> {
-                                            val orderMap = marketCustomOrder.withIndex().associate { it.value to it.index }
-                                            filteredItems.sortedBy { orderMap[it.id] ?: Int.MAX_VALUE }
+                                    if (targetIndex > initialIndex) {
+                                        (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.1f).toInt() } + fadeIn(animationSpec = tween(300))).togetherWith(
+                                            slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.1f).toInt() } + fadeOut(animationSpec = tween(150))
+                                        )
+                                    } else {
+                                        (slideInHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> -(width * 0.1f).toInt() } + fadeIn(animationSpec = tween(300))).togetherWith(
+                                            slideOutHorizontally(animationSpec = tween(300, easing = emphasizedEasing)) { width -> (width * 0.1f).toInt() } + fadeOut(animationSpec = tween(150))
+                                        )
+                                    }
+                                },
+                                label = "ScreenTransition"
+                            ) { screen ->
+                                if (screen == "home") {
+                                    var draggedItemId by remember { mutableStateOf<String?>(null) }
+                                    var initialIndex by remember { mutableStateOf<Int?>(null) }
+                                    var totalDragY by remember { mutableStateOf(0f) }
+
+                                    var itemHeightPx by remember { mutableStateOf(0f) }
+                                    val density = LocalDensity.current
+
+                                    // Auto-scroll state
+                                    var pointerYInViewport by remember { mutableStateOf(0f) }
+                                    var listViewportHeight by remember { mutableStateOf(0f) }
+                                    var listTopOnScreen by remember { mutableStateOf(0f) }
+
+                                    val selectedCat = uiState.selectedCategory
+                                    val filteredItems = uiState.items.filter { item ->
+                                        when (selectedCat) {
+                                            "currency" -> item.category == CurrencyType.Currency
+                                            "gold_and_coin" -> item.category == CurrencyType.GoldAndCoin
+                                            "crypto" -> item.category == CurrencyType.Crypto
+                                            else -> true
                                         }
-                                        else -> filteredItems
                                     }
-                                }
 
-                                // Critical fix: Ensure drag logic sees the LATEST state
-                                val currentSortedItemsState = rememberUpdatedState(sortedItems)
-                                val currentMarketOrderState = rememberUpdatedState(marketCustomOrder)
-
-                                // Auto-scroll logic when dragging near edges
-                                LaunchedEffect(draggedItemId, pointerYInViewport, listViewportHeight) {
-                                    if (draggedItemId != null && listViewportHeight > 0) {
-                                        val threshold = with(density) { 80.dp.toPx() }
-                                        val maxScrollSpeed = 15f
-                                        
-                                        while (true) {
-                                            var scrollAmount = 0f
-                                            if (pointerYInViewport < threshold && pointerYInViewport > 0) {
-                                                // Scroll UP
-                                                val strength = (threshold - pointerYInViewport) / threshold
-                                                scrollAmount = -maxScrollSpeed * strength
-                                            } else if (pointerYInViewport > listViewportHeight - threshold) {
-                                                // Scroll DOWN
-                                                val strength = (pointerYInViewport - (listViewportHeight - threshold)) / threshold
-                                                scrollAmount = maxScrollSpeed * strength
+                                    val sortedItems = remember(bottomListSortOrder, marketCustomOrder, filteredItems) {
+                                        when (bottomListSortOrder) {
+                                            "profitable" -> filteredItems.sortedByDescending { it.changePercentage }
+                                            "loss-making" -> filteredItems.sortedBy { it.changePercentage }
+                                            "custom" -> {
+                                                val orderMap = marketCustomOrder.withIndex().associate { it.value to it.index }
+                                                filteredItems.sortedBy { orderMap[it.id] ?: Int.MAX_VALUE }
                                             }
-                                            
-                                            if (scrollAmount != 0f) {
-                                                homeScrollState.dispatchRawDelta(scrollAmount)
-                                                totalDragY += scrollAmount
-                                            }
-                                            yield()
-                                            delay(10)
+                                            else -> filteredItems
                                         }
                                     }
-                                }
 
-                                ExpressivePullToRefreshBox(
-                                    isRefreshing = uiState.isLoading,
-                                    onRefresh = { viewModel.refreshData() },
-                                    modifier = Modifier.fillMaxSize().padding(innerPadding)
-                                ) {
-                                    LazyColumn(
-                                        state = homeScrollState,
-                                        modifier = Modifier.fillMaxSize().onGloballyPositioned { 
-                                            listViewportHeight = it.size.height.toFloat()
-                                            listTopOnScreen = it.localToWindow(Offset.Zero).y
-                                        }
-                                    ) {
-                                        item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
-                                        item {
-                                            TopAppBar(
-                                                uiState = uiState,
-                                                isEditingHome = isEditingHome,
-                                                calendarType = calendarType,
-                                                digitType = digitType,
-                                                onRefresh = { viewModel.refreshData() },
-                                                onEditHome = { isEditingHome = !isEditingHome },
-                                                modifier = Modifier.padding(horizontal = adaptiveDp(16f))
-                                            )
-                                        }
-                                        item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
-                                        item {
-                                            BentoGrid(
-                                                items = uiState.items,
-                                                homeSymbols = homeItemSymbols,
-                                                isEditing = isEditingHome,
-                                                colorSchemeMode = colorSchemeMode,
-                                                digitType = digitType,
-                                                onSymbolsChanged = { newSymbols ->
-                                                    homeItemSymbols = newSymbols
-                                                    sharedPrefs.edit().putString("home_items", newSymbols.joinToString(",")).apply()
-                                                },
-                                                onClickItem = { item ->
-                                                    selectedItemForDetail = item
-                                                },
-                                                modifier = Modifier.padding(horizontal = adaptiveDp(16f))
-                                            )
-                                        }
-                                        item { Spacer(modifier = Modifier.height(adaptiveDp(20f))) }
-                                        item {
-                                            CategoryChips(
-                                                selectedCategory = uiState.selectedCategory,
-                                                onCategorySelected = { cat ->
-                                                    viewModel.setCategory(cat)
-                                                    coroutineScope.launch {
-                                                        homeScrollState.animateScrollToItem(6)
-                                                    }
-                                                },
-                                                modifier = Modifier.padding(horizontal = adaptiveDp(16f))
-                                            )
-                                        }
-                                        item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
+                                    // Critical fix: Ensure drag logic sees the LATEST state
+                                    val currentSortedItemsState = rememberUpdatedState(sortedItems)
+                                    val currentMarketOrderState = rememberUpdatedState(marketCustomOrder)
 
-                                        val categoryTitleRes = when(selectedCat) {
-                                            "currency" -> R.string.category_currency
-                                            "gold_and_coin" -> R.string.category_gold_and_coin
-                                            "crypto" -> R.string.category_crypto
-                                            else -> R.string.all_markets
-                                        }
+                                    // Auto-scroll logic when dragging near edges
+                                    LaunchedEffect(draggedItemId, pointerYInViewport, listViewportHeight) {
+                                        if (draggedItemId != null && listViewportHeight > 0) {
+                                            val threshold = with(density) { 80.dp.toPx() }
+                                            val maxScrollSpeed = 15f
 
-                                        item(key = "cat_header_$selectedCat") {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().padding(horizontal = adaptiveDp(16f)),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                val title = stringResource(categoryTitleRes)
-                                                Text(
-                                                    text = title,
-                                                    fontSize = 18.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onBackground,
-                                                    fontFamily = getFontFamilyForText(title)
-                                                )
-
-                                                var isSortMenuExpanded by remember { mutableStateOf(false) }
-                                                val currentSortStringRes = when (bottomListSortOrder) {
-                                                    "profitable" -> R.string.sort_profitable
-                                                    "loss-making" -> R.string.sort_loss_making
-                                                    "custom" -> R.string.sort_custom
-                                                    else -> R.string.sort_default
+                                            while (true) {
+                                                var scrollAmount = 0f
+                                                if (pointerYInViewport < threshold && pointerYInViewport > 0) {
+                                                    // Scroll UP
+                                                    val strength = (threshold - pointerYInViewport) / threshold
+                                                    scrollAmount = -maxScrollSpeed * strength
+                                                } else if (pointerYInViewport > listViewportHeight - threshold) {
+                                                    // Scroll DOWN
+                                                    val strength = (pointerYInViewport - (listViewportHeight - threshold)) / threshold
+                                                    scrollAmount = maxScrollSpeed * strength
                                                 }
-                                                val currentSortText = stringResource(currentSortStringRes)
-                                                val rotationAngle by animateFloatAsState(
-                                                    targetValue = if (isSortMenuExpanded) 180f else 0f,
-                                                    animationSpec = motionScheme.defaultSpatialSpec(),
-                                                    label = "SortArrowRotation"
+
+                                                if (scrollAmount != 0f) {
+                                                    homeScrollState.dispatchRawDelta(scrollAmount)
+                                                    totalDragY += scrollAmount
+                                                }
+                                                yield()
+                                                delay(10)
+                                            }
+                                        }
+                                    }
+
+                                    ExpressivePullToRefreshBox(
+                                        isRefreshing = uiState.isLoading,
+                                        onRefresh = { viewModel.refreshData() },
+                                        modifier = Modifier.fillMaxSize().padding(innerPadding)
+                                    ) {
+                                        LazyColumn(
+                                            state = homeScrollState,
+                                            modifier = Modifier.fillMaxSize().onGloballyPositioned {
+                                                listViewportHeight = it.size.height.toFloat()
+                                                listTopOnScreen = it.localToWindow(Offset.Zero).y
+                                            }
+                                        ) {
+                                            item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
+                                            item {
+                                                TopAppBar(
+                                                    uiState = uiState,
+                                                    isEditingHome = isEditingHome,
+                                                    calendarType = calendarType,
+                                                    digitType = digitType,
+                                                    onRefresh = { viewModel.refreshData() },
+                                                    onEditHome = { isEditingHome = !isEditingHome },
+                                                    modifier = Modifier.padding(horizontal = adaptiveDp(16f))
                                                 )
-
-                                                Box {
-                                                    val isSortActive = bottomListSortOrder != "default"
-                                                    Surface(
-                                                        onClick = { isSortMenuExpanded = true },
-                                                        shape = CircleShape,
-                                                        color = if (isSortActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
-                                                        contentColor = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
-                                                        tonalElevation = 2.dp,
-                                                        border = BorderStroke(1.dp, if (isSortActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                                                    ) {
-                                                        Row(
-                                                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = Icons.AutoMirrored.Filled.Sort,
-                                                                contentDescription = "Sort",
-                                                                tint = if (isSortActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
-                                                                modifier = Modifier.size(16.dp)
-                                                            )
-                                                            Text(
-                                                                text = currentSortText,
-                                                                fontSize = 12.sp,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                                                fontFamily = getFontFamilyForText(currentSortText)
-                                                            )
-                                                            if (bottomListSortOrder == "custom") {
-                                                                Surface(
-                                                                    onClick = { isEditingCustomSort = !isEditingCustomSort },
-                                                                    shape = CircleShape,
-                                                                    color = if (isEditingCustomSort) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
-                                                                    modifier = Modifier.size(24.dp)
-                                                                ) {
-                                                                    Icon(
-                                                                        imageVector = Icons.Default.Edit,
-                                                                        contentDescription = "Edit Custom Sort",
-                                                                        tint = if (isEditingCustomSort) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                        modifier = Modifier.padding(5.dp).size(14.dp)
-                                                                    )
-                                                                }
-                                                            }
-                                                            Icon(
-                                                                imageVector = Icons.Default.KeyboardArrowDown,
-                                                                contentDescription = null,
-                                                                tint = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                                modifier = Modifier
-                                                                    .size(18.dp)
-                                                                    .graphicsLayer { rotationZ = rotationAngle }
-                                                            )
+                                            }
+                                            item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
+                                            item {
+                                                BentoGrid(
+                                                    items = uiState.items,
+                                                    homeSymbols = homeItemSymbols,
+                                                    isEditing = isEditingHome,
+                                                    colorSchemeMode = colorSchemeMode,
+                                                    digitType = digitType,
+                                                    onSymbolsChanged = { newSymbols ->
+                                                        homeItemSymbols = newSymbols
+                                                        sharedPrefs.edit().putString("home_items", newSymbols.joinToString(",")).apply()
+                                                    },
+                                                    onClickItem = { item ->
+                                                        selectedItemForDetail = item
+                                                    },
+                                                    modifier = Modifier.padding(horizontal = adaptiveDp(16f))
+                                                )
+                                            }
+                                            item { Spacer(modifier = Modifier.height(adaptiveDp(20f))) }
+                                            item {
+                                                CategoryChips(
+                                                    selectedCategory = uiState.selectedCategory,
+                                                    onCategorySelected = { cat ->
+                                                        viewModel.setCategory(cat)
+                                                        coroutineScope.launch {
+                                                            homeScrollState.animateScrollToItem(6)
                                                         }
-                                                    }
+                                                    },
+                                                    modifier = Modifier.padding(horizontal = adaptiveDp(16f))
+                                                )
+                                            }
+                                            item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
 
-                                                    MaterialTheme(
-                                                        shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(20.dp))
-                                                    ) {
-                                                        DropdownMenu(
-                                                            expanded = isSortMenuExpanded,
-                                                            onDismissRequest = { isSortMenuExpanded = false },
-                                                            modifier = Modifier
-                                                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                                                .width(180.dp)
+                                            val categoryTitleRes = when(selectedCat) {
+                                                "currency" -> R.string.category_currency
+                                                "gold_and_coin" -> R.string.category_gold_and_coin
+                                                "crypto" -> R.string.category_crypto
+                                                else -> R.string.all_markets
+                                            }
+
+                                            item(key = "cat_header_$selectedCat") {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(horizontal = adaptiveDp(16f)),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    val title = stringResource(categoryTitleRes)
+                                                    Text(
+                                                        text = title,
+                                                        fontSize = 18.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onBackground,
+                                                        fontFamily = getFontFamilyForText(title)
+                                                    )
+
+                                                    var isSortMenuExpanded by remember { mutableStateOf(false) }
+                                                    val currentSortStringRes = when (bottomListSortOrder) {
+                                                        "profitable" -> R.string.sort_profitable
+                                                        "loss-making" -> R.string.sort_loss_making
+                                                        "custom" -> R.string.sort_custom
+                                                        else -> R.string.sort_default
+                                                    }
+                                                    val currentSortText = stringResource(currentSortStringRes)
+                                                    val rotationAngle by animateFloatAsState(
+                                                        targetValue = if (isSortMenuExpanded) 180f else 0f,
+                                                        animationSpec = motionScheme.defaultSpatialSpec(),
+                                                        label = "SortArrowRotation"
+                                                    )
+
+                                                    Box {
+                                                        val isSortActive = bottomListSortOrder != "default"
+                                                        Surface(
+                                                            onClick = { isSortMenuExpanded = true },
+                                                            shape = CircleShape,
+                                                            color = if (isSortActive) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                            contentColor = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                                                            tonalElevation = 2.dp,
+                                                            border = BorderStroke(1.dp, if (isSortActive) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                                                         ) {
-                                                            listOf(
-                                                                "default" to R.string.sort_default,
-                                                                "profitable" to R.string.sort_profitable,
-                                                                "loss-making" to R.string.sort_loss_making,
-                                                                "custom" to R.string.sort_custom
-                                                            ).forEach { (mode, stringRes) ->
-                                                                val isSelected = bottomListSortOrder == mode
-                                                                val itemText = stringResource(stringRes)
-                                                                DropdownMenuItem(
-                                                                    text = {
-                                                                        Text(
-                                                                            text = itemText,
-                                                                            fontSize = 13.sp,
-                                                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                                                            fontFamily = getFontFamilyForText(itemText)
+                                                            Row(
+                                                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.AutoMirrored.Filled.Sort,
+                                                                    contentDescription = "Sort",
+                                                                    tint = if (isSortActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary,
+                                                                    modifier = Modifier.size(16.dp)
+                                                                )
+                                                                Text(
+                                                                    text = currentSortText,
+                                                                    fontSize = 12.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                                                                    fontFamily = getFontFamilyForText(currentSortText)
+                                                                )
+                                                                if (bottomListSortOrder == "custom") {
+                                                                    Surface(
+                                                                        onClick = { isEditingCustomSort = !isEditingCustomSort },
+                                                                        shape = CircleShape,
+                                                                        color = if (isEditingCustomSort) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent,
+                                                                        modifier = Modifier.size(24.dp)
+                                                                    ) {
+                                                                        Icon(
+                                                                            imageVector = Icons.Default.Edit,
+                                                                            contentDescription = "Edit Custom Sort",
+                                                                            tint = if (isEditingCustomSort) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                            modifier = Modifier.padding(5.dp).size(14.dp)
                                                                         )
-                                                                    },
-                                                                    onClick = {
-                                                                        bottomListSortOrder = mode
-                                                                        isSortMenuExpanded = false
-                                                                    },
-                                                                    leadingIcon = {
-                                                                        if (isSelected) {
-                                                                            Icon(
-                                                                                imageVector = Icons.Default.Check,
-                                                                                contentDescription = "Selected",
-                                                                                tint = MaterialTheme.colorScheme.primary,
-                                                                                modifier = Modifier.size(18.dp)
-                                                                            )
-                                                                        } else {
-                                                                            Spacer(modifier = Modifier.size(18.dp))
-                                                                        }
-                                                                    },
+                                                                    }
+                                                                }
+                                                                Icon(
+                                                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                                                    contentDescription = null,
+                                                                    tint = if (isSortActive) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
                                                                     modifier = Modifier
-                                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                                        .clip(RoundedCornerShape(12.dp))
-                                                                        .then(
-                                                                            if (isSelected) {
-                                                                                Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f))
-                                                                            } else Modifier
-                                                                        )
+                                                                        .size(18.dp)
+                                                                        .graphicsLayer { rotationZ = rotationAngle }
                                                                 )
                                                             }
                                                         }
+
+                                                        MaterialTheme(
+                                                            shapes = MaterialTheme.shapes.copy(extraSmall = RoundedCornerShape(20.dp))
+                                                        ) {
+                                                            DropdownMenu(
+                                                                expanded = isSortMenuExpanded,
+                                                                onDismissRequest = { isSortMenuExpanded = false },
+                                                                modifier = Modifier
+                                                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                                                    .width(180.dp)
+                                                            ) {
+                                                                listOf(
+                                                                    "default" to R.string.sort_default,
+                                                                    "profitable" to R.string.sort_profitable,
+                                                                    "loss-making" to R.string.sort_loss_making,
+                                                                    "custom" to R.string.sort_custom
+                                                                ).forEach { (mode, stringRes) ->
+                                                                    val isSelected = bottomListSortOrder == mode
+                                                                    val itemText = stringResource(stringRes)
+                                                                    DropdownMenuItem(
+                                                                        text = {
+                                                                            Text(
+                                                                                text = itemText,
+                                                                                fontSize = 13.sp,
+                                                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                                                fontFamily = getFontFamilyForText(itemText)
+                                                                            )
+                                                                        },
+                                                                        onClick = {
+                                                                            bottomListSortOrder = mode
+                                                                            isSortMenuExpanded = false
+                                                                        },
+                                                                        leadingIcon = {
+                                                                            if (isSelected) {
+                                                                                Icon(
+                                                                                    imageVector = Icons.Default.Check,
+                                                                                    contentDescription = "Selected",
+                                                                                    tint = MaterialTheme.colorScheme.primary,
+                                                                                    modifier = Modifier.size(18.dp)
+                                                                                )
+                                                                            } else {
+                                                                                Spacer(modifier = Modifier.size(18.dp))
+                                                                            }
+                                                                        },
+                                                                        modifier = Modifier
+                                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                            .clip(RoundedCornerShape(12.dp))
+                                                                            .then(
+                                                                                if (isSelected) {
+                                                                                    Modifier.background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f))
+                                                                                } else Modifier
+                                                                            )
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
 
-                                        item { Spacer(modifier = Modifier.height(12.dp)) }
+                                            item { Spacer(modifier = Modifier.height(12.dp)) }
 
-                                        itemsIndexed(sortedItems, key = { _, item -> item.id }) { index, item ->
-                                            val isDragging = draggedItemId == item.id
-                                            var itemTopInWindow by remember { mutableStateOf(0f) }
-                                            
-                                            // Compensation offset to keep item under finger after swap
-                                            val dragOffset = if (isDragging && itemHeightPx > 0 && initialIndex != null) {
-                                                totalDragY - (index - initialIndex!!) * itemHeightPx
-                                            } else 0f
+                                            itemsIndexed(sortedItems, key = { _, item -> item.id }) { index, item ->
+                                                val isDragging = draggedItemId == item.id
+                                                var itemTopInWindow by remember { mutableStateOf(0f) }
 
-                                            Box(
-                                                modifier = Modifier
-                                                    .padding(horizontal = adaptiveDp(16f))
-                                                    .zIndex(if (isDragging) 100f else 1f)
-                                                    .graphicsLayer {
-                                                        if (isDragging) {
-                                                            translationY = dragOffset
-                                                            scaleX = 1.06f
-                                                            scaleY = 1.06f
-                                                            shadowElevation = 16.dp.toPx()
-                                                        } else {
-                                                            translationY = 0f
-                                                            scaleX = 1f
-                                                            scaleY = 1f
-                                                            shadowElevation = 0f
+                                                // Compensation offset to keep item under finger after swap
+                                                val dragOffset = if (isDragging && itemHeightPx > 0 && initialIndex != null) {
+                                                    totalDragY - (index - initialIndex!!) * itemHeightPx
+                                                } else 0f
+
+                                                Box(
+                                                    modifier = Modifier
+                                                        .padding(horizontal = adaptiveDp(16f))
+                                                        .zIndex(if (isDragging) 100f else 1f)
+                                                        .graphicsLayer {
+                                                            if (isDragging) {
+                                                                translationY = dragOffset
+                                                                scaleX = 1.06f
+                                                                scaleY = 1.06f
+                                                                shadowElevation = 16.dp.toPx()
+                                                            } else {
+                                                                translationY = 0f
+                                                                scaleX = 1f
+                                                                scaleY = 1f
+                                                                shadowElevation = 0f
+                                                            }
                                                         }
-                                                    }
-                                                    .animateItem()
-                                            ) {
-                                                AssetListItem(
-                                                    item = item,
-                                                    colorSchemeMode = colorSchemeMode,
-                                                    digitType = digitType,
-                                                    onClick = { selectedItemForDetail = item },
-                                                    onLongClick = { viewModel.hideCurrencyForItem(item.id) },
-                                                    isReordering = isEditingCustomSort,
-                                                    isDragging = isDragging,
-                                                    modifier = Modifier.pointerInput(item.id, isEditingCustomSort, bottomListSortOrder) {
-                                                        if (isEditingCustomSort && bottomListSortOrder == "custom") {
-                                                            detectDragGesturesAfterLongPress(
-                                                                onDragStart = { offset ->
-                                                                    HapticUtils.vibrate(context, HapticType.MEDIUM)
-                                                                    draggedItemId = item.id
-                                                                    initialIndex = currentSortedItemsState.value.indexOfFirst { it.id == item.id }
-                                                                    totalDragY = 0f
-                                                                    
-                                                                    pointerYInViewport = offset.y + (itemTopInWindow - listTopOnScreen)
-                                                                },
-                                                                onDrag = { change, dragAmount ->
-                                                                    change.consume()
-                                                                    totalDragY += dragAmount.y
-                                                                    
-                                                                    // Update pointer Y in viewport
-                                                                    pointerYInViewport += dragAmount.y
-                                                                    
-                                                                    if (itemHeightPx > 0) {
-                                                                        val latestList = currentSortedItemsState.value
-                                                                        val nowIdx = latestList.indexOfFirst { it.id == item.id }
-                                                                        val startIdx = initialIndex ?: nowIdx
-                                                                        
-                                                                        val targetIdx = (startIdx + (totalDragY / itemHeightPx).roundToInt()).coerceIn(0, latestList.lastIndex)
-                                                                        
-                                                                        if (targetIdx != nowIdx) {
-                                                                            HapticUtils.vibrate(context, HapticType.LIGHT)
-                                                                            val newList = currentMarketOrderState.value.toMutableList()
-                                                                            filteredItems.forEach { if (it.id !in newList) newList.add(it.id) }
-                                                                            
-                                                                            val id1 = item.id
-                                                                            val id2 = latestList[targetIdx].id
-                                                                            val idx1 = newList.indexOf(id1)
-                                                                            val idx2 = newList.indexOf(id2)
-                                                                            
-                                                                            if (idx1 != -1 && idx2 != -1) {
-                                                                                val tmp = newList[idx1]
-                                                                                newList[idx1] = newList[idx2]
-                                                                                newList[idx2] = tmp
-                                                                                marketCustomOrder = newList
+                                                        .animateItem()
+                                                ) {
+                                                    AssetListItem(
+                                                        item = item,
+                                                        colorSchemeMode = colorSchemeMode,
+                                                        digitType = digitType,
+                                                        onClick = { selectedItemForDetail = item },
+                                                        onLongClick = { viewModel.hideCurrencyForItem(item.id) },
+                                                        isReordering = isEditingCustomSort,
+                                                        isDragging = isDragging,
+                                                        modifier = Modifier.pointerInput(item.id, isEditingCustomSort, bottomListSortOrder) {
+                                                            if (isEditingCustomSort && bottomListSortOrder == "custom") {
+                                                                detectDragGesturesAfterLongPress(
+                                                                    onDragStart = { offset ->
+                                                                        HapticUtils.vibrate(context, HapticType.MEDIUM)
+                                                                        draggedItemId = item.id
+                                                                        initialIndex = currentSortedItemsState.value.indexOfFirst { it.id == item.id }
+                                                                        totalDragY = 0f
+
+                                                                        pointerYInViewport = offset.y + (itemTopInWindow - listTopOnScreen)
+                                                                    },
+                                                                    onDrag = { change, dragAmount ->
+                                                                        change.consume()
+                                                                        totalDragY += dragAmount.y
+
+                                                                        // Update pointer Y in viewport
+                                                                        pointerYInViewport += dragAmount.y
+
+                                                                        if (itemHeightPx > 0) {
+                                                                            val latestList = currentSortedItemsState.value
+                                                                            val nowIdx = latestList.indexOfFirst { it.id == item.id }
+                                                                            val startIdx = initialIndex ?: nowIdx
+
+                                                                            val targetIdx = (startIdx + (totalDragY / itemHeightPx).roundToInt()).coerceIn(0, latestList.lastIndex)
+
+                                                                            if (targetIdx != nowIdx) {
+                                                                                HapticUtils.vibrate(context, HapticType.LIGHT)
+                                                                                val newList = currentMarketOrderState.value.toMutableList()
+                                                                                filteredItems.forEach { if (it.id !in newList) newList.add(it.id) }
+
+                                                                                val id1 = item.id
+                                                                                val id2 = latestList[targetIdx].id
+                                                                                val idx1 = newList.indexOf(id1)
+                                                                                val idx2 = newList.indexOf(id2)
+
+                                                                                if (idx1 != -1 && idx2 != -1) {
+                                                                                    val tmp = newList[idx1]
+                                                                                    newList[idx1] = newList[idx2]
+                                                                                    newList[idx2] = tmp
+                                                                                    marketCustomOrder = newList
+                                                                                }
                                                                             }
                                                                         }
+                                                                    },
+                                                                    onDragEnd = {
+                                                                        sharedPrefs.edit().putString("market_custom_order", marketCustomOrder.joinToString(",")).apply()
+                                                                        draggedItemId = null
+                                                                        initialIndex = null
+                                                                        totalDragY = 0f
+                                                                        pointerYInViewport = 0f
+                                                                        HapticUtils.vibrate(context, HapticType.SUCCESS)
+                                                                    },
+                                                                    onDragCancel = {
+                                                                        draggedItemId = null
+                                                                        initialIndex = null
+                                                                        totalDragY = 0f
+                                                                        pointerYInViewport = 0f
                                                                     }
-                                                                },
-                                                                onDragEnd = {
-                                                                    sharedPrefs.edit().putString("market_custom_order", marketCustomOrder.joinToString(",")).apply()
-                                                                    draggedItemId = null
-                                                                    initialIndex = null
-                                                                    totalDragY = 0f
-                                                                    pointerYInViewport = 0f
-                                                                    HapticUtils.vibrate(context, HapticType.SUCCESS)
-                                                                },
-                                                                onDragCancel = {
-                                                                    draggedItemId = null
-                                                                    initialIndex = null
-                                                                    totalDragY = 0f
-                                                                    pointerYInViewport = 0f
+                                                                )
+                                                            }
+                                                        }
+                                                            .onGloballyPositioned { coords ->
+                                                                itemTopInWindow = coords.localToWindow(Offset.Zero).y
+                                                                if (itemHeightPx == 0f || !isDragging) {
+                                                                    itemHeightPx = coords.size.height.toFloat() + with(density) { 8.dp.toPx() }
                                                                 }
-                                                            )
+                                                            }
+                                                    )
+                                                }
+                                                if (index < sortedItems.size - 1) {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                }
+                                            }
+                                            item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
+                                        }
+                                    }
+                                } else if (screen == "news") {
+                                    com.mmdparsadev.cheghad.ui.NewsScreen(
+                                        innerPadding = innerPadding,
+                                        digitType = digitType,
+                                        newsArticles = uiState.newsArticles,
+                                        isRefreshing = uiState.isNewsLoading,
+                                        onRefresh = { viewModel.fetchNews(disabledNewsAgencies, userSettings.newsEnabled) },
+                                        disabledCategories = disabledNewsCategories,
+                                        disabledAgencies = disabledNewsAgencies,
+                                        newsEnabled = userSettings.newsEnabled,
+                                        onOpenAgenciesSettings = {
+                                            settingsViewModel.setNewsEnabled(true)
+                                            showAgenciesSheet = true
+                                            currentScreen = "settings"
+                                        }
+                                    )
+                                } else if (screen == "calculator") {
+                                    CurrencyCalculatorScreen(
+                                        items = uiState.items,
+                                        digitType = digitType,
+                                        innerPadding = innerPadding
+                                    )
+                                } else if (screen == "settings") {
+                                    SettingsScreen(
+                                        innerPadding = innerPadding,
+                                        onLanguageSelected = { langCode ->
+                                            val newDigitType = if (langCode == "en") "en" else "fa"
+                                            settingsViewModel.setDigitType(newDigitType)
+                                            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(langCode))
+                                        },
+                                        appThemeMode = appThemeMode,
+                                        onThemeSelected = { settingsViewModel.setThemeMode(it) },
+                                        calendarType = calendarType,
+                                        onCalendarSelected = { settingsViewModel.setCalendarType(it) },
+                                        colorSchemeMode = colorSchemeMode,
+                                        onColorSchemeSelected = { settingsViewModel.setColorSchemeMode(it) },
+                                        colorSeedName = colorSeedName,
+                                        onColorSeedSelected = { settingsViewModel.setColorSeed(it) },
+                                        digitType = digitType,
+                                        onDigitTypeSelected = { settingsViewModel.setDigitType(it) },
+                                        timeRangeOrder = timeRangeOrder,
+                                        onTimeRangeOrderChanged = { newOrder ->
+                                            timeRangeOrder = newOrder
+                                            sharedPrefs.edit().putString("time_range_order", newOrder.joinToString(",") { it.id }).apply()
+                                        },
+                                        disabledNewsCategories = disabledNewsCategories,
+                                        onDisabledNewsCategoriesChanged = { newSet ->
+                                            disabledNewsCategories = newSet
+                                            sharedPrefs.edit().putStringSet("disabled_news_categories", newSet).apply()
+                                        },
+                                        disabledNewsAgencies = disabledNewsAgencies,
+                                        onDisabledNewsAgenciesChanged = { newSet ->
+                                            disabledNewsAgencies = newSet
+                                            sharedPrefs.edit().putStringSet("disabled_news_agencies", newSet).apply()
+                                        },
+                                        newsEnabled = userSettings.newsEnabled,
+                                        onNewsEnabledChanged = { settingsViewModel.setNewsEnabled(it) },
+                                        showAgenciesSheet = showAgenciesSheet,
+                                        onShowAgenciesSheetChanged = { showAgenciesSheet = it },
+                                        isCheckingUpdates = isCheckingUpdatesManually,
+                                        onCheckForUpdates = {
+                                            isCheckingUpdatesManually = true
+                                            coroutineScope.launch {
+                                                val currentVersion = BuildConfig.VERSION_NAME
+                                                val result = UpdateManager.checkForUpdate(currentVersion, userSettings.downloadBetaVersions)
+                                                isCheckingUpdatesManually = false
+                                                result.fold(
+                                                    onSuccess = { release ->
+                                                        if (release != null) {
+                                                            availableUpdateRelease = release
+                                                            UpdateWorker.sendUpdateNotification(context, release)
+                                                        } else {
+                                                            Toast.makeText(context, "شما از آخرین نسخه برنامه ($currentVersion) استفاده می‌کنید.", Toast.LENGTH_LONG).show()
                                                         }
-                                                    }
-                                                    .onGloballyPositioned { coords ->
-                                                        itemTopInWindow = coords.localToWindow(Offset.Zero).y
-                                                        if (itemHeightPx == 0f || !isDragging) {
-                                                            itemHeightPx = coords.size.height.toFloat() + with(density) { 8.dp.toPx() }
-                                                        }
+                                                    },
+                                                    onFailure = {
+                                                        Toast.makeText(context, "خطا در برقراری ارتباط با گیت‌هاب", Toast.LENGTH_SHORT).show()
                                                     }
                                                 )
                                             }
-                                            if (index < sortedItems.size - 1) {
-                                                Spacer(modifier = Modifier.height(8.dp))
-                                            }
+                                        },
+                                        downloadBetaVersions = userSettings.downloadBetaVersions,
+                                        onDownloadBetaVersionsChanged = { settingsViewModel.setDownloadBetaVersions(it) },
+                                        lockscreenWidgetCurrencyId = userSettings.lockscreenWidgetCurrencyId,
+                                        onLockscreenWidgetCurrencySelected = { settingsViewModel.setLockscreenWidgetCurrencyId(it) },
+                                        lockscreenWidgetTheme = userSettings.lockscreenWidgetTheme,
+                                        onLockscreenWidgetThemeSelected = { settingsViewModel.setLockscreenWidgetTheme(it) },
+                                        allCurrencies = uiState.items
+                                    )
+                                } else {
+                                    // Alarms screen
+                                    AlarmsScreen(
+                                        alarms = uiState.alarms,
+                                        innerPadding = innerPadding,
+                                        colorSchemeMode = colorSchemeMode,
+                                        digitType = digitType,
+                                        onDeleteAlarm = { alarm ->
+                                            viewModel.deleteAlarm(alarm)
+                                        },
+                                        onEditAlarm = { alarm ->
+                                            selectedAlarmForEdit = alarm
                                         }
-                                        item { Spacer(modifier = Modifier.height(adaptiveDp(16f))) }
-                                    }
+                                    )
                                 }
-                            } else if (screen == "news") {
-                                com.mmdparsadev.cheghad.ui.NewsScreen(
-                                    innerPadding = innerPadding,
-                                    digitType = digitType,
-                                    newsArticles = uiState.newsArticles,
-                                    isRefreshing = uiState.isNewsLoading,
-                                    onRefresh = { viewModel.fetchNews(disabledNewsAgencies, userSettings.newsEnabled) },
-                                    disabledCategories = disabledNewsCategories,
-                                    disabledAgencies = disabledNewsAgencies,
-                                    newsEnabled = userSettings.newsEnabled,
-                                    onOpenAgenciesSettings = {
-                                        settingsViewModel.setNewsEnabled(true)
-                                        showAgenciesSheet = true
-                                        currentScreen = "settings"
-                                    }
-                                )
-                            } else if (screen == "calculator") {
-                                CurrencyCalculatorScreen(
-                                    items = uiState.items,
-                                    digitType = digitType,
-                                    innerPadding = innerPadding
-                                )
-                            } else if (screen == "settings") {
-                                SettingsScreen(
-                                    innerPadding = innerPadding,
-                                    onLanguageSelected = { langCode ->
-                                        val newDigitType = if (langCode == "en") "en" else "fa"
-                                        settingsViewModel.setDigitType(newDigitType)
-                                        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(langCode))
-                                    },
-                                    appThemeMode = appThemeMode,
-                                    onThemeSelected = { settingsViewModel.setThemeMode(it) },
-                                    calendarType = calendarType,
-                                    onCalendarSelected = { settingsViewModel.setCalendarType(it) },
-                                    colorSchemeMode = colorSchemeMode,
-                                    onColorSchemeSelected = { settingsViewModel.setColorSchemeMode(it) },
-                                    colorSeedName = colorSeedName,
-                                    onColorSeedSelected = { settingsViewModel.setColorSeed(it) },
-                                    digitType = digitType,
-                                    onDigitTypeSelected = { settingsViewModel.setDigitType(it) },
-                                    timeRangeOrder = timeRangeOrder,
-                                    onTimeRangeOrderChanged = { newOrder ->
-                                        timeRangeOrder = newOrder
-                                        sharedPrefs.edit().putString("time_range_order", newOrder.joinToString(",") { it.id }).apply()
-                                    },
-                                    disabledNewsCategories = disabledNewsCategories,
-                                    onDisabledNewsCategoriesChanged = { newSet ->
-                                        disabledNewsCategories = newSet
-                                        sharedPrefs.edit().putStringSet("disabled_news_categories", newSet).apply()
-                                    },
-                                    disabledNewsAgencies = disabledNewsAgencies,
-                                    onDisabledNewsAgenciesChanged = { newSet ->
-                                        disabledNewsAgencies = newSet
-                                        sharedPrefs.edit().putStringSet("disabled_news_agencies", newSet).apply()
-                                    },
-                                    newsEnabled = userSettings.newsEnabled,
-                                    onNewsEnabledChanged = { settingsViewModel.setNewsEnabled(it) },
-                                    showAgenciesSheet = showAgenciesSheet,
-                                    onShowAgenciesSheetChanged = { showAgenciesSheet = it },
-                                    isCheckingUpdates = isCheckingUpdatesManually,
-                                    onCheckForUpdates = {
-                                        isCheckingUpdatesManually = true
-                                        coroutineScope.launch {
-                                            val currentVersion = BuildConfig.VERSION_NAME
-                                            val result = UpdateManager.checkForUpdate(currentVersion, userSettings.downloadBetaVersions)
-                                            isCheckingUpdatesManually = false
-                                            result.fold(
-                                                onSuccess = { release ->
-                                                    if (release != null) {
-                                                        availableUpdateRelease = release
-                                                        UpdateWorker.sendUpdateNotification(context, release)
-                                                    } else {
-                                                        Toast.makeText(context, "شما از آخرین نسخه برنامه ($currentVersion) استفاده می‌کنید.", Toast.LENGTH_LONG).show()
-                                                    }
-                                                },
-                                                onFailure = {
-                                                    Toast.makeText(context, "خطا در برقراری ارتباط با گیت‌هاب", Toast.LENGTH_SHORT).show()
-                                                }
-                                            )
-                                        }
-                                    },
-                                    downloadBetaVersions = userSettings.downloadBetaVersions,
-                                    onDownloadBetaVersionsChanged = { settingsViewModel.setDownloadBetaVersions(it) },
-                                    lockscreenWidgetCurrencyId = userSettings.lockscreenWidgetCurrencyId,
-                                    onLockscreenWidgetCurrencySelected = { settingsViewModel.setLockscreenWidgetCurrencyId(it) },
-                                    lockscreenWidgetTheme = userSettings.lockscreenWidgetTheme,
-                                    onLockscreenWidgetThemeSelected = { settingsViewModel.setLockscreenWidgetTheme(it) },
-                                    allCurrencies = uiState.items
-                                )
-                            } else {
-                                // Alarms screen
-                                AlarmsScreen(
-                                    alarms = uiState.alarms,
-                                    innerPadding = innerPadding,
-                                    colorSchemeMode = colorSchemeMode,
-                                    digitType = digitType,
-                                    onDeleteAlarm = { alarm ->
-                                        viewModel.deleteAlarm(alarm)
-                                    },
-                                    onEditAlarm = { alarm ->
-                                        selectedAlarmForEdit = alarm
-                                    }
-                                )
                             }
                         }
                     }
-                }
 
-                // Detail view Dialog
-                selectedItemForDetail?.let { item ->
-                    AssetDetailDialog(
-                        item = item,
-                        timeRangeOrder = timeRangeOrder,
-                        historyPoints = uiState.historyPoints[item.symbol] ?: emptyList(),
-                        isHistoryLoading = uiState.isHistoryLoading,
-                        calendarType = calendarType,
-                        colorSchemeMode = colorSchemeMode,
-                        digitType = digitType,
-                        onFetchHistory = { range -> viewModel.fetchHistory(item.symbol, range.id, item.currentPrice, item.changePercentage) },
-                        onDismiss = { selectedItemForDetail = null },
-                        onSaveAlarm = { price, isAbove ->
-                            viewModel.addAlarm(
-                                symbol = item.symbol,
-                                title = item.title,
-                                targetPrice = price,
-                                isAbove = isAbove
-                            )
-                            selectedItemForDetail = null
-                            Toast.makeText(context, context.getString(R.string.alarm_created_success), Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
+                    // Detail view Dialog
+                    selectedItemForDetail?.let { item ->
+                        AssetDetailDialog(
+                            item = item,
+                            timeRangeOrder = timeRangeOrder,
+                            historyPoints = uiState.historyPoints[item.symbol] ?: emptyList(),
+                            isHistoryLoading = uiState.isHistoryLoading,
+                            calendarType = calendarType,
+                            colorSchemeMode = colorSchemeMode,
+                            digitType = digitType,
+                            onFetchHistory = { range -> viewModel.fetchHistory(item.symbol, range.id, item.currentPrice, item.changePercentage) },
+                            onDismiss = { selectedItemForDetail = null },
+                            onSaveAlarm = { price, isAbove ->
+                                viewModel.addAlarm(
+                                    symbol = item.symbol,
+                                    title = item.title,
+                                    targetPrice = price,
+                                    isAbove = isAbove
+                                )
+                                selectedItemForDetail = null
+                                Toast.makeText(context, context.getString(R.string.alarm_created_success), Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
 
-                // Edit alarm Dialog
-                selectedAlarmForEdit?.let { alarm ->
-                    EditAlarmDialog(
-                        alarm = alarm,
-                        onDismiss = { selectedAlarmForEdit = null },
-                        onSaveAlarm = { updatedAlarm ->
-                            viewModel.updateAlarm(updatedAlarm)
-                            selectedAlarmForEdit = null
-                            Toast.makeText(context, context.getString(R.string.toast_settings_saved), Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                }
+                    // Edit alarm Dialog
+                    selectedAlarmForEdit?.let { alarm ->
+                        EditAlarmDialog(
+                            alarm = alarm,
+                            onDismiss = { selectedAlarmForEdit = null },
+                            onSaveAlarm = { updatedAlarm ->
+                                viewModel.updateAlarm(updatedAlarm)
+                                selectedAlarmForEdit = null
+                                Toast.makeText(context, context.getString(R.string.toast_settings_saved), Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
 
-                // Update Dialog
-                availableUpdateRelease?.let { release ->
-                    UpdateDialog(
-                        release = release,
-                        digitType = digitType,
-                        onDismiss = { availableUpdateRelease = null }
-                    )
+                    // Update Dialog
+                    availableUpdateRelease?.let { release ->
+                        UpdateDialog(
+                            release = release,
+                            digitType = digitType,
+                            onDismiss = { availableUpdateRelease = null }
+                        )
+                    }
                 }
             }
         }
     }
-}
 
     private fun setupBackgroundSync() {
         try {
@@ -1200,7 +1286,12 @@ fun AutoResizingText(
             } else {
                 readyToDraw = true
             }
-        }
+        },
+        style = LocalTextStyle.current.merge(
+            TextStyle(
+                platformStyle = PlatformTextStyle(includeFontPadding = false)
+            )
+        )
     )
 }
 
@@ -1470,9 +1561,9 @@ fun CategoryChips(
         modifier = modifier,
         itemsCount = categories.size,
         selectedIndex = selectedIndex,
-        onSelect = { 
+        onSelect = {
             HapticUtils.vibrate(context, HapticType.LIGHT)
-            onCategorySelected(categories[it]) 
+            onCategorySelected(categories[it])
         },
         spacing = 4.dp,
         height = 42.dp
@@ -1494,9 +1585,9 @@ fun Chip(text: String, selected: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .clip(CircleShape)
             .background(backgroundColor)
-            .clickable { 
+            .clickable {
                 HapticUtils.vibrate(context, HapticType.LIGHT)
-                onClick() 
+                onClick()
             }
             .padding(horizontal = 20.dp, vertical = 8.dp)
             .animateContentSize(),
@@ -1530,9 +1621,11 @@ fun RenderCard(
     colorSchemeMode: String,
     upColor: Color,
     downColor: Color,
-    coloredCardsMode: Boolean
+    coloredCardsMode: Boolean,
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
     val motionScheme = MaterialTheme.motionScheme
     if (style == "hero" && isMerged) {
         val usdChange = item?.changePercentage ?: 0.0
@@ -1617,22 +1710,30 @@ fun RenderCard(
         )
 
         Box(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(adaptiveDp(32f)))
                 .background(heroBgColor)
                 .border(adaptiveDp(1f), heroBorderColor, RoundedCornerShape(adaptiveDp(32f)))
-                .clickable { 
-                if (!isEditing) { 
-                    item?.let { 
-                        HapticUtils.vibrate(context, HapticType.LIGHT)
-                        onClickItem(it) 
-                    } 
-                } 
-            }
-                .padding(adaptiveDp(24f))
+                .clickable {
+                    if (!isEditing) {
+                        item?.let {
+                            HapticUtils.vibrate(context, HapticType.LIGHT)
+                            onClickItem(it)
+                        }
+                    }
+                }
+                .padding(
+                    top = adaptiveDp(22f),
+                    bottom = if (isTv) adaptiveDp(54f) else adaptiveDp(24f),
+                    start = adaptiveDp(24f),
+                    end = adaptiveDp(24f)
+                )
         ) {
-            Column {
+            Column(
+                modifier = if (isTv) Modifier.fillMaxHeight() else Modifier,
+                verticalArrangement = if (isTv) Arrangement.SpaceBetween else Arrangement.Top
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1679,7 +1780,9 @@ fun RenderCard(
                         }
                     }
                 }
-                Spacer(modifier = Modifier.height(adaptiveDp(20f)))
+                
+                if (!isTv) Spacer(modifier = Modifier.height(adaptiveDp(20f)))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Start,
@@ -1702,6 +1805,8 @@ fun RenderCard(
                     Spacer(modifier = Modifier.width(adaptiveDp(6f)))
                     Text(unitStr, fontSize = adaptiveSp(17f), fontWeight = FontWeight.Medium, color = heroContentColor.copy(alpha = 0.7f), modifier = Modifier.alignByBaseline(), fontFamily = getFontFamilyForText(unitStr))
                 }
+                
+                if (isTv) Spacer(modifier = Modifier.height(adaptiveDp(8f)))
             }
         }
     } else if (style == "small" && !isMerged) {
@@ -1765,14 +1870,14 @@ fun RenderCard(
         )
 
         SmallCard(
-            modifier = Modifier.fillMaxWidth().clickable { 
-        if (!isEditing) { 
-            item?.let { 
-                HapticUtils.vibrate(context, HapticType.LIGHT)
-                onClickItem(it) 
-            } 
-        } 
-    },
+            modifier = modifier.fillMaxWidth().clickable {
+                if (!isEditing) {
+                    item?.let {
+                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                        onClickItem(it)
+                    }
+                }
+            },
             icon = iconStr,
             value = if (item != null) formatPrice(item.currentPrice, digitType, item.symbol) else "------",
             trend = if (item != null) formatPercent(item.changePercentage, digitType) else "------",
@@ -1848,14 +1953,14 @@ fun RenderCard(
         )
 
         SecondaryCard(
-            modifier = Modifier.fillMaxWidth().clickable { 
-        if (!isEditing) { 
-            item?.let { 
-                HapticUtils.vibrate(context, HapticType.LIGHT)
-                onClickItem(it) 
-            } 
-        } 
-    },
+            modifier = modifier.fillMaxWidth().clickable {
+                if (!isEditing) {
+                    item?.let {
+                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                        onClickItem(it)
+                    }
+                }
+            },
             title = getLocalizedTitle(item?.symbol ?: "GOLD", item?.title ?: "سکه امامی"),
             subtitle = if (item?.symbol == "GOLD") {
                 if (isEngCard) "Emami Coin / New Design" else "سکه امامی / طرح جدید"
@@ -2002,10 +2107,10 @@ fun BentoGrid(
     ) {
         val motionScheme = MaterialTheme.motionScheme
         val isDragging = draggedIndex == slotIndex
-        
+
         // Calculate where the item should be visually
         val targetDisplacement = if (isDragging) dragOffset else (itemDisplacements[symbol ?: ""] ?: Offset.Zero)
-        
+
         val animatedOffset by animateOffsetAsState(
             targetValue = targetDisplacement,
             animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioLowBouncy),
@@ -2028,7 +2133,7 @@ fun BentoGrid(
                 .graphicsLayer {
                     translationX = animatedOffset.x
                     translationY = animatedOffset.y
-                    
+
                     if (isDragging) {
                         scaleX = 1.08f
                         scaleY = 1.08f
@@ -2149,20 +2254,20 @@ fun BentoGrid(
                                                         val newList = finalHomeSymbols.toMutableList()
                                                         val idDragged = newList[activeDraggedIndex]
                                                         val idOther = newList[j]
-                                                        
+
                                                         newList[activeDraggedIndex] = idOther
                                                         newList[j] = idDragged
-                                                        
+
                                                         val originalCenterI = otherBounds.center
                                                         val originalCenterJ = draggedBounds.center
                                                         val jumpOffset = originalCenterI - originalCenterJ
-                                                        
+
                                                         // Important: Give the 'other' item a displacement so it can animate back
                                                         itemDisplacements[idOther] = -jumpOffset
-                                                        
+
                                                         // Adjust dragged item offset to keep it under finger
                                                         dragOffset -= jumpOffset
-                                                        
+
                                                         HapticUtils.vibrate(context, HapticType.LIGHT)
                                                         onSymbolsChanged(newList)
                                                         draggedIndex = j
@@ -2304,57 +2409,199 @@ fun BentoGrid(
                     },
                     label = "RowMergeTransition"
                 ) { isMergedState ->
-                    if (isMergedState) {
-                        val slotIdx = slots.getOrNull(0) ?: 0
-                        val symbol = finalHomeSymbols.getOrNull(slotIdx)
-                        val item = items.find { it.symbol == symbol }
+                    val isTv = isTvDevice()
+                    if (isTv) {
+                        // چیدمان مخصوص اندروید تی‌وی: ردیف اول (بزرگ) در سمت راست/کنار و ردیف‌های دوم و سوم در جلو (سمت چپ) به صورت ستونی
+                        if (rowConfig.id == 1) {
+                            // ردیف اول بزرگ سمت راست قرار می‌گیرد
+                            Row(
+                                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Max),
+                                horizontalArrangement = Arrangement.spacedBy(adaptiveDp(16f)),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // کادر اصلی بزرگ ردیف اول
+                                Box(modifier = Modifier.weight(1.2f).fillMaxHeight()) {
+                                    if (isMergedState) {
+                                        val slotIdx = slots.getOrNull(0) ?: 0
+                                        val symbol = finalHomeSymbols.getOrNull(slotIdx)
+                                        val item = items.find { it.symbol == symbol }
+                                        DraggableCardContainer(
+                                            slotIndex = slotIdx,
+                                            symbol = symbol,
+                                            shape = RoundedCornerShape(adaptiveDp(28f)),
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            RenderCard(
+                                                style = rowConfig.style,
+                                                item = item,
+                                                isMerged = true,
+                                                onClickItem = onClickItem,
+                                                isEditing = isEditing,
+                                                digitType = digitType,
+                                                colorSchemeMode = colorSchemeMode,
+                                                upColor = upColor,
+                                                downColor = downColor,
+                                                coloredCardsMode = rowConfig.isColored,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
+                                    } else {
+                                        Row(
+                                            modifier = Modifier.fillMaxSize().height(IntrinsicSize.Max),
+                                            horizontalArrangement = Arrangement.spacedBy(adaptiveDp(12f))
+                                        ) {
+                                            slots.forEach { slotIdx ->
+                                                val symbol = finalHomeSymbols.getOrNull(slotIdx)
+                                                val item = items.find { it.symbol == symbol }
+                                                DraggableCardContainer(
+                                                    slotIndex = slotIdx,
+                                                    symbol = symbol,
+                                                    shape = RoundedCornerShape(adaptiveDp(28f)),
+                                                    modifier = Modifier.weight(1f).fillMaxHeight()
+                                                ) {
+                                                    RenderCard(
+                                                        style = rowConfig.style,
+                                                        item = item,
+                                                        isMerged = false,
+                                                        onClickItem = onClickItem,
+                                                        isEditing = isEditing,
+                                                        digitType = digitType,
+                                                        colorSchemeMode = colorSchemeMode,
+                                                        upColor = upColor,
+                                                        downColor = downColor,
+                                                        coloredCardsMode = rowConfig.isColored,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
 
-                        DraggableCardContainer(
-                            slotIndex = slotIdx,
-                            symbol = symbol,
-                            shape = RoundedCornerShape(adaptiveDp(28f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            RenderCard(
-                                style = rowConfig.style,
-                                item = item,
-                                isMerged = true,
-                                onClickItem = onClickItem,
-                                isEditing = isEditing,
-                                digitType = digitType,
-                                colorSchemeMode = colorSchemeMode,
-                                upColor = upColor,
-                                downColor = downColor,
-                                coloredCardsMode = rowConfig.isColored
-                            )
+                                // ردیف‌های دوم و سوم در کنار آن به صورت ستونی چیده می‌شوند
+                                Column(
+                                    modifier = Modifier.weight(1.8f).fillMaxHeight(),
+                                    verticalArrangement = Arrangement.spacedBy(adaptiveDp(12f))
+                                ) {
+                                    // نمایش کارت‌های ردیف ۲ و ۳ به صورت افقی/جلوتر
+                                    rowsConfig.filter { it.id > 1 }.forEach { subRow ->
+                                        val subSlots = slotIndices.getOrNull(subRow.id - 1) ?: emptyList()
+                                        if (subRow.isMerged) {
+                                            val slotIdx = subSlots.getOrNull(0) ?: 0
+                                            val symbol = finalHomeSymbols.getOrNull(slotIdx)
+                                            val item = items.find { it.symbol == symbol }
+                                            DraggableCardContainer(
+                                                slotIndex = slotIdx,
+                                                symbol = symbol,
+                                                shape = RoundedCornerShape(adaptiveDp(28f)),
+                                                modifier = Modifier.fillMaxWidth().weight(1f)
+                                            ) {
+                                                RenderCard(
+                                                    style = subRow.style,
+                                                    item = item,
+                                                    isMerged = true,
+                                                    onClickItem = onClickItem,
+                                                    isEditing = isEditing,
+                                                    digitType = digitType,
+                                                    colorSchemeMode = colorSchemeMode,
+                                                    upColor = upColor,
+                                                    downColor = downColor,
+                                                    coloredCardsMode = subRow.isColored,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                        } else {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().weight(1f).height(IntrinsicSize.Max),
+                                                horizontalArrangement = Arrangement.spacedBy(adaptiveDp(12f))
+                                            ) {
+                                                subSlots.forEach { slotIdx ->
+                                                    val symbol = finalHomeSymbols.getOrNull(slotIdx)
+                                                    val item = items.find { it.symbol == symbol }
+                                                    DraggableCardContainer(
+                                                        slotIndex = slotIdx,
+                                                        symbol = symbol,
+                                                        shape = RoundedCornerShape(adaptiveDp(28f)),
+                                                        modifier = Modifier.weight(1f).fillMaxHeight()
+                                                    ) {
+                                                        RenderCard(
+                                                            style = subRow.style,
+                                                            item = item,
+                                                            isMerged = false,
+                                                            onClickItem = onClickItem,
+                                                            isEditing = isEditing,
+                                                            digitType = digitType,
+                                                            colorSchemeMode = colorSchemeMode,
+                                                            upColor = upColor,
+                                                            downColor = downColor,
+                                                            coloredCardsMode = subRow.isColored,
+                                                            modifier = Modifier.fillMaxSize()
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            // ردیف‌های ۲ و ۳ چون در ستون کنار ردیف اول رندر شدند، اینجا خالی می‌مانند تا تکرار نشوند
+                            Spacer(modifier = Modifier.height(0.dp))
                         }
                     } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(adaptiveDp(12f))
-                        ) {
-                            slots.forEach { slotIdx ->
-                                val symbol = finalHomeSymbols.getOrNull(slotIdx)
-                                val item = items.find { it.symbol == symbol }
+                        // حالت موبایل استاندارد
+                        if (isMergedState) {
+                            val slotIdx = slots.getOrNull(0) ?: 0
+                            val symbol = finalHomeSymbols.getOrNull(slotIdx)
+                            val item = items.find { it.symbol == symbol }
 
-                                DraggableCardContainer(
-                                    slotIndex = slotIdx,
-                                    symbol = symbol,
-                                    shape = RoundedCornerShape(adaptiveDp(28f)),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    RenderCard(
-                                        style = rowConfig.style,
-                                        item = item,
-                                        isMerged = false,
-                                        onClickItem = onClickItem,
-                                        isEditing = isEditing,
-                                        digitType = digitType,
-                                        colorSchemeMode = colorSchemeMode,
-                                        upColor = upColor,
-                                        downColor = downColor,
-                                        coloredCardsMode = rowConfig.isColored
-                                    )
+                            DraggableCardContainer(
+                                slotIndex = slotIdx,
+                                symbol = symbol,
+                                shape = RoundedCornerShape(adaptiveDp(28f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                RenderCard(
+                                    style = rowConfig.style,
+                                    item = item,
+                                    isMerged = true,
+                                    onClickItem = onClickItem,
+                                    isEditing = isEditing,
+                                    digitType = digitType,
+                                    colorSchemeMode = colorSchemeMode,
+                                    upColor = upColor,
+                                    downColor = downColor,
+                                    coloredCardsMode = rowConfig.isColored
+                                )
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(adaptiveDp(12f))
+                            ) {
+                                slots.forEach { slotIdx ->
+                                    val symbol = finalHomeSymbols.getOrNull(slotIdx)
+                                    val item = items.find { it.symbol == symbol }
+
+                                    DraggableCardContainer(
+                                        slotIndex = slotIdx,
+                                        symbol = symbol,
+                                        shape = RoundedCornerShape(adaptiveDp(28f)),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        RenderCard(
+                                            style = rowConfig.style,
+                                            item = item,
+                                            isMerged = false,
+                                            onClickItem = onClickItem,
+                                            isEditing = isEditing,
+                                            digitType = digitType,
+                                            colorSchemeMode = colorSchemeMode,
+                                            upColor = upColor,
+                                            downColor = downColor,
+                                            coloredCardsMode = rowConfig.isColored
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -2486,15 +2733,24 @@ fun SecondaryCard(
     contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
     borderColor: Color = Color.Transparent
 ) {
+    val isTv = isTvDevice()
     val motionScheme = MaterialTheme.motionScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(adaptiveDp(28f)))
             .background(backgroundColor)
             .border(adaptiveDp(1f), borderColor, RoundedCornerShape(adaptiveDp(28f)))
-            .padding(adaptiveDp(20f))
+            .padding(
+                top = adaptiveDp(18f),
+                bottom = if (isTv) adaptiveDp(44f) else adaptiveDp(22f),
+                start = adaptiveDp(20f),
+                end = adaptiveDp(20f)
+            )
     ) {
-        Column {
+        Column(
+            modifier = if (isTv) Modifier.fillMaxHeight() else Modifier,
+            verticalArrangement = if (isTv) Arrangement.SpaceBetween else Arrangement.Top
+        ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(title, fontSize = adaptiveSp(14f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(title))
                 androidx.compose.animation.AnimatedContent(
@@ -2509,20 +2765,26 @@ fun SecondaryCard(
                     AutoResizingText(trnd, fontSize = adaptiveSp(14f), fontWeight = FontWeight.Black, color = trendColor, fontFamily = getFontFamilyForText(trnd), modifier = Modifier.weight(1f, fill = false))
                 }
             }
-            Spacer(modifier = Modifier.height(adaptiveDp(18f)))
-            androidx.compose.animation.AnimatedContent(
-                targetState = value,
-                transitionSpec = {
-                    androidx.compose.animation.fadeIn(motionScheme.defaultEffectsSpec()).togetherWith(
-                        androidx.compose.animation.fadeOut(motionScheme.defaultEffectsSpec())
-                    )
-                },
-                label = "ValueAnim"
-            ) { valStr ->
-                AutoResizingText(valStr, fontSize = adaptiveSp(18f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(valStr))
+
+            if (!isTv) Spacer(modifier = Modifier.height(adaptiveDp(18f)))
+
+            Column {
+                AnimatedContent(
+                    targetState = value,
+                    transitionSpec = {
+                        fadeIn(motionScheme.defaultEffectsSpec()).togetherWith(
+                            fadeOut(motionScheme.defaultEffectsSpec())
+                        )
+                    },
+                    label = "ValueAnim"
+                ) { valStr ->
+                    AutoResizingText(valStr, fontSize = adaptiveSp(18f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(valStr))
+                }
+                Spacer(modifier = Modifier.height(adaptiveDp(2f)))
+                Text(subtitle, fontSize = adaptiveSp(11f), fontWeight = FontWeight.Medium, color = contentColor.copy(alpha = 0.7f), fontFamily = getFontFamilyForText(subtitle))
             }
-            Spacer(modifier = Modifier.height(adaptiveDp(2f)))
-            Text(subtitle, fontSize = adaptiveSp(11f), fontWeight = FontWeight.Medium, color = contentColor.copy(alpha = 0.7f), fontFamily = getFontFamilyForText(subtitle))
+            
+            if (isTv) Spacer(modifier = Modifier.height(adaptiveDp(6f)))
         }
     }
 }
@@ -2538,38 +2800,51 @@ fun SmallCard(
     contentColor: Color = MaterialTheme.colorScheme.onBackground,
     borderColor: Color = MaterialTheme.colorScheme.outlineVariant
 ) {
+    val isTv = isTvDevice()
     val motionScheme = MaterialTheme.motionScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(adaptiveDp(28f)))
             .background(backgroundColor)
             .border(adaptiveDp(1f), borderColor, RoundedCornerShape(adaptiveDp(28f)))
-            .padding(adaptiveDp(18f))
+            .padding(
+                top = adaptiveDp(16f),
+                bottom = if (isTv) adaptiveDp(42f) else adaptiveDp(20f),
+                start = adaptiveDp(18f),
+                end = adaptiveDp(18f)
+            )
     ) {
-        Column {
+        Column(
+            modifier = if (isTv) Modifier.fillMaxHeight() else Modifier,
+            verticalArrangement = if (isTv) Arrangement.SpaceBetween else Arrangement.Top
+        ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Box(modifier = Modifier.size(adaptiveDp(28f)).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
                     AutoResizingText(icon, fontSize = adaptiveSp(12f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(icon))
                 }
                 AutoResizingText(trend, fontSize = adaptiveSp(12f), fontWeight = FontWeight.Bold, color = trendColor, fontFamily = getFontFamilyForText(trend), modifier = Modifier.weight(1f, fill = false))
             }
-            Spacer(modifier = Modifier.height(adaptiveDp(10f)))
+            if (!isTv) Spacer(modifier = Modifier.height(adaptiveDp(10f)))
             AutoResizingText(value, fontSize = adaptiveSp(15f), fontWeight = FontWeight.Bold, color = contentColor, fontFamily = getFontFamilyForText(value))
+            
+            if (isTv) Spacer(modifier = Modifier.height(adaptiveDp(6f)))
         }
     }
 }
 
 @Composable
 fun BottomNavigationBar(currentScreen: String, onScreenSelected: (String) -> Unit) {
+    val isTv = isTvDevice()
     Surface(
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 8.dp
+        shadowElevation = if (isTv) 0.dp else 8.dp,
+        tonalElevation = if (isTv) 4.dp else 0.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(vertical = 12.dp),
+                .then(if (!isTv) Modifier.navigationBarsPadding() else Modifier)
+                .padding(vertical = if (isTv) 8.dp else 12.dp, horizontal = if (isTv) 24.dp else 0.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -2610,28 +2885,45 @@ fun BottomNavigationBar(currentScreen: String, onScreenSelected: (String) -> Uni
 @Composable
 fun NavBarItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVector, isSelected: Boolean, onClick: () -> Unit) {
     val context = LocalContext.current
-    val alphaAnim by androidx.compose.animation.core.animateFloatAsState(targetValue = if (isSelected) 1f else 0.6f, label = "AlphaAnim")
-    val bgColor by androidx.compose.animation.animateColorAsState(if (isSelected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, label = "BgColorAnim")
-    val iconColor by androidx.compose.animation.animateColorAsState(if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface, label = "IconColorAnim")
-    val fontWeightAnim = if (isSelected) FontWeight.Bold else FontWeight.Medium
+    val isTv = isTvDevice()
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
+
+    val alphaAnim by animateFloatAsState(targetValue = if (isSelected || (isTv && isFocused)) 1f else 0.6f, label = "AlphaAnim")
+    val scaleAnim by animateFloatAsState(targetValue = if (isTv && isFocused) 1.12f else 1f, label = "ScaleAnim")
+    val bgColor by animateColorAsState(if (isSelected || (isTv && isFocused)) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent, label = "BgColorAnim")
+    val iconColor by animateColorAsState(if (isSelected || (isTv && isFocused)) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurface, label = "IconColorAnim")
+    val fontWeightAnim = if (isSelected || (isTv && isFocused)) FontWeight.Bold else FontWeight.Medium
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
+            .graphicsLayer {
+                scaleX = scaleAnim
+                scaleY = scaleAnim
+            }
+            .clip(RoundedCornerShape(16.dp))
+            .focusable(interactionSource = interactionSource)
+            .border(
+                width = if (isTv && isFocused) 2.dp else 0.dp,
+                color = if (isTv && isFocused) MaterialTheme.colorScheme.primary else Color.Transparent,
+                shape = RoundedCornerShape(16.dp)
+            )
             .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                indication = null, // Disable default ripple for cleaner pill animation
+                interactionSource = interactionSource,
+                indication = ripple(bounded = true),
                 onClick = {
                     HapticUtils.vibrate(context, HapticType.LIGHT)
                     onClick()
                 }
             )
+            .padding(horizontal = if (isTv) 16.dp else 12.dp, vertical = if (isTv) 8.dp else 6.dp)
             .alpha(alphaAnim)
     ) {
         Box(
             modifier = Modifier
-                .width(64.dp)
-                .height(32.dp)
+                .width(if (isTv) 56.dp else 64.dp)
+                .height(if (isTv) 28.dp else 32.dp)
                 .clip(CircleShape)
                 .background(bgColor),
             contentAlignment = Alignment.Center
@@ -2639,14 +2931,14 @@ fun NavBarItem(title: String, icon: androidx.compose.ui.graphics.vector.ImageVec
             Icon(icon, contentDescription = title, tint = iconColor)
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(title, fontSize = 12.sp, fontWeight = fontWeightAnim, color = iconColor)
+        Text(title, fontSize = if (isTv) 11.sp else 12.sp, fontWeight = fontWeightAnim, color = iconColor)
     }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AssetListItem(
-    item: com.mmdparsadev.cheghad.data.models.CurrencyItem,
+    item: CurrencyItem,
     modifier: Modifier = Modifier,
     colorSchemeMode: String = "standard",
     digitType: String = "fa",
@@ -3325,9 +3617,9 @@ fun SettingsSwitchRow(
 ) {
     val context = LocalContext.current
     Surface(
-        onClick = { 
+        onClick = {
             HapticUtils.vibrate(context, HapticType.LIGHT)
-            onCheckedChange(!isChecked) 
+            onCheckedChange(!isChecked)
         },
         modifier = Modifier
             .fillMaxWidth()
@@ -3682,7 +3974,7 @@ fun SettingsScreen(
             icon = Icons.Default.Palette
         ) {
             val colorOptions = AppThemeColor.entries
-            
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3691,7 +3983,7 @@ fun SettingsScreen(
             ) {
                 colorOptions.forEach { colorOption ->
                     val isSelected = colorOption.name == colorSeedName
-                    
+
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.clickable { onColorSeedSelected(colorOption.name) }
@@ -3701,7 +3993,7 @@ fun SettingsScreen(
                                 .size(adaptiveDp(48f))
                                 .clip(CircleShape)
                                 .background(
-                                    if (colorOption == com.mmdparsadev.cheghad.ui.theme.AppThemeColor.DEFAULT) 
+                                    if (colorOption == com.mmdparsadev.cheghad.ui.theme.AppThemeColor.DEFAULT)
                                         Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.tertiary))
                                     else Brush.linearGradient(listOf(colorOption.seedColor, colorOption.seedColor))
                                 )
@@ -3721,9 +4013,9 @@ fun SettingsScreen(
                                 )
                             }
                         }
-                        
+
                         Spacer(modifier = Modifier.height(adaptiveDp(6f)))
-                        
+
                         Text(
                             text = androidx.compose.ui.res.stringResource(colorOption.stringRes),
                             fontSize = adaptiveSp(10f),
@@ -3787,7 +4079,7 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = adaptiveDp(8f))
                 )
-                
+
                 ExpressiveConnectedButtonGroup(
                     itemsCount = allCurrencies.size,
                     selectedIndex = allCurrencies.indexOfFirst { it.id == lockscreenWidgetCurrencyId }.coerceAtLeast(0),
@@ -3805,9 +4097,9 @@ fun SettingsScreen(
                         fontFamily = getFontFamilyForText(title)
                     )
                 }
-                
+
                 Spacer(modifier = Modifier.height(adaptiveDp(16f)))
-                
+
                 Text(
                     text = stringResource(R.string.settings_lockscreen_widgets_theme_label),
                     fontSize = adaptiveSp(13f),
@@ -3815,13 +4107,13 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = adaptiveDp(8f))
                 )
-                
+
                 val widgetThemeOptions = listOf("glassy", "dark", "light", "trend", "app_color")
                 val widgetThemeLabels = listOf(
-                    R.string.widget_theme_glassy, 
-                    R.string.widget_theme_dark, 
-                    R.string.widget_theme_light, 
-                    R.string.widget_theme_trend, 
+                    R.string.widget_theme_glassy,
+                    R.string.widget_theme_dark,
+                    R.string.widget_theme_light,
+                    R.string.widget_theme_trend,
                     R.string.widget_theme_app_color
                 )
                 val selectedWidgetThemeIndex = widgetThemeOptions.indexOf(lockscreenWidgetTheme).coerceAtLeast(0)
@@ -5300,9 +5592,9 @@ fun CurrencyCalculatorScreen(
                         label = "HistoryCapsuleAnim"
                     ) { item ->
                         if (item != null) {
-                            val displayText = if (item.mode == 0) 
-                                "${item.amount} ${item.assetSymbol}" 
-                            else 
+                            val displayText = if (item.mode == 0)
+                                "${item.amount} ${item.assetSymbol}"
+                            else
                                 formatPrice(item.amount.toDoubleOrNull() ?: 0.0, digitType)
                             Text(
                                 text = displayText,
@@ -5362,7 +5654,7 @@ fun CurrencyCalculatorScreen(
                             }
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(16.dp))
 
                     if (historyList.isEmpty()) {
@@ -5555,7 +5847,7 @@ fun CurrencyCalculatorScreen(
                                         )
                                     )
                                 )
-                            .padding(20.dp)
+                                .padding(20.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -5718,9 +6010,9 @@ fun CurrencyCalculatorScreen(
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold
                                 )
-                                TextButton(onClick = { 
+                                TextButton(onClick = {
                                     HapticUtils.vibrate(context, HapticType.MEDIUM)
-                                    historyJson = "[]" 
+                                    historyJson = "[]"
                                 }) {
                                     Text(stringResource(R.string.clear_history), fontSize = 12.sp)
                                 }
