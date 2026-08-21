@@ -164,7 +164,6 @@
     <string name="settings_update_check_title">بررسی بروزرسانی</string>
     <string name="settings_update_checking">در حال بررسی گیت‌هاب...</string>
     <string name="settings_update_check_btn">بررسی و دریافت نسخه جدید</string>
-
     <string name="pull_refresh_updating">در حال به‌روزرسانی...</string>
     <string name="pull_refresh_release">رها کنید</string>
     <string name="pull_refresh_pull">بکشید برای بروزرسانی</string>
@@ -196,4 +195,6 @@
     <string name="not_colorful_customize">ساده</string>
     <string name="integration_customize">ادغام</string>
     <string name="separation_customize">تفکیک</string>
+    <string name="settings_footer_made_by">ساخته شده با ❤️ توسط mmdparsa</string>
+    <string name="settings_footer_github">https://github.com/mmdparsa-dev/Cheghad</string>
 </resources>

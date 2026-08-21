@@ -7,12 +7,12 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -21,29 +21,16 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.mmdparsadev.cheghad.R
 
-// تعریف FontFamily با فونت Vazir و تنظیمات متغیر
-@OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
-val VazirFontFamily: FontFamily = try {
-    FontFamily(
-        Font(
-            resId = R.font.vazir_variable,
-            weight = FontWeight.Normal,
-            variationSettings = FontVariation.Settings(FontVariation.weight(400))
-        ),
-        Font(
-            resId = R.font.vazir_variable,
-            weight = FontWeight.Medium,
-            variationSettings = FontVariation.Settings(FontVariation.weight(500))
-        ),
-        Font(
-            resId = R.font.vazir_variable,
-            weight = FontWeight.Bold,
-            variationSettings = FontVariation.Settings(FontVariation.weight(700))
-        )
-    )
-} catch (e: Exception) {
-    FontFamily.Default
-}
+// تعریف FontFamily با استفاده از نسخه‌های استاتیک (غیر وریبل) فونت وزیر برای سازگاری حداکثری
+val VazirFontFamily: FontFamily = FontFamily(
+    Font(resId = R.font.vazir_thin, weight = FontWeight.Thin),
+    Font(resId = R.font.vazir_light, weight = FontWeight.Light),
+    Font(resId = R.font.vazir_regular, weight = FontWeight.Normal),
+    Font(resId = R.font.vazir_medium, weight = FontWeight.Medium),
+    Font(resId = R.font.vazir_bold, weight = FontWeight.Bold),
+    Font(resId = R.font.vazir_black, weight = FontWeight.ExtraBold), // نگاشت ExtraBold به Black برای حفظ ظاهر
+    Font(resId = R.font.vazir_black, weight = FontWeight.Black)
+)
 
 fun initializeVazirFont(context: Context) {
     // برای پشتیبانی از نسخه‌های قبلی نگه داشته شده است
@@ -63,24 +50,27 @@ fun getFontFamilyForText(text: String): FontFamily {
     return VazirFontFamily
 }
 
-// تایپوگرافی متریال ۳
+// تنظیمات مشترک برای حذف پدینگ اضافی فونت و بهبود تراز عمودی در زبان فارسی
+val defaultPlatformStyle = PlatformTextStyle(includeFontPadding = false)
+
+// تایپوگرافی متریال ۳ با استفاده از فونت‌های استاتیک
 val Typography: Typography
     get() = Typography(
-        displayLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 57.sp),
-        displayMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 45.sp),
-        displaySmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 36.sp),
-        headlineLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 32.sp),
-        headlineMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 28.sp),
-        headlineSmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 24.sp),
-        titleLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 22.sp),
-        titleMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 16.sp),
-        titleSmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp),
-        bodyLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp, letterSpacing = 0.5.sp),
-        bodyMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 14.sp),
-        bodySmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 12.sp),
-        labelLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp),
-        labelMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp),
-        labelSmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp)
+        displayLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 57.sp, platformStyle = defaultPlatformStyle),
+        displayMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 45.sp, platformStyle = defaultPlatformStyle),
+        displaySmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 36.sp, platformStyle = defaultPlatformStyle),
+        headlineLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 32.sp, platformStyle = defaultPlatformStyle),
+        headlineMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 28.sp, platformStyle = defaultPlatformStyle),
+        headlineSmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 24.sp, platformStyle = defaultPlatformStyle),
+        titleLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 22.sp, platformStyle = defaultPlatformStyle),
+        titleMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 16.sp, platformStyle = defaultPlatformStyle),
+        titleSmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, platformStyle = defaultPlatformStyle),
+        bodyLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp, letterSpacing = 0.5.sp, platformStyle = defaultPlatformStyle),
+        bodyMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 14.sp, platformStyle = defaultPlatformStyle),
+        bodySmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 12.sp, platformStyle = defaultPlatformStyle),
+        labelLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 14.sp, platformStyle = defaultPlatformStyle),
+        labelMedium = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp, platformStyle = defaultPlatformStyle),
+        labelSmall = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp, platformStyle = defaultPlatformStyle)
     )
 
 @Composable
@@ -121,6 +111,6 @@ fun AppText(
         maxLines = maxLines,
         minLines = minLines,
         onTextLayout = onTextLayout,
-        style = style
+        style = style.merge(TextStyle(platformStyle = defaultPlatformStyle))
     )
 }

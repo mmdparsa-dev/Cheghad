@@ -100,6 +100,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.room3.runtime)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation("androidx.tv:tv-foundation:1.0.0-alpha11")
+    implementation("androidx.tv:tv-material:1.0.0-rc01")
     implementation(libs.retrofit)
     implementation(libs.converter.moshi)
     implementation(libs.retrofit2.kotlinx.serialization.converter)
