@@ -233,7 +233,7 @@ If you find a bug or have an idea for improving the project:
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/6bda6a3b-1416-43e4-86e5-ad86738197f1" width="250" />
-  <img src="https://github.com/user-attachments/assets/ea00e225-b1cb-4ebe-b774-fadb9e6d428" width="250" />
+  <img src="https://github.com/user-attachments/assets/6710a482-4759-40de-a298-d2dc43227b7c" width="250"  />
   <img src="https://github.com/user-attachments/assets/eba3534c-5d2b-4134-a5fd-dacd782fd82f" width="250" />
 </p>
 
