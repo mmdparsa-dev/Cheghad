@@ -232,17 +232,15 @@ If you find a bug or have an idea for improving the project:
 ## 🖼️ Preview
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/57eaa32a-a325-4257-ba98-35d8bf0e4113" width="210" alt="Cheghad Screenshot 1" />
-  <img src="https://github.com/user-attachments/assets/9e1ac9f0-0958-46f9-ad22-f24b63845c48" width="210" alt="Cheghad Screenshot 2" />
-  <img src="https://github.com/user-attachments/assets/3da521d8-5b6a-4f07-8abc-f9dc59fe2988" width="210" alt="Cheghad Screenshot 3" />
-  <img src="https://github.com/user-attachments/assets/af648733-bf37-4e5c-ad34-518140621c5b" width="210" alt="Cheghad Screenshot 4" />
+  <img src="https://github.com/user-attachments/assets/6bda6a3b-1416-43e4-86e5-ad86738197f1" width="250" />
+  <img src="https://github.com/user-attachments/assets/ea00e225-b1cb-4ebe-b774-fadb9e6d428" width="250" />
+  <img src="https://github.com/user-attachments/assets/eba3534c-5d2b-4134-a5fd-dacd782fd82f" width="250" />
 </p>
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/182b2632-800c-47ae-923d-90d3eb5a7cf9" width="210" alt="Cheghad Screenshot 5" />
-  <img src="https://github.com/user-attachments/assets/9a8740cf-361f-42e1-bc20-27f15732ebad" width="210" alt="Cheghad Screenshot 6" />
-  <img src="https://github.com/user-attachments/assets/3fdd0db9-9cf7-4bb7-a8ab-3249d738b0bd" width="210" alt="Cheghad Screenshot 7" />
-  <img src="https://github.com/user-attachments/assets/0ef75ded-566e-4bd9-9692-0aa27442f3e6" width="210" alt="Cheghad Screenshot 8" />
+  <img src="https://github.com/user-attachments/assets/2534fce9-1236-4f5d-b87d-b60451a16988" width="250" />
+  <img src="https://github.com/user-attachments/assets/1688611c-aee2-42c7-8d23-fcf5ed8ba0b1" width="250" />
+  <img src="https://github.com/user-attachments/assets/cbde61a6-aa0d-47b4-a195-4ca7efe24b5f" width="250" />
 </p>
 
 ---
