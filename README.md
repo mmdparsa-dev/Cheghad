@@ -232,15 +232,15 @@ If you find a bug or have an idea for improving the project:
 ## 🖼️ Preview
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/6bda6a3b-1416-43e4-86e5-ad86738197f1" width="250" />
-  <img src="https://github.com/user-attachments/assets/6710a482-4759-40de-a298-d2dc43227b7c" width="250"  />
   <img src="https://github.com/user-attachments/assets/eba3534c-5d2b-4134-a5fd-dacd782fd82f" width="250" />
+  <img src="https://github.com/user-attachments/assets/f8d34a99-cdf9-4c68-a6e3-95af6c59a8c5" width="250" />
+  <img src="https://github.com/user-attachments/assets/2534fce9-1236-4f5d-b87d-b60451a16988" width="250" />
 </p>
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/2534fce9-1236-4f5d-b87d-b60451a16988" width="250" />
+  <img src="https://github.com/user-attachments/assets/6bda6a3b-1416-43e4-86e5-ad86738197f1" width="250" />
+  <img src="https://github.com/user-attachments/assets/6710a482-4759-40de-a298-d2dc43227b7c" width="250" />
   <img src="https://github.com/user-attachments/assets/1688611c-aee2-42c7-8d23-fcf5ed8ba0b1" width="250" />
-  <img src="https://github.com/user-attachments/assets/cbde61a6-aa0d-47b4-a195-4ca7efe24b5f" width="250" />
 </p>
 
 ---
