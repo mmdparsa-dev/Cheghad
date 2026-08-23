@@ -61,7 +61,7 @@ Check the Releses or Download From app
 
 ### 📄 License
 Distributed under the MIT License. See `LICENSE` for more information.
-### preview (پیش نمایش)
+### 🖼️ Preview (پیش نمایش)
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/57eaa32a-a325-4257-ba98-35d8bf0e4113" width="210" alt="Cheghad Screenshot 1" />
