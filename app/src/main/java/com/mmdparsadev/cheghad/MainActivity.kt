@@ -114,6 +114,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteDefaults
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffoldDefaults
+import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteType
 import androidx.core.app.NotificationCompat
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.focusable
@@ -153,6 +158,18 @@ enum class TimeRange(val stringRes: Int, val id: String) {
     WEEK(R.string.range_week, "WEEK"),
     MONTH(R.string.range_month, "MONTH"),
     YEAR(R.string.range_year, "YEAR")
+}
+
+enum class CheghadDestination(
+    val id: String,
+    val labelRes: Int,
+    val icon: ImageVector
+) {
+    Market("home", R.string.nav_market, Icons.Default.Dashboard),
+    Calculator("calculator", R.string.nav_calculator, Icons.Default.Calculate),
+    News("news", R.string.nav_news, Icons.Default.Newspaper),
+    Alarms("portfolio", R.string.nav_portfolio, Icons.Default.Notifications),
+    Settings("settings", R.string.nav_settings, Icons.Default.Settings)
 }
 
 class MainActivity : AppCompatActivity() {
@@ -390,73 +407,9 @@ class MainActivity : AppCompatActivity() {
                         )
                     } else {
                         val isTv = isTvDevice()
-                        Scaffold(
-                            modifier = Modifier.fillMaxSize(),
-                            containerColor = MaterialTheme.colorScheme.background,
-                            topBar = {
-                                if (isTv) {
-                                    Column {
-                                        ConnectivityStatusBanner(uiState = uiState)
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Box(modifier = Modifier.weight(1f)) {
-                                                BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it })
-                                            }
-                                            // دکمه به‌روزرسانی سریع اکسپرسیو مخصوص اندروید تی‌وی
-                                            Surface(
-                                                onClick = { viewModel.refreshData() },
-                                                shape = RoundedCornerShape(24.dp),
-                                                color = MaterialTheme.colorScheme.surface,
-                                                tonalElevation = 4.dp,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                                modifier = Modifier
-                                                    .padding(horizontal = 16.dp)
-                                                    .height(44.dp)
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                                ) {
-                                                    if (uiState.isLoading) {
-                                                        ExpressiveLoadingIndicator(
-                                                            modifier = Modifier.size(20.dp),
-                                                            color = MaterialTheme.colorScheme.primary,
-                                                            isRefreshing = true
-                                                        )
-                                                    } else {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Refresh,
-                                                            contentDescription = stringResource(R.string.button_refresh),
-                                                            tint = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.size(20.dp)
-                                                        )
-                                                    }
-                                                    Text(
-                                                        text = stringResource(R.string.button_refresh),
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface,
-                                                        fontFamily = getFontFamilyForText(stringResource(R.string.button_refresh))
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            },
-                            bottomBar = {
-                                if (!isTv) {
-                                    Column {
-                                        ConnectivityStatusBanner(uiState = uiState)
-                                        BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it })
-                                    }
-                                }
-                            }
-                        ) { innerPadding ->
+
+                        @Composable
+                        fun CheghadAppContent(innerPadding: PaddingValues) {
                             AnimatedContent(
                                 targetState = currentScreen,
                                 transitionSpec = {
@@ -968,6 +921,105 @@ class MainActivity : AppCompatActivity() {
                                             selectedAlarmForEdit = alarm
                                         }
                                     )
+                                }
+                            }
+                        }
+
+                        if (isTv) {
+                            Scaffold(
+                                modifier = Modifier.fillMaxSize(),
+                                containerColor = MaterialTheme.colorScheme.background,
+                                topBar = {
+                                    Column {
+                                        ConnectivityStatusBanner(uiState = uiState)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it })
+                                            }
+                                            // دکمه به‌روزرسانی سریع اکسپرسیو مخصوص اندروید تی‌وی
+                                            Surface(
+                                                onClick = { viewModel.refreshData() },
+                                                shape = RoundedCornerShape(24.dp),
+                                                color = MaterialTheme.colorScheme.surface,
+                                                tonalElevation = 4.dp,
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                modifier = Modifier
+                                                    .padding(horizontal = 16.dp)
+                                                    .height(44.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    if (uiState.isLoading) {
+                                                        ExpressiveLoadingIndicator(
+                                                            modifier = Modifier.size(20.dp),
+                                                            color = MaterialTheme.colorScheme.primary,
+                                                            isRefreshing = true
+                                                        )
+                                                    } else {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Refresh,
+                                                            contentDescription = stringResource(R.string.button_refresh),
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = stringResource(R.string.button_refresh),
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        fontFamily = getFontFamilyForText(stringResource(R.string.button_refresh))
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ) { innerPadding ->
+                                CheghadAppContent(innerPadding)
+                            }
+                        } else {
+                            NavigationSuiteScaffold(
+                                navigationSuiteItems = {
+                                    CheghadDestination.entries.forEach { destination ->
+                                        item(
+                                            icon = { Icon(destination.icon, contentDescription = stringResource(destination.labelRes)) },
+                                            label = {
+                                                Text(
+                                                    text = stringResource(destination.labelRes),
+                                                    fontSize = 12.sp,
+                                                    fontFamily = getFontFamilyForText(stringResource(destination.labelRes))
+                                                )
+                                            },
+                                            selected = currentScreen == destination.id,
+                                            onClick = {
+                                                HapticUtils.vibrate(context, HapticType.LIGHT)
+                                                currentScreen = destination.id
+                                            }
+                                        )
+                                    }
+                                },
+                                containerColor = MaterialTheme.colorScheme.background,
+                                navigationSuiteColors = NavigationSuiteDefaults.colors(
+                                    navigationBarContainerColor = MaterialTheme.colorScheme.surface,
+                                    navigationRailContainerColor = MaterialTheme.colorScheme.surface
+                                )
+                            ) {
+                                Scaffold(
+                                    modifier = Modifier.fillMaxSize(),
+                                    containerColor = MaterialTheme.colorScheme.background,
+                                    topBar = {
+                                        ConnectivityStatusBanner(uiState = uiState)
+                                    }
+                                ) { innerPadding ->
+                                    CheghadAppContent(innerPadding)
                                 }
                             }
                         }
