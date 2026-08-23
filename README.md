@@ -1,5 +1,15 @@
 # Cheghad (چقد) 🪙
+<p align="center">
 
+[![GitHub Release](https://img.shields.io/github/v/release/mmdparsa-dev/Cheghad?style=flat-square&logo=github)](https://github.com/mmdparsa-dev/Cheghad/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/mmdparsa-dev/Cheghad?style=flat-square&logo=github)](https://github.com/mmdparsa-dev/Cheghad/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/mmdparsa-dev/Cheghad?style=flat-square&logo=github)](https://github.com/mmdparsa-dev/Cheghad/issues)
+[![License](https://img.shields.io/github/license/mmdparsa-dev/Cheghad?style=flat-square)](https://github.com/mmdparsa-dev/Cheghad/blob/main/LICENSE)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.x-7F52FF?style=flat-square&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Material%203](https://img.shields.io/badge/Material%203-Expressive-757575?style=flat-square&logo=materialdesign&logoColor=white)](https://m3.material.io/)
+
+</p>
 [فارسی](#فارسی) | [English](#english)
 
 ---
