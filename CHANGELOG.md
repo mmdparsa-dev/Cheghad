@@ -1,3 +1,19 @@
+## [v1.0.6.5 - Stable] - 2026-08-23
+
+#  یه اپدیت کوچیک
+## تغییرات:
+
+- حل مشکل نصف شدن Navbar در اندروید TV و اندروید
+- ریسپانسیو تر شدن Navbar
+-----
+
+# a little update 
+## The Changes: 
+
+- Fixed bottom navigation bar cutoff issue on Android and Android TV
+- Improved navigation bar responsiveness
+
+
 # Cheghad Changelog
 
 ## [v1.0.0 - Stable] - 2026-08-08
