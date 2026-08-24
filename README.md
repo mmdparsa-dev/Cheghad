@@ -117,7 +117,9 @@ git clone https://github.com/mmdparsa-dev/Cheghad.git
 ---
 
 ### 🤝 مشارکت در پروژه
+
 CONTRIBUTING.md رو نگاه بکن.
+
 ---
 
 ## English
