@@ -26,15 +26,12 @@ jobs:
           RELEASE_DATE=$(date +'%Y-%m-%d')
           TITLE=${RELEASE_TITLE:-$RELEASE_TAG}
 
-          # ذخیره امن بدنه ریلیز در فایل موقت جهت جلوگیری از باگ Multiline
-          echo "$RELEASE_BODY" > body.tmp
+          printf "%s\n" "$RELEASE_BODY" > body.tmp
 
-          # اگر CHANGELOG وجود ندارد آن را بساز
           if [ ! -f CHANGELOG.md ]; then
             echo -e "# Changelog\n" > CHANGELOG.md
           fi
 
-          # ساخت بلوک جدید
           {
             echo "## [$TITLE] - $RELEASE_DATE"
             echo ""
@@ -43,29 +40,37 @@ jobs:
             echo ""
           } > new_entry.tmp
 
-          # اگر فایل با # Changelog شروع شده، متن جدید بعد از خط اول اضافه شود
           if grep -q "^# Changelog" CHANGELOG.md; then
-            {
-              head -n 2 CHANGELOG.md
-              cat new_entry.tmp
-              tail -n +3 CHANGELOG.md
-            } > CHANGELOG.tmp
+            python3 -c '
+          import sys
+          with open("CHANGELOG.md", "r") as f:
+              lines = f.readlines()
+          with open("new_entry.tmp", "r") as f:
+              new_content = f.read()
+          
+          header = lines[0] if lines else "# Changelog\n"
+          rest = "".join(lines[1:]).lstrip()
+          
+          with open("CHANGELOG.md", "w") as f:
+              f.write(header + "\n" + new_content + rest)
+          '
           else
-            # اگر تیتر اصلی نداشت، متن جدید را به ابتدای کل فایل بچسبان
             cat new_entry.tmp CHANGELOG.md > CHANGELOG.tmp
+            mv CHANGELOG.tmp CHANGELOG.md
           fi
 
-          mv CHANGELOG.tmp CHANGELOG.md
           rm -f body.tmp new_entry.tmp
 
       - name: Commit and Push Changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           git add CHANGELOG.md
-          # بررسی اینکه آیا تغییری برای کامیت وجود دارد یا خیر
+
           if ! git diff --cached --quiet; then
             git commit -m "chore(changelog): update CHANGELOG.md for ${{ github.event.release.tag_name }} [skip ci]"
-            git push origin HEAD:${{ github.event.release.target_commitish }}
+            TARGET_BRANCH="${{ github.event.release.target_commitish }}"
+            git fetch origin "$TARGET_BRANCH" || true
+            git push origin "HEAD:$TARGET_BRANCH"
           fi
