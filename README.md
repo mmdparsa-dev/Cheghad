@@ -117,15 +117,7 @@ git clone https://github.com/mmdparsa-dev/Cheghad.git
 ---
 
 ### 🤝 مشارکت در پروژه
-
-چقد یک پروژه Open Source است و از مشارکت توسعه‌دهندگان استقبال می‌کند.
-
-اگر پیشنهادی برای بهبود پروژه دارید یا با مشکلی مواجه شدید:
-
-* یک **Issue** ایجاد کنید.
-* تغییرات خود را در یک **Pull Request** ارسال کنید.
-* پیشنهادها و ایده‌های جدید خود را مطرح کنید.
-
+CONTRIBUTING.md رو نگاه بکن.
 ---
 
 ## English
@@ -219,13 +211,7 @@ Then:
 
 ### 🤝 Contributing
 
-Cheghad is an open-source project and contributions are welcome.
-
-If you find a bug or have an idea for improving the project:
-
-* Open an **Issue**.
-* Submit a **Pull Request**.
-* Share your ideas and suggestions.
+Check The CONTRIBUTING.md
 
 ---
 
