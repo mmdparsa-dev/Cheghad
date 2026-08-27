@@ -1,4 +1,7 @@
-# Cheghad (چقد) 🪙
+<p align="center">
+  <img width="200" height="200" alt="LogoCheghad" src="https://github.com/user-attachments/assets/7488ac10-8447-4dc9-bd53-6630f9c6d9ad" />
+</p>
+<h1 align="center">Cheghad (چقد) 🪙</h1>
 
 <p align="center">
 
@@ -7,7 +10,6 @@
 [![GitHub Issues](https://img.shields.io/github/issues/mmdparsa-dev/Cheghad?style=flat-square\&logo=github)](https://github.com/mmdparsa-dev/Cheghad/issues)
 [![GitHub License](https://img.shields.io/github/license/mmdparsa-dev/Cheghad?style=flat-square)](https://github.com/mmdparsa-dev/Cheghad/blob/main/LICENSE)
 [![GitHub Last Commit](https://img.shields.io/github/last-commit/mmdparsa-dev/Cheghad?style=flat-square\&logo=github)](https://github.com/mmdparsa-dev/Cheghad/commits/main)
-
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.x-7F52FF?style=flat-square\&logo=kotlin\&logoColor=white)](https://kotlinlang.org/)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-UI-4285F4?style=flat-square\&logo=jetpackcompose\&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![Material 3](https://img.shields.io/badge/Material%203-Expressive-757575?style=flat-square\&logo=materialdesign\&logoColor=white)](https://m3.material.io/)
@@ -118,7 +120,7 @@ git clone https://github.com/mmdparsa-dev/Cheghad.git
 
 ### 🤝 مشارکت در پروژه
 
-CONTRIBUTING.md رو نگاه بکن.
+CONTRIBUTING.md رو نگاه کن.
 
 ---
 
