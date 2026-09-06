@@ -13,7 +13,7 @@
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.x-7F52FF?style=flat-square\&logo=kotlin\&logoColor=white)](https://kotlinlang.org/)
 [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-UI-4285F4?style=flat-square\&logo=jetpackcompose\&logoColor=white)](https://developer.android.com/jetpack/compose)
 [![Material 3](https://img.shields.io/badge/Material%203-Expressive-757575?style=flat-square\&logo=materialdesign\&logoColor=white)](https://m3.material.io/)
-[![Room](https://img.shields.io/badge/Room-Database-6DB33F?style=flat-square)](https://developer.android.com/training/data-storage/room)
+[![Room](https://img.shields.io/badge/Room3-Database-6DB33F?style=flat-square)](https://developer.android.com/training/data-storage/room)
 [![Retrofit](https://img.shields.io/badge/Retrofit-Networking-48B983?style=flat-square)](https://square.github.io/retrofit/)
 
 </p>
