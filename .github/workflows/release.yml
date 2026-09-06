@@ -9,7 +9,8 @@ permissions:
   contents: write 
 
 jobs:
-  build-and-attach:
+  signed-build:
+    name: Signed Build
     runs-on: ubuntu-latest
 
     steps:
@@ -29,7 +30,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build Release APK
-        run: ./gradlew assembleRelease -x lint -x test --no-daemon
+        run: ./gradlew assembleRelease -x validateSigningRelease -x lint -x test --no-daemon
 
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
