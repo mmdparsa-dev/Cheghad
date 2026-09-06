@@ -8,7 +8,7 @@ plugins {
     alias(libs.plugins.roborazzi)
     alias(libs.plugins.google.services)
 }
-
+// تست 
 android {
     namespace = "com.mmdparsadev.cheghad"
     compileSdk = 37
