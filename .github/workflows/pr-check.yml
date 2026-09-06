@@ -17,7 +17,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: pr-check-gate # این سد نفوذناپذیر اضافه شد!
+    environment: pr-check-gate 
 
     steps:
       - name: Checkout Code
@@ -41,4 +41,4 @@ jobs:
           echo '{"project_info":{"project_number":"0","project_id":"dummy"},"client":[{"client_info":{"mobilesdk_app_id":"1:0:android:0","android_client_info":{"package_name":"com.mmdparsadev.cheghad"}}}]}' > app/google-services.json
 
       - name: Run Checks and Build
-        run: ./gradlew check --no-daemon
+        run: ./gradlew check -x processDebugGoogleServices -x processReleaseGoogleServices --no-daemon
