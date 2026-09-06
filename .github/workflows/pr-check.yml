@@ -2,8 +2,7 @@ name: PR Verification
 
 on:
   pull_request:
-    branches:
-      - main
+  
     paths:
       - 'app/**'
       - 'src/**'
