@@ -270,6 +270,11 @@ class MainActivity : AppCompatActivity() {
 
                 var selectedItemForDetail by remember { mutableStateOf<CurrencyItem?>(null) }
                 var selectedAlarmForEdit by remember { mutableStateOf<AlarmEntity?>(null) }
+                var selectedTechnicalAsset by remember { mutableStateOf<CurrencyItem?>(null) }
+
+                androidx.activity.compose.BackHandler(currentScreen == "technical_chart") {
+                    currentScreen = "home"
+                }
 
                 LaunchedEffect(Unit) {
                     viewModel.triggeredAlarmFlow.collect { (alarm, currentPrice) ->
@@ -413,7 +418,7 @@ class MainActivity : AppCompatActivity() {
                             AnimatedContent(
                                 targetState = currentScreen,
                                 transitionSpec = {
-                                    val screenOrder = listOf("home", "calculator", "news", "portfolio", "settings")
+                                    val screenOrder = listOf("home", "calculator", "news", "portfolio", "settings", "technical_chart")
                                     val initialIndex = screenOrder.indexOf(initialState)
                                     val targetIndex = screenOrder.indexOf(targetState)
                                     val emphasizedEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
@@ -907,6 +912,19 @@ class MainActivity : AppCompatActivity() {
                                         onLockscreenWidgetThemeSelected = { settingsViewModel.setLockscreenWidgetTheme(it) },
                                         allCurrencies = uiState.items
                                     )
+                                } else if (screen == "technical_chart") {
+                                    val fallback = uiState.items.firstOrNull() ?: CurrencyItem(
+                                        id = "1", symbol = "USD", title = "US Dollar", currentPrice = 62000.0,
+                                        previousPrice = 61500.0, changeAmount = 500.0, changePercentage = 0.8,
+                                        priceDirection = PriceDirection.Up, lastUpdatedTimestamp = System.currentTimeMillis(),
+                                        iconUrl = "", category = CurrencyType.Currency
+                                    )
+                                    com.mmdparsadev.cheghad.ui.technical.TechnicalChartScreen(
+                                        initialCurrency = selectedTechnicalAsset ?: fallback,
+                                        allCurrencies = uiState.items,
+                                        digitType = digitType,
+                                        onBack = { currentScreen = "home" }
+                                    )
                                 } else {
                                     // Alarms screen
                                     AlarmsScreen(
@@ -919,6 +937,10 @@ class MainActivity : AppCompatActivity() {
                                         },
                                         onEditAlarm = { alarm ->
                                             selectedAlarmForEdit = alarm
+                                        },
+                                        onOpenTechnicalChart = {
+                                            selectedTechnicalAsset = uiState.items.firstOrNull()
+                                            currentScreen = "technical_chart"
                                         }
                                     )
                                 }
@@ -1006,6 +1028,7 @@ class MainActivity : AppCompatActivity() {
                                         )
                                     }
                                 },
+                                layoutType = if (currentScreen == "technical_chart") NavigationSuiteType.None else NavigationSuiteScaffoldDefaults.calculateFromAdaptiveInfo(currentWindowAdaptiveInfo()),
                                 containerColor = MaterialTheme.colorScheme.background,
                                 navigationSuiteColors = NavigationSuiteDefaults.colors(
                                     navigationBarContainerColor = MaterialTheme.colorScheme.surface,
@@ -1037,6 +1060,11 @@ class MainActivity : AppCompatActivity() {
                             digitType = digitType,
                             onFetchHistory = { range -> viewModel.fetchHistory(item.symbol, range.id, item.currentPrice, item.changePercentage) },
                             onDismiss = { selectedItemForDetail = null },
+                            onOpenTechnicalChart = {
+                                selectedTechnicalAsset = item
+                                selectedItemForDetail = null
+                                currentScreen = "technical_chart"
+                            },
                             onSaveAlarm = { price, isAbove ->
                                 viewModel.addAlarm(
                                     symbol = item.symbol,
@@ -4770,6 +4798,7 @@ fun AssetDetailDialog(
     digitType: String = "fa",
     onFetchHistory: (TimeRange) -> Unit,
     onDismiss: () -> Unit,
+    onOpenTechnicalChart: () -> Unit = {},
     onSaveAlarm: (targetPrice: Double, isAbove: Boolean) -> Unit
 ) {
     val context = LocalContext.current
@@ -5072,7 +5101,66 @@ fun AssetDetailDialog(
                 )
             }
 
-            Spacer(modifier = Modifier.height(adaptiveDp(24f)))
+            Spacer(modifier = Modifier.height(adaptiveDp(14f)))
+
+            // Technical Chart Entry Button
+            Surface(
+                onClick = onOpenTechnicalChart,
+                shape = RoundedCornerShape(adaptiveDp(18f)),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                border = BorderStroke(adaptiveDp(1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(adaptiveDp(12f)),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(adaptiveDp(38f))
+                                .clip(RoundedCornerShape(adaptiveDp(10f)))
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CandlestickChart,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(adaptiveDp(22f))
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(adaptiveDp(12f)))
+                        Column {
+                            Text(
+                                text = androidx.compose.ui.res.stringResource(R.string.technical_chart_open_btn),
+                                fontSize = adaptiveSp(12f),
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                fontFamily = getFontFamilyForText("تحلیل")
+                            )
+                            Text(
+                                text = androidx.compose.ui.res.stringResource(R.string.technical_chart_subtitle),
+                                fontSize = adaptiveSp(10f),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                                fontFamily = getFontFamilyForText("تحلیل")
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(adaptiveDp(18f)).rotate(180f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(adaptiveDp(18f)))
 
             // Alarm Section
             Card(
@@ -5316,7 +5404,8 @@ fun AlarmsScreen(
     colorSchemeMode: String = "standard",
     digitType: String = "fa",
     onDeleteAlarm: (com.mmdparsadev.cheghad.data.models.AlarmEntity) -> Unit,
-    onEditAlarm: (com.mmdparsadev.cheghad.data.models.AlarmEntity) -> Unit
+    onEditAlarm: (com.mmdparsadev.cheghad.data.models.AlarmEntity) -> Unit,
+    onOpenTechnicalChart: () -> Unit = {}
 ) {
     val context = LocalContext.current
     Column(
@@ -5337,7 +5426,66 @@ fun AlarmsScreen(
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
         )
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Technical Chart Access Card
+        Surface(
+            onClick = onOpenTechnicalChart,
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CandlestickChart,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = androidx.compose.ui.res.stringResource(R.string.technical_chart_alarms_card),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontFamily = getFontFamilyForText("نمودار")
+                        )
+                        Text(
+                            text = androidx.compose.ui.res.stringResource(R.string.technical_chart_alarms_desc),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontFamily = getFontFamilyForText("نمودار")
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp).rotate(180f)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         if (alarms.isEmpty()) {
             Box(

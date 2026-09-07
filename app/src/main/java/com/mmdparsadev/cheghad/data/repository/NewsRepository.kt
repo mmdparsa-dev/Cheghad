@@ -97,12 +97,13 @@ class NewsRepository {
         }
 
         val initialFallback = getInitialNewsArticles()
+        val activeAgencyIds = activeAgencies.map { it.id }.toSet()
         if (fetchedList.isEmpty()) {
-            initialFallback.sortedByDescending { it.pubTimestamp }
+            initialFallback.filter { it.agency.id in activeAgencyIds }.sortedByDescending { it.pubTimestamp }
         } else {
             // Combine fetched live news with fallbacks for agencies that had network errors
             val existingAgencies = fetchedList.map { it.agency.id }.toSet()
-            val missingAgencyFallbacks = initialFallback.filter { it.agency.id !in existingAgencies }
+            val missingAgencyFallbacks = initialFallback.filter { it.agency.id in activeAgencyIds && it.agency.id !in existingAgencies }
             
             (fetchedList + missingAgencyFallbacks)
                 .distinctBy { it.title.trim() }

@@ -22,6 +22,13 @@ object ApiClient {
     }
     
     
+    private val ScraperOkHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(12, TimeUnit.SECONDS)
+            .build()
+    }
+
     private val MockInterceptor = Interceptor { chain ->
         val uri = chain.request().url.toString()
         if (uri.endsWith("/api/currencies")) {
@@ -56,17 +63,13 @@ object ApiClient {
             val tgjuTask = java.util.concurrent.CompletableFuture.runAsync({
                 try {
                     // Fetch real rates from tgju.org
-                    val client = OkHttpClient.Builder()
-                        .connectTimeout(6, TimeUnit.SECONDS)
-                        .readTimeout(6, TimeUnit.SECONDS)
-                        .build()
                     val request = Request.Builder()
                         .url("https://www.tgju.org/currency")
                         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
                         .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
                         .header("Accept-Language", "fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7")
                         .build()
-                    val response = client.newCall(request).execute()
+                    val response = ScraperOkHttpClient.newCall(request).execute()
                     if (response.isSuccessful) {
                         val html = response.body.string()
                         
@@ -116,14 +119,10 @@ object ApiClient {
 
             val bitpinTask = java.util.concurrent.CompletableFuture.runAsync({
                 try {
-                    val bitpinClient = OkHttpClient.Builder()
-                        .connectTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
-                        .readTimeout(6, java.util.concurrent.TimeUnit.SECONDS)
-                        .build()
                     val bitpinRequest = Request.Builder()
                         .url("https://api.bitpin.ir/v1/mkt/markets/")
                         .build()
-                    val bitpinResponse = bitpinClient.newCall(bitpinRequest).execute()
+                    val bitpinResponse = ScraperOkHttpClient.newCall(bitpinRequest).execute()
                     if (bitpinResponse.isSuccessful) {
                         val body = bitpinResponse.body.string()
                         val json = org.json.JSONObject(body)
@@ -151,7 +150,7 @@ object ApiClient {
             }, executor)
 
             try {
-                java.util.concurrent.CompletableFuture.allOf(tgjuTask, bitpinTask).get(7, java.util.concurrent.TimeUnit.SECONDS)
+                java.util.concurrent.CompletableFuture.allOf(tgjuTask, bitpinTask).get(12, java.util.concurrent.TimeUnit.SECONDS)
             } catch (e: Exception) {
             } finally {
                 executor.shutdown()

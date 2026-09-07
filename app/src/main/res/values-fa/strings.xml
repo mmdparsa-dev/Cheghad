@@ -197,4 +197,9 @@
     <string name="separation_customize">تفکیک</string>
     <string name="settings_footer_made_by">ساخته شده با ❤️ توسط mmdparsa</string>
     <string name="settings_footer_github">https://github.com/mmdparsa-dev/Cheghad</string>
+    <string name="technical_chart_title">نمودار تکنیکال پیشرفته</string>
+    <string name="technical_chart_subtitle">کندل‌استیک، میانگین متحرک ۲۰۰ (EMA) و شاخص RSI</string>
+    <string name="technical_chart_open_btn">تحلیل تکنیکال پیشرفته (کندل‌استیک، EMA 200، RSI)</string>
+    <string name="technical_chart_alarms_card">نمودار تکنیکال و هشدارهای بازار</string>
+    <string name="technical_chart_alarms_desc">مشاهده نمودار کندل‌استیک، EMA 200، RSI و ۵ گردون ارزی بازار</string>
 </resources>

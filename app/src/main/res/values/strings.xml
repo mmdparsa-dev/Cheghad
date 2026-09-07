@@ -197,4 +197,9 @@
     <string name="separation_customize">Separation</string>
     <string name="settings_footer_made_by">Made with ❤️ by mmdparsa</string>
     <string name="settings_footer_github">https://github.com/mmdparsa-dev/Cheghad</string>
+    <string name="technical_chart_title">Advanced Technical Chart</string>
+    <string name="technical_chart_subtitle">Candlestick, EMA 200, and RSI Indicator</string>
+    <string name="technical_chart_open_btn">Advanced Technical Chart (Candles, EMA 200, RSI)</string>
+    <string name="technical_chart_alarms_card">Technical Chart &amp; Market Analysis</string>
+    <string name="technical_chart_alarms_desc">View candlestick chart, EMA 200, RSI, and 5 asset carousels</string>
 </resources>

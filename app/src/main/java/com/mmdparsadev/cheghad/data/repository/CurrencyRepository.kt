@@ -22,11 +22,23 @@ class CurrencyRepository(
 
     fun getVisibleCurrenciesFlow(now: Long): Flow<List<CurrencyItem>> = currencyDao.getVisibleCurrenciesFlow(now)
 
-    suspend fun getCachedCurrencies(): List<CurrencyItem> = currencyDao.getAllCurrencies()
+    suspend fun getCachedCurrencies(): List<CurrencyItem> {
+        return withContext(Dispatchers.IO) {
+            try {
+                currencyDao.getAllCurrencies()
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
+    }
 
     suspend fun saveCurrenciesToCache(currencies: List<CurrencyItem>) {
         withContext(Dispatchers.IO) {
-            currencyDao.insertAll(currencies)
+            try {
+                currencyDao.insertAll(currencies)
+            } catch (e: Exception) {
+                android.util.Log.e("CurrencyRepository", "Failed to cache currencies to DB", e)
+            }
         }
     }
 

@@ -1,4 +1,13 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.io.FileInputStream
+import java.util.Properties
+
+val keystorePropertiesFile = layout.projectDirectory.file("../keystore.properties").asFile
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        load(FileInputStream(keystorePropertiesFile))
+    }
+}
 
 plugins {
     alias(libs.plugins.android.application)
@@ -17,18 +26,25 @@ android {
         applicationId = "com.mmdparsadev.cheghad"
         minSdk = 24
         targetSdk = 37
-        versionCode = 10
-        versionName = "1.0.6.5 - Stable"
+        versionCode = 110
+        versionName = "1.1.0 - Stable"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
         create("release") {
-            val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+                ?: keystoreProperties.getProperty("storeFile")
+                ?: layout.projectDirectory.file("../my-upload-key.jks").asFile.absolutePath                ?: "${rootDir}/my-upload-key.jks"
+
             storeFile = file(keystorePath)
             storePassword = System.getenv("STORE_PASSWORD")
-            keyAlias = "upload"
+                ?: keystoreProperties.getProperty("storePassword")
+            keyAlias = System.getenv("KEY_ALIAS")
+                ?: keystoreProperties.getProperty("keyAlias")
+                ?: "upload"
             keyPassword = System.getenv("KEY_PASSWORD")
+                ?: keystoreProperties.getProperty("keyPassword")
         }
     }
 
@@ -124,7 +140,9 @@ dependencies {
     testImplementation(libs.roborazzi.junit.rule)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.runner)
+    androidTestImplementation(libs.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

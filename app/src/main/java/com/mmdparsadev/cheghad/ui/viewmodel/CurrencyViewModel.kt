@@ -33,6 +33,8 @@ import java.util.Date
 import java.util.Locale
 
 import com.mmdparsadev.cheghad.widget.updateAllWidgets
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
 
 data class CurrencyUiState(
     val isLoading: Boolean = false,
@@ -68,7 +70,7 @@ class CurrencyViewModel(
     private val jsonFormat = Json { ignoreUnknownKeys = true }
 
     private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
-        _uiState.update { it.copy(errorMessageResId = R.string.error_server) }
+        Log.e("CurrencyViewModel", "Unhandled exception in ViewModel coroutine", throwable)
     }
 
     private fun loadCachedItemsFromPrefs(): List<CurrencyItem> {
@@ -98,6 +100,20 @@ class CurrencyViewModel(
     val triggeredAlarmFlow = _triggeredAlarmFlow.asSharedFlow()
 
     init {
+        // Pre-populate Room cache from SharedPreferences if Room is empty
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val roomCurrencies = repository.getCachedCurrencies()
+                if (roomCurrencies.isEmpty()) {
+                    val prefCurrencies = loadCachedItemsFromPrefs()
+                    if (prefCurrencies.isNotEmpty()) {
+                        repository.saveCurrenciesToCache(prefCurrencies)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("CurrencyViewModel", "Failed to sync cache to Room", e)
+            }
+        }
         observeCurrencies()
         startPeriodicUpdates()
         observeAlarms()
@@ -191,6 +207,7 @@ class CurrencyViewModel(
 
     private fun startPeriodicUpdates() {
         viewModelScope.launch(exceptionHandler) {
+            delay(1000L) // Warmup delay on app launch
             while (isActive) {
                 fetchData(isManualRefresh = false)
                 delay(3 * 60 * 1000L) // 3 minutes
@@ -270,42 +287,60 @@ class CurrencyViewModel(
 
     private fun fetchData(isManualRefresh: Boolean) {
         if (_uiState.value.isLoading) return
-        _uiState.update { it.copy(isLoading = true, errorMessageResId = null) }
+        _uiState.update { it.copy(isLoading = true, errorMessageResId = if (isManualRefresh) null else it.errorMessageResId) }
         viewModelScope.launch(exceptionHandler) {
-            when (val result = repository.fetchLivePrices()) {
-                is NetworkResult.Success -> {
-                    val currentTime = if (result.isFresh) {
-                        SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-                    } else {
-                        prefs?.getString("cached_time", "") ?: ""
-                    }
-                    
-                    if (result.isFresh) {
-                        saveCachedItemsToPrefs(result.data)
-                        prefs?.edit()?.putString("cached_time", currentTime)?.apply()
-                    }
+            try {
+                when (val result = repository.fetchLivePrices()) {
+                    is NetworkResult.Success -> {
+                        val currentTime = if (result.isFresh) {
+                            SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
+                        } else {
+                            prefs?.getString("cached_time", "") ?: ""
+                        }
+                        
+                        if (result.isFresh) {
+                            saveCachedItemsToPrefs(result.data)
+                            prefs?.edit()?.putString("cached_time", currentTime)?.apply()
+                        }
 
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            items = result.data,
-                            lastUpdatedTime = currentTime,
-                            showSuccessMessage = isManualRefresh && result.isFresh,
-                            errorMessageResId = if (!result.isFresh && isManualRefresh) R.string.error_showing_cache else null
-                        )
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                items = result.data,
+                                lastUpdatedTime = currentTime,
+                                showSuccessMessage = isManualRefresh && result.isFresh,
+                                errorMessageResId = if (!result.isFresh && isManualRefresh) R.string.error_showing_cache else null
+                            )
+                        }
+                        if (result.isFresh) {
+                            try {
+                                context?.let { updateAllWidgets(it) }
+                            } catch (e: Exception) {
+                                Log.e("CurrencyViewModel", "Widget update error", e)
+                            }
+                        }
+                        try {
+                            checkTriggeredAlarms(result.data)
+                        } catch (e: Exception) {
+                            Log.e("CurrencyViewModel", "Check alarms error", e)
+                        }
                     }
-                    if (result.isFresh) {
-                        context?.let { updateAllWidgets(it) }
+                    is NetworkResult.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                errorMessageResId = if (isManualRefresh) result.messageResId else null
+                            )
+                        }
                     }
-                    checkTriggeredAlarms(result.data)
                 }
-                is NetworkResult.Error -> {
-                    _uiState.update {
-                        it.copy(
-                            isLoading = false,
-                            errorMessageResId = result.messageResId
-                        )
-                    }
+            } catch (e: Exception) {
+                Log.e("CurrencyViewModel", "fetchData error", e)
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessageResId = if (isManualRefresh) R.string.error_server else null
+                    )
                 }
             }
         }
