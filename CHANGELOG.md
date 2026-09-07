@@ -1,6 +1,69 @@
-## [Example] - 2026-09-07
+## [v1.0.6.5 - Stable] - 2026-09-07
+# 🚀 نسسسسسخه جدیییییدددددد!
+## تغییرات:
 
-Example
+- اضافه شدن keystore.properties به .gitignore 
+- پیاده‌سازی لودینگ داینامیک keystore.properties در Gradle
+- قابلیت خواندن پسوردها و مسیر استور از Environment Variables یا فایل لوکال
+- اضافه شدن دیپندنسی‌های تست androidx.junit و runner 
+- پیاده‌سازی متغیر استیت selectedTechnicalAsset در MainActivity 
+- اضافه شدن BackHandler اختصاصی برای صفحه technical_chart 
+- اضافه شدن technical_chart به ترتیب انیمیشن‌های صفحه در AnimatedContent 
+- رندر کامپوننت TechnicalChartScreen به همراه دیتای فال‌بک دلاری
+- اکشن باز کردن چارت تکنیکال در متد onOpenTechnicalChart صفحه هشدارها
+- غیرفعال شدن نوار نویگیشن ( NavigationSuiteType.None ) در نمای چارت تکنیکال
+- دکمه دسترسی به چارت تکنیکال در دیالوگ جزییات دارایی ( AssetDetailDialog )
+- کارت دسترسی به چارت تکنیکال در صفحه هشدارها ( AlarmsScreen )
+- تعریف کلاینت اشتراکی ScraperOkHttpClient با مهلت زمانی ۱۲ ثانیه
+- افزایش تایم‌اوت وب‌اسکرپینگ TGJU به ۱۲ ثانیه
+- افزایش تایم‌اوت ریکوئست مارکت بیت‌پین به ۱۲ ثانیه
+- افزایش زمان انتظار CompletableFuture.allOf به ۱۲ ثانیه
+- انتقال کوئری‌های getCachedCurrencies و saveCurrenciesToCache به کانتکست Dispatchers.IO 
+- مدیریت اکسپشن با بلوک‌های try-catch در کش دیتابیس Room
+- فیلتر کردن اخبار فال‌بک بر اساس خبرگزاری‌های فعال ( activeAgencyIds )
+- پیاده‌سازی کامپوننت رفرش ExpressivePullToRefreshBox در صفحه اخبار
+- حذف ارور سراسری در CoroutineExceptionHandler و جایگزینی با لاگ در ViewModel
+- همگام‌سازی دیتای کش SharedPreferences به دیتابیس Room در راه‌اندازی اولیه
+- افزودن دیلی ۱ ثانیه‌ای پیش از اولین دریافت زمان‌بندی‌شده نرخ‌ها
+- عدم پاک شدن ارور در زمان رفرش‌های اتوماتیک دوره‌ای
+- امن‌سازی فراخوانی به‌روزرسانی ویجت‌ها با بلوک try-catch 
+- امن‌سازی بررسی هشدارهای قیمت با بلوک try-catch 
+- اضافه شدن ریسورس‌های رشته‌ای چارت تکنیکال به زبان انگلیسی
+- اضافه شدن ریسورس‌های رشته‌ای چارت تکنیکال به زبان فارسی
+
+-----
+
+# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
+## The Changes: 
+
+- Added keystore.properties to .gitignore
+- Implemented dynamic loading of keystore.properties in Gradle
+- Ability to read passwords and store path from Environment Variables or local file
+- Added androidx.junit and runner test dependencies
+- Implemented selectedTechnicalAsset state variable in MainActivity
+- Added dedicated BackHandler for technical_chart page
+- Added technical_chart in order of page animations in AnimatedContent
+- Rendered TechnicalChartScreen component with dollar fallback data
+- Action to open technical chart in onOpenTechnicalChart method of alerts page
+- Disabling navigation bar (NavigationSuiteType.None) in technical chart view
+- Technical chart access button in asset detail dialog (AssetDetailDialog)
+- Technical chart access card in alerts page (AlarmsScreen)
+- Definition of ScraperOkHttpClient shared client with 12 second timeout
+- Increased TGJU web scraping timeout to 12 seconds
+- Increase BitPin Market request timeout to 12 seconds
+- Increase CompletableFuture.allOf wait time to 12 seconds
+- Move getCachedCurrencies and saveCurrenciesToCache queries to Dispatchers.IO context
+- Handle exceptions with try-catch blocks in Room database cache
+- Filter fallback news based on active agencies ( activeAgencyIds )
+- Implement ExpressivePullToRefreshBox refresh component on news page
+- Remove global error in CoroutineExceptionHandler and replace with log in ViewModel
+- Synchronize SharedPreferences cache data to Room database on initial startup
+- Add 1 second delay before first scheduled fetch of rates
+- Error not cleared during periodic automatic refreshes
+- Secure widget update call with try-catch block
+- Secure price alert checking with try-catch block
+- Added technical chart string resources in English
+- Added technical chart string resources in Persian
 
 
 ## [v1.0.6.5 - Stable] - 2026-08-23
