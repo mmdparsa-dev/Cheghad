@@ -2,7 +2,7 @@ name: Build & Attach Signed Release
 
 on:
   release:
-    types: [published]
+    types: [published, created, prereleased]
   workflow_dispatch:
 
 permissions:
