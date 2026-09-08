@@ -18,8 +18,26 @@ class SettingsViewModel(private val repository: SettingsRepository) : ViewModel(
     val settings: StateFlow<UserSettings> = repository.settingsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = UserSettings("system", "DEFAULT", "jalali", "fa", "standard", "USD", "glassy", isLoaded = false)
+        initialValue = UserSettings("system", "DEFAULT", "jalali", "fa", "standard", "USD", "glassy", candleBullishColor = "#00C853", candleBearishColor = "#FF3D00", assetClickAction = "simple", isLoaded = false)
     )
+
+    fun setAssetClickAction(action: String) {
+        viewModelScope.launch {
+            repository.updateAssetClickAction(action)
+        }
+    }
+
+    fun setCandleBullishColor(color: String) {
+        viewModelScope.launch {
+            repository.updateCandleBullishColor(color)
+        }
+    }
+
+    fun setCandleBearishColor(color: String) {
+        viewModelScope.launch {
+            repository.updateCandleBearishColor(color)
+        }
+    }
 
     fun setThemeMode(mode: String) {
         viewModelScope.launch {

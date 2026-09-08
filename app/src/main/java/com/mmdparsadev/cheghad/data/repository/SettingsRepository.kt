@@ -22,6 +22,9 @@ class SettingsRepository(val context: Context) {
         val LOCKSCREEN_WIDGET_THEME = stringPreferencesKey("lockscreen_widget_theme")
         val DOWNLOAD_BETA_VERSIONS = booleanPreferencesKey("download_beta_versions")
         val NEWS_ENABLED = booleanPreferencesKey("news_enabled")
+        val CANDLE_BULLISH_COLOR = stringPreferencesKey("candle_bullish_color")
+        val CANDLE_BEARISH_COLOR = stringPreferencesKey("candle_bearish_color")
+        val ASSET_CLICK_ACTION = stringPreferencesKey("asset_click_action")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data
@@ -42,6 +45,9 @@ class SettingsRepository(val context: Context) {
             val lockscreenWidgetTheme = preferences[PreferencesKeys.LOCKSCREEN_WIDGET_THEME] ?: "glassy"
             val downloadBetaVersions = preferences[PreferencesKeys.DOWNLOAD_BETA_VERSIONS] ?: false
             val newsEnabled = preferences[PreferencesKeys.NEWS_ENABLED] ?: false
+            val candleBullishColor = preferences[PreferencesKeys.CANDLE_BULLISH_COLOR] ?: "#00C853"
+            val candleBearishColor = preferences[PreferencesKeys.CANDLE_BEARISH_COLOR] ?: "#FF3D00"
+            val assetClickAction = preferences[PreferencesKeys.ASSET_CLICK_ACTION] ?: "simple"
 
             UserSettings(
                 themeMode = themeMode,
@@ -53,6 +59,9 @@ class SettingsRepository(val context: Context) {
                 lockscreenWidgetTheme = lockscreenWidgetTheme,
                 downloadBetaVersions = downloadBetaVersions,
                 newsEnabled = newsEnabled,
+                candleBullishColor = candleBullishColor,
+                candleBearishColor = candleBearishColor,
+                assetClickAction = assetClickAction,
                 isLoaded = true,
             )
         }
@@ -110,6 +119,24 @@ class SettingsRepository(val context: Context) {
             preferences[PreferencesKeys.NEWS_ENABLED] = enabled
         }
     }
+
+    suspend fun updateCandleBullishColor(color: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.CANDLE_BULLISH_COLOR] = color
+        }
+    }
+
+    suspend fun updateCandleBearishColor(color: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.CANDLE_BEARISH_COLOR] = color
+        }
+    }
+
+    suspend fun updateAssetClickAction(action: String) {
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.ASSET_CLICK_ACTION] = action
+        }
+    }
 }
 
 data class UserSettings(
@@ -122,5 +149,8 @@ data class UserSettings(
     val lockscreenWidgetTheme: String = "glassy",
     val downloadBetaVersions: Boolean = false,
     val newsEnabled: Boolean = false,
+    val candleBullishColor: String = "#00C853",
+    val candleBearishColor: String = "#FF3D00",
+    val assetClickAction: String = "simple",
     val isLoaded: Boolean = false
 )

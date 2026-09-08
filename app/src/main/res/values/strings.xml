@@ -202,4 +202,21 @@
     <string name="technical_chart_open_btn">Advanced Technical Chart (Candles, EMA 200, RSI)</string>
     <string name="technical_chart_alarms_card">Technical Chart &amp; Market Analysis</string>
     <string name="technical_chart_alarms_desc">View candlestick chart, EMA 200, RSI, and 5 asset carousels</string>
+    <string name="settings_candle_colors_title">Technical Chart Candle Colors</string>
+    <string name="settings_candle_bullish_label">Bullish Candles (Positive / Up)</string>
+    <string name="settings_candle_bearish_label">Bearish Candles (Negative / Down)</string>
+    <string name="settings_candle_preview_label">Live Candle Preview</string>
+    <string name="settings_asset_click_title">Default Asset Click Action</string>
+    <string name="settings_asset_click_simple">Simple Chart</string>
+    <string name="settings_asset_click_technical">Technical Chart</string>
+    <string name="settings_custom_color">Custom</string>
+    <string name="settings_custom_color_title_bullish">Custom Bullish Candle Color</string>
+    <string name="settings_custom_color_title_bearish">Custom Bearish Candle Color</string>
+    <string name="settings_custom_color_hex_label">Hex Color Code</string>
+    <string name="settings_custom_color_hex_hint">e.g. #00E676 or FF5722</string>
+    <string name="settings_custom_color_confirm">Apply</string>
+    <string name="settings_custom_color_cancel">Cancel</string>
+    <string name="settings_custom_color_invalid">Invalid color code</string>
+    <string name="settings_custom_color_quick_palette">Popular Palette</string>
+    <string name="settings_custom_color_brightness">Color Brightness</string>
 </resources>

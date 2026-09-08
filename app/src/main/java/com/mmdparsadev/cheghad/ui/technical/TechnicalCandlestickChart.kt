@@ -420,6 +420,8 @@ fun TechnicalCandlestickChart(
     drawingsAlpha: Float = 1f,
     cornerRadius: Dp = 16.dp,
     isTvMode: Boolean = false,
+    bullishColor: Color = Color(0xFF00C853),
+    bearishColor: Color = Color(0xFFFF3D00),
     modifier: Modifier = Modifier,
     onHoverCandleChanged: (CandleData?) -> Unit = {},
     onZoomChanged: () -> Unit = {},
@@ -468,8 +470,8 @@ fun TechnicalCandlestickChart(
         }
     }
 
-    val upColor = Color(0xFF00C853) // Green
-    val downColor = Color(0xFFFF3D00) // Red
+    val upColor = bullishColor
+    val downColor = bearishColor
     val emaColor = Color(0xFFFFB300) // Amber / Gold
     val rsiColor = Color(0xFF7C4DFF) // Purple
     val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
@@ -1336,7 +1338,9 @@ fun renderChartToBitmap(
     showEma: Boolean = true,
     showRsi: Boolean = true,
     isDark: Boolean = false,
-    drawings: List<ChartDrawing> = emptyList()
+    drawings: List<ChartDrawing> = emptyList(),
+    bullishColor: Color = Color(0xFF00C853),
+    bearishColor: Color = Color(0xFFFF3D00)
 ): Bitmap {
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(bitmap)
@@ -1404,8 +1408,8 @@ fun renderChartToBitmap(
     val candleW = chartWidth / visibleCandles.size
     val bodyW = max(candleW * 0.7f, 2f)
 
-    val greenPaint = Paint().apply { color = android.graphics.Color.rgb(0, 200, 83); isAntiAlias = true }
-    val redPaint = Paint().apply { color = android.graphics.Color.rgb(255, 61, 0); isAntiAlias = true }
+    val greenPaint = Paint().apply { color = bullishColor.toArgb(); isAntiAlias = true }
+    val redPaint = Paint().apply { color = bearishColor.toArgb(); isAntiAlias = true }
 
     for (i in visibleCandles.indices) {
         val c = visibleCandles[i]

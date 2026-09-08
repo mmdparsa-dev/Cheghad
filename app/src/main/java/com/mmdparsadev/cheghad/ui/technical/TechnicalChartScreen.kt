@@ -157,6 +157,8 @@ fun TechnicalChartScreen(
     initialCurrency: CurrencyItem,
     allCurrencies: List<CurrencyItem>,
     digitType: String = "fa",
+    bullishColor: Color = Color(0xFF00C853),
+    bearishColor: Color = Color(0xFFFF3D00),
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -221,8 +223,8 @@ fun TechnicalChartScreen(
 
     val latestCandle = hoveredCandle ?: candles.lastOrNull()
 
-    val upColor = Color(0xFF00C853)
-    val downColor = Color(0xFFFF3D00)
+    val upColor = bullishColor
+    val downColor = bearishColor
     val emaColor = Color(0xFFFFB300)
     val rsiColor = Color(0xFF7C4DFF)
 
@@ -583,7 +585,94 @@ fun TechnicalChartScreen(
                 }
             }
 
-            // 3. HUD Info Bar (Collapsible with smooth animation)
+            // 3. Drawing Toolbar with animated undo and clear (Hidden in TV mode to prioritize widescreen chart area)
+            if (!isTv) {
+                DrawingToolbar(
+                    activeTool = activeTool,
+                    onToolSelected = { activeTool = it },
+                    activeColor = activeColor,
+                    onColorSelected = { activeColor = it },
+                    canUndo = undoStack.isNotEmpty() || drawings.isNotEmpty(),
+                    onUndo = {
+                        coroutineScope.launch {
+                            drawingsAlpha.snapTo(0.25f)
+                            if (undoStack.isNotEmpty()) {
+                                drawings = undoStack.last()
+                                undoStack = undoStack.dropLast(1)
+                            } else if (drawings.isNotEmpty()) {
+                                drawings = emptyList()
+                            }
+                            drawingsAlpha.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
+                        }
+                    },
+                    canClear = drawings.isNotEmpty(),
+                    onClear = {
+                        if (drawings.isNotEmpty()) {
+                            coroutineScope.launch {
+                                drawingsAlpha.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
+                                undoStack = undoStack + listOf(drawings)
+                                drawings = emptyList()
+                                drawingsAlpha.snapTo(1f)
+                            }
+                        }
+                    }
+                )
+            }
+
+            // 4. Main Candlestick Chart Area (Fills container with animated margin and border radius)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = chartMarginH, vertical = chartMarginV),
+                contentAlignment = Alignment.Center
+            ) {
+                TechnicalCandlestickChart(
+                    candles = candles,
+                    currency = currentCurrency,
+                    timeframe = selectedTimeframe,
+                    showEma = showEma,
+                    showRsi = showRsi,
+                    digitType = digitType,
+                    activeTool = activeTool,
+                    activeColor = activeColor,
+                    drawings = drawings,
+                    drawingsAlpha = drawingsAlpha.value,
+                    cornerRadius = chartCornerRadius,
+                    isTvMode = isTv,
+                    bullishColor = bullishColor,
+                    bearishColor = bearishColor,
+                    modifier = Modifier.fillMaxSize(),
+                    onHoverCandleChanged = { hoveredCandle = it },
+                    onZoomChanged = { selectedTimeframe = null },
+                    onDrawingCreated = { newD ->
+                        undoStack = undoStack + listOf(drawings)
+                        drawings = drawings + newD
+                    },
+                    onRequestTextInput = { pt ->
+                        textTargetPoint = pt
+                        inputNoteText = ""
+                        showTextDialog = true
+                    }
+                )
+
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(36.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp
+                        )
+                    }
+                }
+            }
+
+            // 5. HUD Info Bar (Collapsible with smooth animation, located directly below candlestick chart)
             AnimatedVisibility(
                 visible = !isFullScreen,
                 enter = expandVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(300)),
@@ -664,91 +753,6 @@ fun TechnicalChartScreen(
                                 HudItem("بسته", latestCandle.close, digitType, isTv = isTv)
                             }
                         }
-                    }
-                }
-            }
-
-            // 4. Drawing Toolbar with animated undo and clear (Hidden in TV mode to prioritize widescreen chart area)
-            if (!isTv) {
-                DrawingToolbar(
-                    activeTool = activeTool,
-                    onToolSelected = { activeTool = it },
-                    activeColor = activeColor,
-                    onColorSelected = { activeColor = it },
-                    canUndo = undoStack.isNotEmpty() || drawings.isNotEmpty(),
-                    onUndo = {
-                        coroutineScope.launch {
-                            drawingsAlpha.snapTo(0.25f)
-                            if (undoStack.isNotEmpty()) {
-                                drawings = undoStack.last()
-                                undoStack = undoStack.dropLast(1)
-                            } else if (drawings.isNotEmpty()) {
-                                drawings = emptyList()
-                            }
-                            drawingsAlpha.animateTo(1f, tween(260, easing = FastOutSlowInEasing))
-                        }
-                    },
-                    canClear = drawings.isNotEmpty(),
-                    onClear = {
-                        if (drawings.isNotEmpty()) {
-                            coroutineScope.launch {
-                                drawingsAlpha.animateTo(0f, tween(200, easing = FastOutSlowInEasing))
-                                undoStack = undoStack + listOf(drawings)
-                                drawings = emptyList()
-                                drawingsAlpha.snapTo(1f)
-                            }
-                        }
-                    }
-                )
-            }
-
-            // 5. Main Candlestick Chart Area (Fills container with animated margin and border radius)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(horizontal = chartMarginH, vertical = chartMarginV),
-                contentAlignment = Alignment.Center
-            ) {
-                TechnicalCandlestickChart(
-                    candles = candles,
-                    currency = currentCurrency,
-                    timeframe = selectedTimeframe,
-                    showEma = showEma,
-                    showRsi = showRsi,
-                    digitType = digitType,
-                    activeTool = activeTool,
-                    activeColor = activeColor,
-                    drawings = drawings,
-                    drawingsAlpha = drawingsAlpha.value,
-                    cornerRadius = chartCornerRadius,
-                    isTvMode = isTv,
-                    modifier = Modifier.fillMaxSize(),
-                    onHoverCandleChanged = { hoveredCandle = it },
-                    onZoomChanged = { selectedTimeframe = null },
-                    onDrawingCreated = { newD ->
-                        undoStack = undoStack + listOf(drawings)
-                        drawings = drawings + newD
-                    },
-                    onRequestTextInput = { pt ->
-                        textTargetPoint = pt
-                        inputNoteText = ""
-                        showTextDialog = true
-                    }
-                )
-
-                if (isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(36.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            strokeWidth = 3.dp
-                        )
                     }
                 }
             }
@@ -1106,7 +1110,9 @@ fun TechnicalChartScreen(
                                         candles = candles,
                                         showEma = showEma,
                                         showRsi = showRsi,
-                                        drawings = drawings
+                                        drawings = drawings,
+                                        bullishColor = bullishColor,
+                                        bearishColor = bearishColor
                                     )
                                     TechnicalExportHelper.sharePng(
                                         context = context,
@@ -1166,7 +1172,9 @@ fun TechnicalChartScreen(
                                         candles = candles,
                                         showEma = showEma,
                                         showRsi = showRsi,
-                                        drawings = drawings
+                                        drawings = drawings,
+                                        bullishColor = bullishColor,
+                                        bearishColor = bearishColor
                                     )
                                     TechnicalExportHelper.savePngToDevice(
                                         context = context,
@@ -1264,7 +1272,9 @@ fun TechnicalChartScreen(
                                         candles = candles,
                                         showEma = showEma,
                                         showRsi = showRsi,
-                                        drawings = drawings
+                                        drawings = drawings,
+                                        bullishColor = bullishColor,
+                                        bearishColor = bearishColor
                                     )
                                     TechnicalExportHelper.sharePdf(
                                         context = context,
@@ -1325,7 +1335,9 @@ fun TechnicalChartScreen(
                                         candles = candles,
                                         showEma = showEma,
                                         showRsi = showRsi,
-                                        drawings = drawings
+                                        drawings = drawings,
+                                        bullishColor = bullishColor,
+                                        bearishColor = bearishColor
                                     )
                                     TechnicalExportHelper.savePdfToDevice(
                                         context = context,

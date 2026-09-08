@@ -202,4 +202,21 @@
     <string name="technical_chart_open_btn">تحلیل تکنیکال پیشرفته (کندل‌استیک، EMA 200، RSI)</string>
     <string name="technical_chart_alarms_card">نمودار تکنیکال و هشدارهای بازار</string>
     <string name="technical_chart_alarms_desc">مشاهده نمودار کندل‌استیک، EMA 200، RSI و ۵ گردون ارزی بازار</string>
+    <string name="settings_candle_colors_title">رنگ کندل‌های نمودار تکنیکال</string>
+    <string name="settings_candle_bullish_label">کندل‌های مثبت (صعودی)</string>
+    <string name="settings_candle_bearish_label">کندل‌های منفی (نزولی)</string>
+    <string name="settings_candle_preview_label">پیش‌نمایش زنده کندل‌ها</string>
+    <string name="settings_asset_click_title">عملکرد لمس کارت ارزها</string>
+    <string name="settings_asset_click_simple">نمودار ساده</string>
+    <string name="settings_asset_click_technical">نمودار تکنیکال</string>
+    <string name="settings_custom_color">سفارشی</string>
+    <string name="settings_custom_color_title_bullish">انتخاب رنگ دلخواه کندل صعودی</string>
+    <string name="settings_custom_color_title_bearish">انتخاب رنگ دلخواه کندل نزولی</string>
+    <string name="settings_custom_color_hex_label">کد هگز رنگ</string>
+    <string name="settings_custom_color_hex_hint">مثال: #00E676 یا FF5722</string>
+    <string name="settings_custom_color_confirm">ثبت و اعمال</string>
+    <string name="settings_custom_color_cancel">انصراف</string>
+    <string name="settings_custom_color_invalid">کد رنگ نامعتبر است</string>
+    <string name="settings_custom_color_quick_palette">پالت رنگ‌های محبوب</string>
+    <string name="settings_custom_color_brightness">روشنایی رنگ</string>
 </resources>

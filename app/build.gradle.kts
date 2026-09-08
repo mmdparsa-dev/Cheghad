@@ -26,8 +26,8 @@ android {
         applicationId = "com.mmdparsadev.cheghad"
         minSdk = 24
         targetSdk = 37
-        versionCode = 110
-        versionName = "1.1.0 - Stable"
+        versionCode = 111
+        versionName = "1.1.1 - Stable"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

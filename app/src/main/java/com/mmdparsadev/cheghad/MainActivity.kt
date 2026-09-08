@@ -36,6 +36,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.graphicsLayer
@@ -75,6 +77,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
@@ -393,6 +396,15 @@ class MainActivity : AppCompatActivity() {
                 val homeScrollState = rememberLazyListState()
                 val coroutineScope = rememberCoroutineScope()
 
+                val handleAssetClick: (CurrencyItem) -> Unit = { item ->
+                    if (userSettings.assetClickAction == "technical") {
+                        selectedTechnicalAsset = item
+                        currentScreen = "technical_chart"
+                    } else {
+                        selectedItemForDetail = item
+                    }
+                }
+
                 MyApplicationTheme(
                     themeMode = appThemeMode,
                     seedColor = if (selectedAppColor == AppThemeColor.DEFAULT) null else selectedAppColor.seedColor,
@@ -539,7 +551,7 @@ class MainActivity : AppCompatActivity() {
                                                         sharedPrefs.edit().putString("home_items", newSymbols.joinToString(",")).apply()
                                                     },
                                                     onClickItem = { item ->
-                                                        selectedItemForDetail = item
+                                                        handleAssetClick(item)
                                                     },
                                                     modifier = Modifier.padding(horizontal = adaptiveDp(16f))
                                                 )
@@ -743,7 +755,7 @@ class MainActivity : AppCompatActivity() {
                                                         item = item,
                                                         colorSchemeMode = colorSchemeMode,
                                                         digitType = digitType,
-                                                        onClick = { selectedItemForDetail = item },
+                                                        onClick = { handleAssetClick(item) },
                                                         onLongClick = { viewModel.hideCurrencyForItem(item.id) },
                                                         isReordering = isEditingCustomSort,
                                                         isDragging = isDragging,
@@ -910,6 +922,12 @@ class MainActivity : AppCompatActivity() {
                                         onLockscreenWidgetCurrencySelected = { settingsViewModel.setLockscreenWidgetCurrencyId(it) },
                                         lockscreenWidgetTheme = userSettings.lockscreenWidgetTheme,
                                         onLockscreenWidgetThemeSelected = { settingsViewModel.setLockscreenWidgetTheme(it) },
+                                        candleBullishColor = userSettings.candleBullishColor,
+                                        onCandleBullishColorSelected = { settingsViewModel.setCandleBullishColor(it) },
+                                        candleBearishColor = userSettings.candleBearishColor,
+                                        onCandleBearishColorSelected = { settingsViewModel.setCandleBearishColor(it) },
+                                        assetClickAction = userSettings.assetClickAction,
+                                        onAssetClickActionSelected = { settingsViewModel.setAssetClickAction(it) },
                                         allCurrencies = uiState.items
                                     )
                                 } else if (screen == "technical_chart") {
@@ -919,10 +937,22 @@ class MainActivity : AppCompatActivity() {
                                         priceDirection = PriceDirection.Up, lastUpdatedTimestamp = System.currentTimeMillis(),
                                         iconUrl = "", category = CurrencyType.Currency
                                     )
+                                    val bullishColor = try {
+                                        Color(android.graphics.Color.parseColor(userSettings.candleBullishColor))
+                                    } catch (_: Exception) {
+                                        Color(0xFF00C853)
+                                    }
+                                    val bearishColor = try {
+                                        Color(android.graphics.Color.parseColor(userSettings.candleBearishColor))
+                                    } catch (_: Exception) {
+                                        Color(0xFFFF3D00)
+                                    }
                                     com.mmdparsadev.cheghad.ui.technical.TechnicalChartScreen(
                                         initialCurrency = selectedTechnicalAsset ?: fallback,
                                         allCurrencies = uiState.items,
                                         digitType = digitType,
+                                        bullishColor = bullishColor,
+                                        bearishColor = bearishColor,
                                         onBack = { currentScreen = "home" }
                                     )
                                 } else {
@@ -954,51 +984,57 @@ class MainActivity : AppCompatActivity() {
                                 topBar = {
                                     Column {
                                         ConnectivityStatusBanner(uiState = uiState)
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                        AnimatedVisibility(
+                                            visible = currentScreen != "technical_chart",
+                                            enter = expandVertically() + fadeIn(),
+                                            exit = shrinkVertically() + fadeOut()
                                         ) {
-                                            Box(modifier = Modifier.weight(1f)) {
-                                                BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it })
-                                            }
-                                            // دکمه به‌روزرسانی سریع اکسپرسیو مخصوص اندروید تی‌وی
-                                            Surface(
-                                                onClick = { viewModel.refreshData() },
-                                                shape = RoundedCornerShape(24.dp),
-                                                color = MaterialTheme.colorScheme.surface,
-                                                tonalElevation = 4.dp,
-                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                                modifier = Modifier
-                                                    .padding(horizontal = 16.dp)
-                                                    .height(44.dp)
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                Box(modifier = Modifier.weight(1f)) {
+                                                    BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it })
+                                                }
+                                                // دکمه به‌روزرسانی سریع اکسپرسیو مخصوص اندروید تی‌وی
+                                                Surface(
+                                                    onClick = { viewModel.refreshData() },
+                                                    shape = RoundedCornerShape(24.dp),
+                                                    color = MaterialTheme.colorScheme.surface,
+                                                    tonalElevation = 4.dp,
+                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                    modifier = Modifier
+                                                        .padding(horizontal = 16.dp)
+                                                        .height(44.dp)
                                                 ) {
-                                                    if (uiState.isLoading) {
-                                                        ExpressiveLoadingIndicator(
-                                                            modifier = Modifier.size(20.dp),
-                                                            color = MaterialTheme.colorScheme.primary,
-                                                            isRefreshing = true
-                                                        )
-                                                    } else {
-                                                        Icon(
-                                                            imageVector = Icons.Default.Refresh,
-                                                            contentDescription = stringResource(R.string.button_refresh),
-                                                            tint = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.size(20.dp)
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                    ) {
+                                                        if (uiState.isLoading) {
+                                                            ExpressiveLoadingIndicator(
+                                                                modifier = Modifier.size(20.dp),
+                                                                color = MaterialTheme.colorScheme.primary,
+                                                                isRefreshing = true
+                                                            )
+                                                        } else {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Refresh,
+                                                                contentDescription = stringResource(R.string.button_refresh),
+                                                                tint = MaterialTheme.colorScheme.primary,
+                                                                modifier = Modifier.size(20.dp)
+                                                            )
+                                                        }
+                                                        Text(
+                                                            text = stringResource(R.string.button_refresh),
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                            fontFamily = getFontFamilyForText(stringResource(R.string.button_refresh))
                                                         )
                                                     }
-                                                    Text(
-                                                        text = stringResource(R.string.button_refresh),
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface,
-                                                        fontFamily = getFontFamilyForText(stringResource(R.string.button_refresh))
-                                                    )
                                                 }
                                             }
                                         }
@@ -3799,9 +3835,359 @@ fun SettingsScreen(
     onLockscreenWidgetCurrencySelected: (String) -> Unit = {},
     lockscreenWidgetTheme: String = "glassy",
     onLockscreenWidgetThemeSelected: (String) -> Unit = {},
+    candleBullishColor: String = "#00C853",
+    onCandleBullishColorSelected: (String) -> Unit = {},
+    candleBearishColor: String = "#FF3D00",
+    onCandleBearishColorSelected: (String) -> Unit = {},
+    assetClickAction: String = "simple",
+    onAssetClickActionSelected: (String) -> Unit = {},
     allCurrencies: List<CurrencyItem> = emptyList()
 ) {
     val context = LocalContext.current
+
+    var showCustomColorDialog by remember { mutableStateOf(false) }
+    var isTargetBullish by remember { mutableStateOf(true) }
+    var customHexInput by remember { mutableStateOf("") }
+
+    if (showCustomColorDialog) {
+        val initialColorInt = remember(customHexInput) {
+            try {
+                android.graphics.Color.parseColor(if (customHexInput.startsWith("#")) customHexInput else "#$customHexInput")
+            } catch (_: Exception) {
+                if (isTargetBullish) 0xFF00C853.toInt() else 0xFFFF3D00.toInt()
+            }
+        }
+        val initialHsv = remember(initialColorInt) {
+            FloatArray(3).apply {
+                android.graphics.Color.colorToHSV(initialColorInt, this)
+            }
+        }
+        var hue by remember(initialColorInt) { mutableFloatStateOf(initialHsv[0]) }
+        var saturation by remember(initialColorInt) { mutableFloatStateOf(initialHsv[1]) }
+        var brightness by remember(initialColorInt) { mutableFloatStateOf(initialHsv[2].coerceIn(0.15f, 1f)) }
+
+        val currentColorInt = android.graphics.Color.HSVToColor(floatArrayOf(hue, saturation, brightness))
+        val currentColor = Color(currentColorInt)
+        val currentHex = String.format("#%06X", 0xFFFFFF and currentColorInt)
+
+        val quickColors = if (isTargetBullish) {
+            listOf("#00C853", "#00E676", "#69F0AE", "#26A69A", "#00BCD4", "#00B0FF", "#2196F3", "#76FF03", "#FFEB3B", "#FFFFFF")
+        } else {
+            listOf("#FF3D00", "#FF1744", "#EF5350", "#FF5252", "#FF6D00", "#FF9100", "#9C27B0", "#D500F9", "#78909C", "#37474F")
+        }
+
+        AlertDialog(
+            onDismissRequest = { showCustomColorDialog = false },
+            title = {
+                Text(
+                    text = stringResource(if (isTargetBullish) R.string.settings_custom_color_title_bullish else R.string.settings_custom_color_title_bearish),
+                    fontSize = adaptiveSp(16f),
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Live preview banner
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(adaptiveDp(60f))
+                            .clip(RoundedCornerShape(adaptiveDp(14f)))
+                            .background(Color(0xFF131722))
+                            .padding(horizontal = adaptiveDp(16f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            // Mini candle
+                            androidx.compose.foundation.Canvas(modifier = Modifier.size(width = adaptiveDp(18f), height = adaptiveDp(36f))) {
+                                val w = size.width
+                                val h = size.height
+                                val cX = w / 2f
+                                drawLine(
+                                    color = currentColor,
+                                    start = Offset(cX, 2f),
+                                    end = Offset(cX, h - 2f),
+                                    strokeWidth = 2.dp.toPx()
+                                )
+                                drawRect(
+                                    color = currentColor,
+                                    topLeft = Offset(2f, h * 0.22f),
+                                    size = Size(w - 4f, h * 0.52f)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(adaptiveDp(14f)))
+                            Column {
+                                Text(
+                                    text = currentHex,
+                                    fontSize = adaptiveSp(15f),
+                                    fontWeight = FontWeight.Bold,
+                                    color = currentColor
+                                )
+                                Text(
+                                    text = if (isTargetBullish) "کندل صعودی (+)" else "کندل نزولی (-)",
+                                    fontSize = adaptiveSp(10f),
+                                    color = Color.White.copy(alpha = 0.7f)
+                                )
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            Box(
+                                modifier = Modifier
+                                    .size(adaptiveDp(28f))
+                                    .clip(CircleShape)
+                                    .background(currentColor)
+                                    .border(adaptiveDp(1.5f), Color.White.copy(alpha = 0.5f), CircleShape)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(adaptiveDp(16f)))
+
+                    // Circular Color Picker Wheel
+                    val density = LocalDensity.current
+                    val thumbRadiusPx = with(density) { adaptiveDp(12f).toPx() }
+
+                    androidx.compose.foundation.Canvas(
+                        modifier = Modifier
+                            .size(adaptiveDp(200f))
+                            .pointerInput(thumbRadiusPx) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    val cX = size.width / 2f
+                                    val cY = size.height / 2f
+                                    val wheelRadius = minOf(size.width, size.height) / 2f - thumbRadiusPx
+
+                                    fun updateFromPoint(pt: Offset) {
+                                        val dx = pt.x - cX
+                                        val dy = pt.y - cY
+                                        val dist = Math.hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                                        val clampedDist = dist.coerceAtMost(wheelRadius)
+                                        var angleDeg = Math.toDegrees(Math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+                                        if (angleDeg < 0f) angleDeg += 360f
+                                        hue = angleDeg
+                                        saturation = (clampedDist / wheelRadius).coerceIn(0f, 1f)
+                                    }
+
+                                    updateFromPoint(down.position)
+
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull() ?: break
+                                        if (!change.pressed) break
+                                        change.consume()
+                                        updateFromPoint(change.position)
+                                    }
+                                }
+                            }
+                    ) {
+                        val cX = size.width / 2f
+                        val cY = size.height / 2f
+                        val wheelRadius = size.minDimension / 2f - thumbRadiusPx
+
+                        // 1. Rainbow Hue Sweep Gradient
+                        drawCircle(
+                            brush = Brush.sweepGradient(
+                                colors = listOf(
+                                    Color(0xFFFF0000),
+                                    Color(0xFFFFFF00),
+                                    Color(0xFF00FF00),
+                                    Color(0xFF00FFFF),
+                                    Color(0xFF0000FF),
+                                    Color(0xFFFF00FF),
+                                    Color(0xFFFF0000)
+                                ),
+                                center = Offset(cX, cY)
+                            ),
+                            radius = wheelRadius,
+                            center = Offset(cX, cY)
+                        )
+
+                        // 2. White Radial Gradient to desaturate center
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                colors = listOf(Color.White, Color.Transparent),
+                                center = Offset(cX, cY),
+                                radius = wheelRadius
+                            ),
+                            radius = wheelRadius,
+                            center = Offset(cX, cY)
+                        )
+
+                        // 3. Black overlay for darkness/brightness
+                        if (brightness < 1f) {
+                            drawCircle(
+                                color = Color.Black.copy(alpha = 1f - brightness),
+                                radius = wheelRadius,
+                                center = Offset(cX, cY)
+                            )
+                        }
+
+                        // 4. Subtle wheel outer outline
+                        drawCircle(
+                            color = Color.White.copy(alpha = 0.4f),
+                            radius = wheelRadius,
+                            center = Offset(cX, cY),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx())
+                        )
+
+                        // 5. Thumb Selector Handle
+                        val angleRad = Math.toRadians(hue.toDouble())
+                        val dist = saturation * wheelRadius
+                        val thumbX = cX + (dist * Math.cos(angleRad)).toFloat()
+                        val thumbY = cY + (dist * Math.sin(angleRad)).toFloat()
+                        val thumbCenter = Offset(thumbX, thumbY)
+
+                        // Shadow
+                        drawCircle(
+                            color = Color.Black.copy(alpha = 0.35f),
+                            radius = thumbRadiusPx + 1.5.dp.toPx(),
+                            center = thumbCenter + Offset(0f, 1.5.dp.toPx())
+                        )
+                        // White Ring
+                        drawCircle(
+                            color = Color.White,
+                            radius = thumbRadiusPx,
+                            center = thumbCenter
+                        )
+                        drawCircle(
+                            color = Color.Black.copy(alpha = 0.15f),
+                            radius = thumbRadiusPx,
+                            center = thumbCenter,
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                        )
+                        // Inner color core
+                        drawCircle(
+                            color = currentColor,
+                            radius = thumbRadiusPx - 2.5.dp.toPx(),
+                            center = thumbCenter
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(adaptiveDp(12f)))
+
+                    // Brightness slider
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = adaptiveDp(4f)),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BrightnessMedium,
+                            contentDescription = null,
+                            modifier = Modifier.size(adaptiveDp(18f)),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(adaptiveDp(6f)))
+                        Slider(
+                            value = brightness,
+                            onValueChange = { brightness = it },
+                            valueRange = 0.15f..1.0f,
+                            modifier = Modifier.weight(1f),
+                            colors = SliderDefaults.colors(
+                                thumbColor = currentColor,
+                                activeTrackColor = currentColor,
+                                inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(adaptiveDp(6f)))
+                        Text(
+                            text = "${(brightness * 100).toInt()}%",
+                            fontSize = adaptiveSp(11f),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(adaptiveDp(8f)))
+
+                    // Quick Color Swatches
+                    Text(
+                        text = stringResource(R.string.settings_custom_color_quick_palette),
+                        fontSize = adaptiveSp(11f),
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = adaptiveDp(6f))
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(adaptiveDp(8f)),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        quickColors.forEach { qHex ->
+                            val qc = try { Color(android.graphics.Color.parseColor(qHex)) } catch (_: Exception) { Color.Gray }
+                            val isPicked = currentHex.equals(qHex, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .size(adaptiveDp(30f))
+                                    .clip(CircleShape)
+                                    .background(qc)
+                                    .border(
+                                        width = if (isPicked) adaptiveDp(2.5f) else adaptiveDp(1f),
+                                        color = if (isPicked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                                        try {
+                                            val parsed = android.graphics.Color.parseColor(qHex)
+                                            val tempHsv = FloatArray(3)
+                                            android.graphics.Color.colorToHSV(parsed, tempHsv)
+                                            hue = tempHsv[0]
+                                            saturation = tempHsv[1]
+                                            brightness = tempHsv[2].coerceIn(0.15f, 1f)
+                                        } catch (_: Exception) {}
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (isPicked) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = if (qHex == "#FFFFFF" || qHex == "#FFEB3B" || qHex == "#76FF03" || qHex == "#69F0AE") Color.Black else Color.White,
+                                        modifier = Modifier.size(adaptiveDp(14f))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        HapticUtils.vibrate(context, HapticType.SUCCESS)
+                        val finalHex = currentHex.uppercase()
+                        if (isTargetBullish) {
+                            onCandleBullishColorSelected(finalHex)
+                        } else {
+                            onCandleBearishColorSelected(finalHex)
+                        }
+                        showCustomColorDialog = false
+                    }
+                ) {
+                    Text(stringResource(R.string.settings_custom_color_confirm), fontWeight = FontWeight.Bold, fontSize = adaptiveSp(13f))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomColorDialog = false }) {
+                    Text(stringResource(R.string.settings_custom_color_cancel), fontSize = adaptiveSp(13f))
+                }
+            }
+        )
+    }
 
     if (showAgenciesSheet) {
         ModalBottomSheet(
@@ -4043,6 +4429,405 @@ fun SettingsScreen(
                     fontSize = adaptiveSp(12f),
                     fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
                 )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
+
+        // Asset Click Action Section
+        SettingsCard(
+            title = stringResource(R.string.settings_asset_click_title),
+            icon = Icons.Default.TouchApp
+        ) {
+            val clickOptions = listOf("simple", "technical")
+            val clickLabels = listOf(R.string.settings_asset_click_simple, R.string.settings_asset_click_technical)
+            val selectedIndex = clickOptions.indexOf(assetClickAction).coerceAtLeast(0)
+
+            ExpressiveConnectedButtonGroup(
+                itemsCount = clickOptions.size,
+                selectedIndex = selectedIndex,
+                onSelect = { onAssetClickActionSelected(clickOptions[it]) }
+            ) { index, isSelected ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = if (index == 0) Icons.AutoMirrored.Filled.ShowChart else Icons.Default.CandlestickChart,
+                        contentDescription = null,
+                        tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(adaptiveDp(16f))
+                    )
+                    Spacer(modifier = Modifier.width(adaptiveDp(6f)))
+                    Text(
+                        text = stringResource(clickLabels[index]),
+                        fontSize = adaptiveSp(12f),
+                        fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(adaptiveDp(16f)))
+
+        // Technical Chart Candle Colors Section
+        SettingsCard(
+            title = stringResource(R.string.settings_candle_colors_title),
+            icon = Icons.Default.CandlestickChart
+        ) {
+            val parsedBullishColor = try {
+                Color(android.graphics.Color.parseColor(candleBullishColor))
+            } catch (_: Exception) {
+                Color(0xFF00C853)
+            }
+            val parsedBearishColor = try {
+                Color(android.graphics.Color.parseColor(candleBearishColor))
+            } catch (_: Exception) {
+                Color(0xFFFF3D00)
+            }
+
+            // Live Candle Preview Box
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = adaptiveDp(14f)),
+                shape = RoundedCornerShape(adaptiveDp(18f)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(adaptiveDp(12f)),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_candle_preview_label),
+                        fontSize = adaptiveSp(11f),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = adaptiveDp(8f))
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(adaptiveDp(64f))
+                            .clip(RoundedCornerShape(adaptiveDp(12f)))
+                            .background(Color(0xFF131722)) // Dark Trading Chart Canvas
+                            .padding(horizontal = adaptiveDp(24f)),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Bullish Candle
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            androidx.compose.foundation.Canvas(modifier = Modifier.size(width = adaptiveDp(20f), height = adaptiveDp(40f))) {
+                                val w = size.width
+                                val h = size.height
+                                val cX = w / 2f
+                                drawLine(
+                                    color = parsedBullishColor,
+                                    start = Offset(cX, 2f),
+                                    end = Offset(cX, h - 2f),
+                                    strokeWidth = 2.dp.toPx()
+                                )
+                                drawRect(
+                                    color = parsedBullishColor,
+                                    topLeft = Offset(2f, h * 0.25f),
+                                    size = Size(w - 4f, h * 0.48f)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(adaptiveDp(2f)))
+                            Text("صعودی (+)", fontSize = adaptiveSp(9f), fontWeight = FontWeight.Bold, color = parsedBullishColor)
+                        }
+
+                        // Bearish Candle
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            androidx.compose.foundation.Canvas(modifier = Modifier.size(width = adaptiveDp(20f), height = adaptiveDp(40f))) {
+                                val w = size.width
+                                val h = size.height
+                                val cX = w / 2f
+                                drawLine(
+                                    color = parsedBearishColor,
+                                    start = Offset(cX, 2f),
+                                    end = Offset(cX, h - 2f),
+                                    strokeWidth = 2.dp.toPx()
+                                )
+                                drawRect(
+                                    color = parsedBearishColor,
+                                    topLeft = Offset(2f, h * 0.20f),
+                                    size = Size(w - 4f, h * 0.54f)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(adaptiveDp(2f)))
+                            Text("نزولی (-)", fontSize = adaptiveSp(9f), fontWeight = FontWeight.Bold, color = parsedBearishColor)
+                        }
+                    }
+                }
+            }
+
+            // Bullish Color Picker
+            Text(
+                text = stringResource(R.string.settings_candle_bullish_label),
+                fontSize = adaptiveSp(12f),
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = adaptiveDp(8f))
+            )
+            val bullishPalette = listOf(
+                "#00C853" to "سبز کلاسیک",
+                "#26A69A" to "سبز نعنایی",
+                "#00E676" to "سبز نئونی",
+                "#00BCD4" to "فیروزه‌ای",
+                "#2196F3" to "آبی",
+                "#FFD600" to "طلایی",
+                "#FFFFFF" to "سفید"
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(adaptiveDp(10f)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                bullishPalette.forEach { (hex, name) ->
+                    val isSelected = candleBullishColor.equals(hex, ignoreCase = true)
+                    val cVal = try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { Color.Gray }
+                    val animatedScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.15f else 1.0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                        label = "bullishScale"
+                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            HapticUtils.vibrate(context, HapticType.LIGHT)
+                            onCandleBullishColorSelected(hex)
+                        }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(adaptiveDp(36f))
+                                .graphicsLayer {
+                                    scaleX = animatedScale
+                                    scaleY = animatedScale
+                                }
+                                .clip(CircleShape)
+                                .background(cVal)
+                                .border(
+                                    width = if (isSelected) adaptiveDp(2.5f) else adaptiveDp(1f),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = if (hex == "#FFFFFF") Color.Black else Color.White,
+                                    modifier = Modifier.size(adaptiveDp(16f))
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(adaptiveDp(3f)))
+                        Text(
+                            text = name,
+                            fontSize = adaptiveSp(9f),
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                // Custom Bullish Color Button
+                val isBullishCustom = bullishPalette.none { it.first.equals(candleBullishColor, ignoreCase = true) }
+                val customBullishScale by animateFloatAsState(
+                    targetValue = if (isBullishCustom) 1.15f else 1.0f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                    label = "customBullishScale"
+                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable {
+                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                        isTargetBullish = true
+                        customHexInput = candleBullishColor
+                        showCustomColorDialog = true
+                    }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(adaptiveDp(36f))
+                            .graphicsLayer {
+                                scaleX = customBullishScale
+                                scaleY = customBullishScale
+                            }
+                            .clip(CircleShape)
+                            .background(if (isBullishCustom) parsedBullishColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .border(
+                                width = if (isBullishCustom) adaptiveDp(2.5f) else adaptiveDp(1f),
+                                color = if (isBullishCustom) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isBullishCustom) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = if (candleBullishColor.equals("#FFFFFF", ignoreCase = true)) Color.Black else Color.White,
+                                modifier = Modifier.size(adaptiveDp(16f))
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(adaptiveDp(18f))
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(adaptiveDp(3f)))
+                    Text(
+                        text = stringResource(R.string.settings_custom_color),
+                        fontSize = adaptiveSp(9f),
+                        fontWeight = if (isBullishCustom) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isBullishCustom) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(adaptiveDp(14f)))
+
+            // Bearish Color Picker
+            Text(
+                text = stringResource(R.string.settings_candle_bearish_label),
+                fontSize = adaptiveSp(12f),
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = adaptiveDp(8f))
+            )
+            val bearishPalette = listOf(
+                "#FF3D00" to "قرمز کلاسیک",
+                "#EF5350" to "مرجانی",
+                "#FF1744" to "زرشکی",
+                "#FF6D00" to "نارنجی تند",
+                "#9C27B0" to "بنفش",
+                "#78909C" to "خاکستری آبی",
+                "#37474F" to "ذغالی"
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(adaptiveDp(10f)),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                bearishPalette.forEach { (hex, name) ->
+                    val isSelected = candleBearishColor.equals(hex, ignoreCase = true)
+                    val cVal = try { Color(android.graphics.Color.parseColor(hex)) } catch (_: Exception) { Color.Gray }
+                    val animatedScale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.15f else 1.0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                        label = "bearishScale"
+                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            HapticUtils.vibrate(context, HapticType.LIGHT)
+                            onCandleBearishColorSelected(hex)
+                        }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(adaptiveDp(36f))
+                                .graphicsLayer {
+                                    scaleX = animatedScale
+                                    scaleY = animatedScale
+                                }
+                                .clip(CircleShape)
+                                .background(cVal)
+                                .border(
+                                    width = if (isSelected) adaptiveDp(2.5f) else adaptiveDp(1f),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(adaptiveDp(16f))
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(adaptiveDp(3f)))
+                        Text(
+                            text = name,
+                            fontSize = adaptiveSp(9f),
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+
+                // Custom Bearish Color Button
+                val isBearishCustom = bearishPalette.none { it.first.equals(candleBearishColor, ignoreCase = true) }
+                val customBearishScale by animateFloatAsState(
+                    targetValue = if (isBearishCustom) 1.15f else 1.0f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                    label = "customBearishScale"
+                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.clickable {
+                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                        isTargetBullish = false
+                        customHexInput = candleBearishColor
+                        showCustomColorDialog = true
+                    }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(adaptiveDp(36f))
+                            .graphicsLayer {
+                                scaleX = customBearishScale
+                                scaleY = customBearishScale
+                            }
+                            .clip(CircleShape)
+                            .background(if (isBearishCustom) parsedBearishColor else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .border(
+                                width = if (isBearishCustom) adaptiveDp(2.5f) else adaptiveDp(1f),
+                                color = if (isBearishCustom) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (isBearishCustom) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(adaptiveDp(16f))
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(adaptiveDp(18f))
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(adaptiveDp(3f)))
+                    Text(
+                        text = stringResource(R.string.settings_custom_color),
+                        fontSize = adaptiveSp(9f),
+                        fontWeight = if (isBearishCustom) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isBearishCustom) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
 
