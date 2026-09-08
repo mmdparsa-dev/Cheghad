@@ -1,3 +1,23 @@
+## [v1.1.1 - Stable] - 2026-09-08
+
+#  یه اپدیت کوچیک
+## تغییرات:
+
+- اضافه شدن قابلیت تغییر رنگ کندل ها
+- اضافه شدن قابلیت تغییر عملکرد لمس کارت های ارز
+- تغییر مکان انتقال کانتینر اطلاعات کندل
+- رفع باگ نمایش nav هنگام کار کردن با نمودار تکنیکال در اندروید تی وی
+-----
+
+# a little update 
+## The Changes: 
+
+- Added the ability to change the color of candles
+- Added the ability to change the touch function of currency cards
+- Changed the location of the candle data container
+- Fixed the nav display bug when working with technical charts on Android TV
+
+
 ## [v1.1.0 - Stable] - 2026-09-07
 # 🚀 نسسسسسخه جدیییییدددددد!
 ## تغییرات:
