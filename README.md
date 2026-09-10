@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="200" height="200" alt="LogoCheghad" src="https://github.com/user-attachments/assets/7488ac10-8447-4dc9-bd53-6630f9c6d9ad" />
+  <img width="200" alt="LogoCheghad" src="https://github.com/user-attachments/assets/7488ac10-8447-4dc9-bd53-6630f9c6d9ad" />
 </p>
 <h1 align="center">Cheghad (چقد) 🪙</h1>
 
