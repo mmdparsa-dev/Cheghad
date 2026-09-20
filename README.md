@@ -48,6 +48,7 @@
 
   * طراحی شده با Material 3 Expressive
   * پشتیبانی از حالت روشن و تاریک
+  * نمودار تکنیکال
   * طراحی سازگار با اندازه‌های مختلف صفحه‌نمایش
 
 - ⚡ **کار کردن به صورت آفلاین**
@@ -142,6 +143,7 @@ The application is developed using **Kotlin** and **Jetpack Compose**, with an O
 
   * Built with Material 3 Expressive
   * Light and Dark theme support
+  * Technical Chart
   * Responsive design
 
 * ⚡ **Offline-First**
