@@ -24,8 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.tv.foundation.lazy.list.TvLazyRow
-import androidx.tv.foundation.lazy.list.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import com.mmdparsadev.cheghad.data.models.CurrencyItem
 import com.mmdparsadev.cheghad.data.models.PriceDirection
 import java.util.Locale
@@ -249,12 +249,15 @@ fun TvCurrencyRowScreen(
             color = MaterialTheme.colorScheme.onBackground
         )
 
-        TvLazyRow(
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 48.dp, vertical = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            items(currencies, key = { it.id }) { currency ->
+            items(
+                items = currencies,
+                key = { it.id }
+            ) { currency ->
                 PriceCard(
                     currency = currency,
                     onClick = { onCurrencySelect(currency) },
