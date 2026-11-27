@@ -294,6 +294,8 @@
     <string name="tech_tv_zoom_in">Zoom in</string>
     <string name="tech_tv_zoom_out">Zoom out</string>
     <string name="tech_tv_zoom_reset">Reset zoom</string>
+    <string name="tech_tv_prev_candle">Previous candle</string>
+    <string name="tech_tv_next_candle">Next candle</string>
     <string name="tech_tv_remote_hint">Remote: ◀ ▶ Candle | OK Crosshair</string>
     <string name="tech_export_sheet_title">Export &amp; Share Technical Chart</string>
     <string name="tech_export_sheet_subtitle">%1$s (%2$s) - Timeframe %3$s</string>

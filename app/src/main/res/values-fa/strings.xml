@@ -294,6 +294,8 @@
     <string name="tech_tv_zoom_in">بزرگ‌نمایی</string>
     <string name="tech_tv_zoom_out">کوچک‌نمایی</string>
     <string name="tech_tv_zoom_reset">ریست زوم</string>
+    <string name="tech_tv_prev_candle">کندل قبلی</string>
+    <string name="tech_tv_next_candle">کندل بعدی</string>
     <string name="tech_tv_remote_hint">ریموت: ◀ ▶ کندل | OK نشانگر</string>
     <string name="tech_export_sheet_title">خروجی و اشتراک‌گذاری نمودار تکنیکال</string>
     <string name="tech_export_sheet_subtitle">%1$s (%2$s) - تایم‌فریم %3$s</string>
