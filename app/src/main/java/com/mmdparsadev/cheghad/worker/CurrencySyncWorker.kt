@@ -28,7 +28,6 @@ class CurrencySyncWorker(
             val database = com.mmdparsadev.cheghad.data.database.AppDatabase.getDatabase(applicationContext)
             val repository = CurrencyRepository(
                 ApiClient.CheghadApiService,
-                ApiClient.KifpoolApiService,
                 database.currencyDao()
             )
 

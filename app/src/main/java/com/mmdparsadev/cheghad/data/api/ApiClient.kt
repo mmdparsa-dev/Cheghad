@@ -1,8 +1,22 @@
 package com.mmdparsadev.cheghad.data.api
 
-import com.mmdparsadev.cheghad.data.api.KifpoolApi
-import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import com.mmdparsadev.cheghad.data.models.CurrencyItem
+import com.mmdparsadev.cheghad.data.models.CurrencyResponse
+import com.mmdparsadev.cheghad.data.models.CurrencyType
+import com.mmdparsadev.cheghad.data.models.PriceDirection
+import com.mmdparsadev.cheghad.data.models.TgjuSymbolMapper
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -11,17 +25,27 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.ResponseBody.Companion.toResponseBody
 import retrofit2.Retrofit
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
+import java.util.Locale
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
+import kotlin.math.round
 
 object ApiClient {
-    private const val BASE_URL = "https://api.example.com/" // Dummy base URL
+    private const val BASE_URL = "https://api.example.com/" // Intercepted locally via LiveTgjuInterceptor
+    private const val TGJU_AJAX_URL = "https://call.tgju.org/ajax.json"
+    private const val TGJU_TV2_HISTORY_URL = "https://dashboard-api.tgju.org/v1/tv2/history"
+    private const val USD_SLUG = "price_dollar_rl"
+    private const val USOON_SYMBOL = "USOON"
+    private const val USOON_ICON_URL = "https://cdn.bitpin.ir/media/market/currency/1771999775.svg"
+    private const val USD_CACHE_TTL_MS = 60_000L
 
     private val JsonConfig = Json {
         ignoreUnknownKeys = true
         isLenient = true
     }
-    
-    
+
     private val ScraperOkHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(12, TimeUnit.SECONDS)
@@ -29,360 +53,439 @@ object ApiClient {
             .build()
     }
 
-    private val MockInterceptor = Interceptor { chain ->
-        val uri = chain.request().url.toString()
+    @Volatile
+    private var cachedUsdToman: Pair<Double, Long>? = null
+
+    private enum class UnitMode {
+        IRR_TO_TOMAN,
+        USD_TO_TOMAN,
+        NATIVE
+    }
+
+    private data class AssetSpec(
+        val id: String,
+        val symbol: String,
+        val title: String,
+        val category: CurrencyType,
+        val unitMode: UnitMode,
+        val iconUrl: String = ""
+    ) {
+        val tgjuSlug: String = TgjuSymbolMapper.toTgjuSymbol(symbol)
+    }
+
+    private val ASSET_SPECS = listOf(
+        AssetSpec("1", "USD", "US Dollar", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("2", "EUR", "Euro", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("3", "GBP", "British Pound", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("4", "CAD", "Canadian Dollar", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("5", "AUD", "Australian Dollar", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("6", "AED", "UAE Dirham", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("7", "TRY", "Turkish Lira", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("8", "CHF", "Swiss Franc", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("9", "CNY", "Chinese Yuan", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("10", "IQD", "Iraqi Dinar", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("11", "SEK", "Swedish Krona", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("12", "SAR", "Saudi Riyal", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("13", "QAR", "Qatari Riyal", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("14", "OMR", "Omani Rial", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("15", "RUB", "Russian Ruble", CurrencyType.Currency, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("16", "BTC", "Bitcoin", CurrencyType.Crypto, UnitMode.USD_TO_TOMAN),
+        AssetSpec("17", "ETH", "Ethereum", CurrencyType.Crypto, UnitMode.USD_TO_TOMAN),
+        AssetSpec("24", USOON_SYMBOL, "Ondo US Oil", CurrencyType.Crypto, UnitMode.USD_TO_TOMAN, USOON_ICON_URL),
+        AssetSpec("18", "GOLD", "Gold Coin (Emami)", CurrencyType.GoldAndCoin, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("19", "XAU", "Gold Ounce", CurrencyType.GoldAndCoin, UnitMode.NATIVE),
+        AssetSpec("20", "MESGHAL", "Gold Mesghal", CurrencyType.GoldAndCoin, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("21", "GOLD18K", "18k Gold (Gram)", CurrencyType.GoldAndCoin, UnitMode.IRR_TO_TOMAN),
+        AssetSpec("22", "BRENT", "Brent Oil", CurrencyType.GoldAndCoin, UnitMode.NATIVE),
+        AssetSpec("23", "BOURSE", "Bourse Index", CurrencyType.Currency, UnitMode.NATIVE)
+    )
+
+    @Serializable
+    private data class TgjuTv2CloseResponse(
+        @SerialName("s") val status: String? = null,
+        @SerialName("t") val timestamps: List<Long>? = null,
+        @SerialName("c") val closePrices: List<Double>? = null
+    )
+
+    internal data class TgjuAjaxResult(
+        val prices: Map<String, Double>,
+        val percentages: Map<String, Double>
+    )
+
+    private val LiveTgjuInterceptor = Interceptor { chain ->
+        val request = chain.request()
+        val uri = request.url.toString()
+
         if (uri.endsWith("/api/currencies")) {
-            
-            val currentTime = System.currentTimeMillis()
-            val random = java.util.Random()
-            
-            // Dynamic fluctuation helper to make things actually change on pull-to-refresh!
-            fun fluctuate(base: Double, percentRange: Double = 0.005): Double {
-                val factor = 1.0 + (random.nextDouble() * 2 * percentRange - percentRange)
-                return Math.round(base * factor * 100.0) / 100.0
-            }
-
-            fun String.toEnDigits(): String {
-                return this.map { ch ->
-                    when (ch) {
-                        in '۰'..'۹' -> ('0'.code + (ch.code - '۰'.code)).toChar()
-                        in '٠'..'٩' -> ('0'.code + (ch.code - '٠'.code)).toChar()
-                        else -> ch
-                    }
-                }.joinToString("")
-            }
-
-            var usdIrr = 62450.0
-            val parsedPrices = java.util.concurrent.ConcurrentHashMap<String, Double>()
-            val parsedPercentages = java.util.concurrent.ConcurrentHashMap<String, Double>()
-
-            val executor = java.util.concurrent.Executors.newFixedThreadPool(2)
-            val fetchedBitpinPrice = java.util.concurrent.atomic.AtomicReference<Double?>(null)
-            val fetchedBitpinChange = java.util.concurrent.atomic.AtomicReference<Double?>(null)
-
-            val tgjuTask = java.util.concurrent.CompletableFuture.runAsync({
-                try {
-                    // Fetch real rates from tgju.org
-                    val request = Request.Builder()
-                        .url("https://www.tgju.org/currency")
-                        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-                        .header("Accept-Language", "fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7")
-                        .build()
-                    val response = ScraperOkHttpClient.newCall(request).execute()
-                    if (response.isSuccessful) {
-                        val html = response.body.string()
-                        
-                        // 1. Parse table row prices and change percentages
-                        val rowRegex = """data-market-row="([^"]+)"[^>]*>.*?<td[^>]*>([^<]+)</td>\s*<td[^>]*>(.*?)</td>""".toRegex(RegexOption.DOT_MATCHES_ALL)
-                        rowRegex.findAll(html).forEach { match ->
-                            val rowMatch = match.value
-                            val key = match.groups[1]?.value ?: ""
-                            val valStr = match.groups[2]?.value ?: ""
-                            val changeCell = match.groups[3]?.value ?: ""
-                            val price = valStr.toEnDigits().replace(",", "").replace(" ", "").trim().toDoubleOrNull()
-                            if (key.isNotEmpty() && price != null && price > 0) {
-                                parsedPrices[key] = price
-                                val pctMatch = """\(([-+]?[0-9]*\.?[0-9]+)%\)""".toRegex().find(changeCell)
-                                if (pctMatch != null) {
-                                    pctMatch.groups[1]?.value?.toDoubleOrNull()?.let { pct ->
-                                        val isNegative = rowMatch.contains("low") || changeCell.contains("low") || changeCell.contains("-")
-                                        parsedPercentages[key] = if (isNegative && pct > 0) -pct else pct
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // 2. Parse li card prices and change percentages
-                        val liRegex = """<li\s+[^>]*id="(l-[a-zA-Z0-9_-]+)"[^>]*>.*?class="info-price"[^>]*>([^<]+)</span>\s*<span[^>]*class="info-change"[^>]*>(.*?)</span>""".toRegex(RegexOption.DOT_MATCHES_ALL)
-                        liRegex.findAll(html).forEach { match ->
-                            val fullMatch = match.value
-                            val key = match.groups[1]?.value ?: ""
-                            val valStr = match.groups[2]?.value ?: ""
-                            val changeStr = match.groups[3]?.value ?: ""
-                            val price = valStr.toEnDigits().replace(",", "").replace(" ", "").trim().toDoubleOrNull()
-                            if (key.isNotEmpty() && price != null && price > 0) {
-                                parsedPrices[key] = price
-                                val pctMatch = """\(([-+]?[0-9]*\.?[0-9]+)%\)""".toRegex().find(changeStr)
-                                if (pctMatch != null) {
-                                    pctMatch.groups[1]?.value?.toDoubleOrNull()?.let { pct ->
-                                        val isNegative = fullMatch.contains("low") || changeStr.contains("low") || changeStr.contains("-")
-                                        parsedPercentages[key] = if (isNegative && pct > 0) -pct else pct
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                }
-            }, executor)
-
-            val bitpinTask = java.util.concurrent.CompletableFuture.runAsync({
-                try {
-                    val bitpinRequest = Request.Builder()
-                        .url("https://api.bitpin.ir/v1/mkt/markets/")
-                        .build()
-                    val bitpinResponse = ScraperOkHttpClient.newCall(bitpinRequest).execute()
-                    if (bitpinResponse.isSuccessful) {
-                        val body = bitpinResponse.body.string()
-                        val json = org.json.JSONObject(body)
-                        val results = json.optJSONArray("results")
-                        if (results != null) {
-                            for (i in 0 until results.length()) {
-                                val item = results.optJSONObject(i)
-                                if (item?.optString("code") == "USOON_IRT") {
-                                    val priceStr = item.optString("price")
-                                    val price = priceStr.toDoubleOrNull()
-                                    if (price != null && price > 0) fetchedBitpinPrice.set(price)
-                                    
-                                    val priceInfo = item.optJSONObject("price_info")
-                                    if (priceInfo != null) {
-                                        val change = priceInfo.optDouble("change", 0.0)
-                                        fetchedBitpinChange.set(change)
-                                    }
-                                    break
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                }
-            }, executor)
-
-            try {
-                java.util.concurrent.CompletableFuture.allOf(tgjuTask, bitpinTask).get(12, java.util.concurrent.TimeUnit.SECONDS)
-            } catch (e: Exception) {
-            } finally {
-                executor.shutdown()
-            }
-
-            if (fetchedBitpinChange.get() != null) {
-                parsedPercentages["usoon_bitpin"] = fetchedBitpinChange.get()!!
-            }
-
-            // If we failed to fetch any real data, return an error instead of fake data
-            if (parsedPrices.isEmpty() && fetchedBitpinPrice.get() == null) {
-                return@Interceptor okhttp3.Response.Builder()
-                    .code(503)
-                    .message("Service Unavailable - Real-time sources unreachable")
-                    .request(chain.request())
-                    .protocol(okhttp3.Protocol.HTTP_1_1)
-                    .body("{}".toResponseBody("application/json".toMediaType()))
-                    .build()
-            }
-
-            // Define real-time values, falling back ONLY to other scraped sources, not hardcoded mocks
-            val usdIrrScraped = parsedPrices["price_dollar_rl"]?.let { it / 10.0 }
-            
-            // If we don't even have USD, we can't calculate others safely without real data
-            if (usdIrrScraped == null && parsedPrices.isEmpty()) {
-                 return@Interceptor okhttp3.Response.Builder()
-                    .code(503)
-                    .message("No base currency data available")
-                    .request(chain.request())
-                    .protocol(okhttp3.Protocol.HTTP_1_1)
-                    .body("{}".toResponseBody("application/json".toMediaType()))
-                    .build()
-            }
-
-            val baseUsd = usdIrrScraped ?: 0.0 // Should not be 0 due to checks above
-
-            val randUSD = usdIrrScraped ?: fluctuate(62000.0) // This part is still tricky, let's make it more strict
-            
-            // Re-evaluating: If any major price is missing from scrape, we should probably not guess.
-            // But to keep some functionality, let's at least ensure we don't show "random" prices if NOTHING was scraped.
-            
-            val randEUR = parsedPrices["price_eur"]?.let { it / 10.0 } ?: 0.0
-            val randGBP = parsedPrices["price_gbp"]?.let { it / 10.0 } ?: 0.0
-            val randCAD = parsedPrices["price_cad"]?.let { it / 10.0 } ?: 0.0
-            val randAUD = parsedPrices["price_aud"]?.let { it / 10.0 } ?: 0.0
-            val randAED = parsedPrices["price_aed"]?.let { it / 10.0 } ?: 0.0
-            val randTRY = parsedPrices["price_try"]?.let { it / 10.0 } ?: 0.0
-            val randCHF = parsedPrices["price_chf"]?.let { it / 10.0 } ?: 0.0
-            val randCNY = parsedPrices["price_cny"]?.let { it / 10.0 } ?: 0.0
-            val randIQD = parsedPrices["price_iqd"]?.let { it / 10.0 } ?: 0.0
-            val randSEK = parsedPrices["price_sek"]?.let { it / 10.0 } ?: 0.0
-            val randSAR = parsedPrices["price_sar"]?.let { it / 10.0 } ?: 0.0
-            val randQAR = parsedPrices["price_qar"]?.let { it / 10.0 } ?: 0.0
-            val randOMR = parsedPrices["price_omr"]?.let { it / 10.0 } ?: 0.0
-            val randRUB = parsedPrices["price_rub"]?.let { it / 10.0 } ?: 0.0
-
-            val rawBTCUSD = parsedPrices["l-crypto-bitcoin"] ?: 0.0
-            val rawETHUSD = parsedPrices["l-crypto-ethereum"] ?: (rawBTCUSD * 0.053)
-
-            val randBTC = if (rawBTCUSD > 0 && baseUsd > 0) rawBTCUSD * baseUsd else 0.0
-            val randETH = if (rawETHUSD > 0 && baseUsd > 0) rawETHUSD * baseUsd else 0.0
-
-            val usoonPrice = fetchedBitpinPrice.get() ?: 0.0
-
-            val randGOLD = parsedPrices["l-sekee"]?.let { it / 10.0 } ?: 0.0
-            val randXAU = parsedPrices["l-ons"] ?: 0.0
-            val randMESGHAL = parsedPrices["l-mesghal"]?.let { it / 10.0 } ?: 0.0
-            val randGOLD18K = parsedPrices["l-geram18"]?.let { it / 10.0 } ?: 0.0
-            val randBRENT = parsedPrices["l-oil_brent"] ?: 0.0
-            val randBOURSE = parsedPrices["l-gc30"] ?: 0.0
-
-
-            // Helper to get base price using parsed percentage change from TGJU
-            fun getBasePrice(slug: String, current: Double): Double {
-                val pct = parsedPercentages[slug] ?: run {
-                    val seed = slug.hashCode().toLong()
-                    val r = java.util.Random(seed)
-                    (r.nextDouble() * 2.0 - 1.0) * 0.8
-                }
-                return current / (1.0 + (pct / 100.0))
-            }
-
-            // Dynamic items generator helper
-            fun itemJson(id: String, symbol: String, title: String, current: Double, base: Double, category: String, iconUrl: String = ""): String {
-                val safeCurrent = if (current.isNaN() || current.isInfinite()) 0.0 else current
-                val safeBase = if (base.isNaN() || base.isInfinite()) 0.0 else base
-                val changeAmount = safeCurrent - safeBase
-                val changePercentage = if (safeBase != 0.0) (changeAmount / safeBase) * 100.0 else 0.0
-                val direction = if (changePercentage > 0.05) "up" else if (changePercentage < -0.05) "down" else "unchanged"
-                
-                val roundedCurrent = String.format(java.util.Locale.US, "%.2f", safeCurrent)
-                val roundedBase = String.format(java.util.Locale.US, "%.2f", safeBase)
-                val roundedChange = String.format(java.util.Locale.US, "%.2f", changeAmount)
-                val roundedPercent = String.format(java.util.Locale.US, "%.2f", changePercentage)
-                
-                return """{ "id": "$id", "symbol": "$symbol", "title": "$title", "current_price": $roundedCurrent, "previous_price": $roundedBase, "change_amount": $roundedChange, "change_percentage": $roundedPercent, "price_direction": "$direction", "last_updated_timestamp": $currentTime, "icon_url": "$iconUrl", "category": "$category" }"""
-            }
-
-            val responseString = """
-                {
-                    "items": [
-                        ${itemJson("1", "USD", "US Dollar", randUSD, getBasePrice("price_dollar_rl", randUSD), "currency")},
-                        ${itemJson("2", "EUR", "Euro", randEUR, getBasePrice("price_eur", randEUR), "currency")},
-                        ${itemJson("3", "GBP", "British Pound", randGBP, getBasePrice("price_gbp", randGBP), "currency")},
-                        ${itemJson("4", "CAD", "Canadian Dollar", randCAD, getBasePrice("price_cad", randCAD), "currency")},
-                        ${itemJson("5", "AUD", "Australian Dollar", randAUD, getBasePrice("price_aud", randAUD), "currency")},
-                        ${itemJson("6", "AED", "UAE Dirham", randAED, getBasePrice("price_aed", randAED), "currency")},
-                        ${itemJson("7", "TRY", "Turkish Lira", randTRY, getBasePrice("price_try", randTRY), "currency")},
-                        ${itemJson("8", "CHF", "Swiss Franc", randCHF, getBasePrice("price_chf", randCHF), "currency")},
-                        ${itemJson("9", "CNY", "Chinese Yuan", randCNY, getBasePrice("price_cny", randCNY), "currency")},
-                        ${itemJson("10", "IQD", "Iraqi Dinar", randIQD, getBasePrice("price_iqd", randIQD), "currency")},
-                        ${itemJson("11", "SEK", "Swedish Krona", randSEK, getBasePrice("price_sek", randSEK), "currency")},
-                        ${itemJson("12", "SAR", "Saudi Riyal", randSAR, getBasePrice("price_sar", randSAR), "currency")},
-                        ${itemJson("13", "QAR", "Qatari Riyal", randQAR, getBasePrice("price_qar", randQAR), "currency")},
-                        ${itemJson("14", "OMR", "Omani Rial", randOMR, getBasePrice("price_omr", randOMR), "currency")},
-                        ${itemJson("15", "RUB", "Russian Ruble", randRUB, getBasePrice("price_rub", randRUB), "currency")},
-                        
-                        ${itemJson("16", "BTC", "Bitcoin", randBTC, getBasePrice("l-crypto-bitcoin", randBTC), "crypto")},
-                        ${itemJson("17", "ETH", "Ethereum", randETH, getBasePrice("l-crypto-ethereum", randETH), "crypto")},
-                        ${itemJson("24", "USOON", "Ondo US Oil", usoonPrice, getBasePrice("usoon_bitpin", usoonPrice), "crypto", "https://cdn.bitpin.ir/media/market/currency/1771999775.svg")},
-                        
-                        ${itemJson("18", "GOLD", "Gold Coin (Emami)", randGOLD, getBasePrice("l-sekee", randGOLD), "gold_and_coin")},
-                        ${itemJson("19", "XAU", "Gold Ounce", randXAU, getBasePrice("l-ons", randXAU), "gold_and_coin")},
-                        ${itemJson("20", "MESGHAL", "Gold Mesghal", randMESGHAL, getBasePrice("l-mesghal", randMESGHAL), "gold_and_coin")},
-                        ${itemJson("21", "GOLD18K", "18k Gold (Gram)", randGOLD18K, getBasePrice("l-geram18", randGOLD18K), "gold_and_coin")},
-                        ${itemJson("22", "BRENT", "Brent Oil", randBRENT, getBasePrice("l-oil_brent", randBRENT), "gold_and_coin")},
-                        ${itemJson("23", "BOURSE", "Bourse Index", randBOURSE, getBasePrice("l-gc30", randBOURSE), "currency")}
-                    ]
-                }
-            """.trimIndent()
-            
-            return@Interceptor okhttp3.Response.Builder()
-                .code(200)
-                .message("OK")
-                .request(chain.request())
-                .protocol(okhttp3.Protocol.HTTP_1_1)
-                .body(responseString.toResponseBody("application/json".toMediaType()))
-                .addHeader("content-type", "application/json")
-                .build()
+            return@Interceptor handleCurrenciesRequest(request)
         }
 
         if (uri.contains("/api/currencies/history")) {
-            val symbol = chain.request().url.queryParameter("symbol") ?: "USD"
-            val range = chain.request().url.queryParameter("range") ?: "DAY"
-            
-            val points = mutableListOf<Double>()
-            val steps = 15
-            val random = java.util.Random(symbol.hashCode().toLong())
-            
-            // Try to get current price to start/end simulation reasonably
-            // In a real app we'd fetch this properly, here we'll just mock based on symbol
-            val basePrice = when(symbol) {
-                "USD" -> 62000.0
-                "BTC" -> 64000.0
-                "GOLD" -> 42000000.0
-                else -> 100000.0
-            }
-
-            val rangeMultiplier = when(range) {
-                "HOUR" -> 0.002
-                "DAY" -> 0.01
-                "WEEK" -> 0.04
-                "MONTH" -> 0.1
-                "YEAR" -> 0.3
-                else -> 0.02
-            }
-
-            // Seed based on current time (day/hour) so the "real" chart is consistent for all users today
-            val timeSeed = when(range) {
-                "HOUR" -> System.currentTimeMillis() / (1000 * 60 * 10) // Changes every 10 mins
-                "DAY" -> System.currentTimeMillis() / (1000 * 60 * 60) // Changes every hour
-                "WEEK", "MONTH" -> System.currentTimeMillis() / (1000 * 60 * 60 * 24) // Changes every day
-                else -> System.currentTimeMillis() / (1000 * 60 * 60 * 24 * 7) // Changes every week
-            }
-            val timeRandom = java.util.Random(symbol.hashCode().toLong() + timeSeed)
-
-            var current = basePrice * (1.0 + (timeRandom.nextDouble() - 0.5) * rangeMultiplier)
-            points.add(current)
-            for (i in 1 until steps) {
-                val drift = (timeRandom.nextDouble() - 0.48) * (rangeMultiplier / steps) * current
-                current += drift
-                points.add(current)
-            }
-
-            val json = "[" + points.joinToString(",") { String.format(java.util.Locale.US, "%.2f", it) } + "]"
-            
-            return@Interceptor okhttp3.Response.Builder()
-                .code(200)
-                .message("OK")
-                .request(chain.request())
-                .protocol(okhttp3.Protocol.HTTP_1_1)
-                .body(json.toResponseBody("application/json".toMediaType()))
-                .addHeader("content-type", "application/json")
-                .build()
+            return@Interceptor handleHistoryRequest(request)
         }
-        chain.proceed(chain.request())
+
+        chain.proceed(request)
     }
 
+    private fun handleCurrenciesRequest(request: Request): Response {
+        val currentTimeMs = System.currentTimeMillis()
+        val toTs = currentTimeMs / 1000L
+        val usoonSlug = TgjuSymbolMapper.toTgjuSymbol(USOON_SYMBOL)
+
+        val ajaxFuture = CompletableFuture.supplyAsync { fetchTgjuAjax() }
+        val usoonFuture = CompletableFuture.supplyAsync {
+            fetchTv2History(usoonSlug, "60", toTs - 3L * 86400L, toTs)
+        }
+
+        val ajaxResult = runCatching { ajaxFuture.get(12, TimeUnit.SECONDS) }.getOrNull()
+        val usoonHistory = runCatching { usoonFuture.get(12, TimeUnit.SECONDS) }.getOrNull()
+
+        val liveUsdToman = ajaxResult?.prices?.get(USD_SLUG)?.div(10.0)
+        if (ajaxResult == null || ajaxResult.prices.isEmpty() || liveUsdToman == null || liveUsdToman <= 0.0) {
+            return errorResponse(request, 503, "Service Unavailable - Live TGJU USD rate unreachable")
+        }
+
+        cachedUsdToman = liveUsdToman to currentTimeMs
+
+        val mergedPrices = ajaxResult.prices.toMutableMap()
+        val mergedPercentages = ajaxResult.percentages.toMutableMap()
+
+        val usoonCloses = usoonHistory?.closePrices?.filter { it > 0.0 }.orEmpty()
+        if (usoonCloses.isNotEmpty()) {
+            val latestClose = usoonCloses.last()
+            mergedPrices[usoonSlug] = latestClose
+            if (usoonCloses.size >= 2) {
+                val prevClose = usoonCloses[usoonCloses.size - 2]
+                if (prevClose > 0.0) {
+                    mergedPercentages[usoonSlug] = ((latestClose - prevClose) / prevClose) * 100.0
+                }
+            }
+        }
+
+        val items = buildCurrencyItems(
+            prices = mergedPrices,
+            percentages = mergedPercentages,
+            liveUsdToman = liveUsdToman,
+            timestampMs = currentTimeMs
+        )
+        val payload = JsonConfig.encodeToString(CurrencyResponse(items))
+        return jsonResponse(request, 200, "OK", payload)
+    }
+
+    private fun handleHistoryRequest(request: Request): Response {
+        val symbol = request.url.queryParameter("symbol") ?: "USD"
+        val range = request.url.queryParameter("range") ?: "DAY"
+
+        val tgjuSlug = TgjuSymbolMapper.findTgjuSymbol(symbol)
+            ?: return errorResponse(request, 503, "Unsupported symbol: $symbol")
+
+        val (windowSeconds, primaryResolution) = mapRangeToTgjuParams(range)
+        val toTs = System.currentTimeMillis() / 1000L
+        val fromTs = (toTs - windowSeconds).coerceAtLeast(0L)
+
+        var history = fetchTv2History(tgjuSlug, primaryResolution, fromTs, toTs)
+        var windowedCloses = sliceHistoryCloses(
+            timestamps = history?.timestamps,
+            closes = history?.closePrices.orEmpty(),
+            fromTs = fromTs,
+            toTs = toTs,
+            windowSeconds = windowSeconds
+        )
+
+        // Some TGJU assets lack 1m/5m candles or have very sparse hourly points in the immediate window;
+        // try alternate intraday resolutions so 1H and 1D charts show meaningful recent structure.
+        if (windowedCloses.size < 4 && primaryResolution in listOf("1", "5", "60")) {
+            val fallbackRes = when (primaryResolution) {
+                "1" -> listOf("5", "15", "60")
+                "5" -> listOf("15", "60")
+                else -> listOf("15", "5")
+            }
+            for (res in fallbackRes) {
+                val candidate = fetchTv2History(tgjuSlug, res, (toTs - maxOf(windowSeconds, 3L * 86400L)).coerceAtLeast(0L), toTs)
+                    ?: continue
+                val candidateWindow = sliceHistoryCloses(
+                    timestamps = candidate.timestamps,
+                    closes = candidate.closePrices.orEmpty(),
+                    fromTs = fromTs,
+                    toTs = toTs,
+                    windowSeconds = windowSeconds
+                )
+                if (candidateWindow.size > windowedCloses.size) {
+                    history = candidate
+                    windowedCloses = candidateWindow
+                }
+                if (windowedCloses.size >= 4) break
+            }
+        }
+
+        if (history == null || history.closePrices.isNullOrEmpty()) {
+            return errorResponse(request, 503, "TGJU history unavailable for $symbol ($range)")
+        }
+        if (windowedCloses.isEmpty()) {
+            return errorResponse(request, 503, "Empty TGJU history window for $symbol ($range)")
+        }
+
+        val converted = convertHistoryCloses(symbol, windowedCloses) { getLiveUsdTomanRate() }
+            ?: return errorResponse(request, 503, "Live TGJU USD rate unavailable for $symbol conversion")
+
+        val jsonBody = JsonConfig.encodeToString(JsonArray(converted.map { JsonPrimitive(roundValue(it)) }))
+        return jsonResponse(request, 200, "OK", jsonBody)
+    }
+
+    internal fun buildCurrencyItems(
+        prices: Map<String, Double>,
+        percentages: Map<String, Double>,
+        liveUsdToman: Double,
+        timestampMs: Long
+    ): List<CurrencyItem> {
+        return ASSET_SPECS.map { spec ->
+            val rawPrice = prices[spec.tgjuSlug] ?: 0.0
+            val current = when (spec.unitMode) {
+                UnitMode.IRR_TO_TOMAN -> rawPrice / 10.0
+                UnitMode.USD_TO_TOMAN -> if (rawPrice > 0.0 && liveUsdToman > 0.0) rawPrice * liveUsdToman else 0.0
+                UnitMode.NATIVE -> rawPrice
+            }
+            val safeCurrent = if (current.isNaN() || current.isInfinite() || current <= 0.0) 0.0 else current
+            val pct = percentages[spec.tgjuSlug] ?: 0.0
+            val denom = 1.0 + (pct / 100.0)
+            val rawPrevious = if (safeCurrent > 0.0 && denom > 0.0) safeCurrent / denom else safeCurrent
+            val safePrevious = if (rawPrevious.isNaN() || rawPrevious.isInfinite()) safeCurrent else rawPrevious
+
+            val changeAmount = safeCurrent - safePrevious
+            val changePercentage = if (safePrevious != 0.0) (changeAmount / safePrevious) * 100.0 else 0.0
+            val direction = when {
+                changePercentage > 0.05 -> PriceDirection.Up
+                changePercentage < -0.05 -> PriceDirection.Down
+                else -> PriceDirection.Unchanged
+            }
+
+            CurrencyItem(
+                id = spec.id,
+                symbol = spec.symbol,
+                title = spec.title,
+                currentPrice = roundValue(safeCurrent),
+                previousPrice = roundValue(safePrevious),
+                changeAmount = roundValue(changeAmount),
+                changePercentage = round2(changePercentage),
+                priceDirection = direction,
+                lastUpdatedTimestamp = timestampMs,
+                iconUrl = spec.iconUrl,
+                category = spec.category
+            )
+        }
+    }
+
+    internal fun mapRangeToTgjuParams(range: String): Pair<Long, String> {
+        return when (range.uppercase(Locale.US)) {
+            "1M", "1MIN", "MIN1" -> 350L * 60L to "1"
+            "5M", "5MIN", "MIN5" -> 350L * 5L * 60L to "5"
+            "HOUR" -> 3600L to "5"
+            "DAY" -> 86400L to "60"
+            "WEEK" -> 7L * 86400L to "240"
+            "MONTH" -> 30L * 86400L to "D"
+            "YEAR" -> 365L * 86400L to "W"
+            else -> 86400L to "60"
+        }
+    }
+
+    internal fun sliceHistoryCloses(
+        timestamps: List<Long>?,
+        closes: List<Double>,
+        fromTs: Long,
+        toTs: Long,
+        windowSeconds: Long
+    ): List<Double> {
+        if (timestamps == null || timestamps.size < closes.size) {
+            return closes.filter { it > 0.0 }.takeLast(60)
+        }
+
+        val validPairs = closes.indices
+            .map { i -> timestamps[i] to closes[i] }
+            .filter { (ts, price) -> ts <= toTs && price > 0.0 && !price.isNaN() && !price.isInfinite() }
+        if (validPairs.isEmpty()) return emptyList()
+
+        val inWindow = validPairs.filter { (ts, _) -> ts >= fromTs }
+        val latestTs = validPairs.last().first
+        val isRecentEnough = latestTs >= toTs - (windowSeconds / 4L)
+        val result = if (inWindow.size >= 2 && (isRecentEnough || inWindow.size >= 6)) {
+            inWindow.map { it.second }
+        } else {
+            // Anchor the requested window at the latest real candle when markets are closed (e.g. weekends/holidays/off-hours)
+            val anchorStart = (latestTs - windowSeconds).coerceAtLeast(0L)
+            validPairs.filter { (ts, _) -> ts >= anchorStart }.map { it.second }
+        }
+        return if (result.size >= 2 || validPairs.size < 2) {
+            result
+        } else {
+            // Daily-only assets on short windows (e.g. 1H) still need at least 2 real points for a chart line
+            validPairs.takeLast(2).map { it.second }
+        }
+    }
+
+    internal fun convertHistoryCloses(
+        symbol: String,
+        closes: List<Double>,
+        liveUsdRateProvider: () -> Double?
+    ): List<Double>? {
+        return when {
+            TgjuSymbolMapper.isTomanPrice(symbol) -> closes.map { it / 10.0 }
+            TgjuSymbolMapper.isUsdCrypto(symbol) -> {
+                val usdRate = liveUsdRateProvider() ?: return null
+                if (usdRate <= 0.0) return null
+                closes.map { it * usdRate }
+            }
+            else -> closes
+        }
+    }
+
+    internal fun parseTgjuAjaxJson(body: String): TgjuAjaxResult {
+        val prices = LinkedHashMap<String, Double>()
+        val percentages = LinkedHashMap<String, Double>()
+
+        val currentObj = runCatching {
+            JsonConfig.parseToJsonElement(body).jsonObject["current"]?.jsonObject
+        }.getOrNull() ?: return TgjuAjaxResult(prices, percentages)
+
+        for ((slug, element) in currentObj) {
+            val entry = element as? JsonObject ?: continue
+            val price = parseTgjuNumber(entry["p"]?.jsonPrimitive?.contentOrNull)
+            if (price != null && price > 0.0) {
+                prices[slug] = price
+            }
+
+            val dp = parseTgjuNumber(entry["dp"]?.jsonPrimitive?.contentOrNull)
+            val dt = entry["dt"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            if (dp != null) {
+                percentages[slug] = when (dt.lowercase(Locale.US)) {
+                    "low" -> -abs(dp)
+                    "high" -> abs(dp)
+                    else -> dp
+                }
+            }
+        }
+        return TgjuAjaxResult(prices, percentages)
+    }
+
+    internal fun parseTgjuNumber(raw: String?): Double? {
+        if (raw.isNullOrBlank()) return null
+        val normalized = buildString(raw.length) {
+            for (ch in raw) {
+                when (ch) {
+                    in '۰'..'۹' -> append(('0'.code + (ch.code - '۰'.code)).toChar())
+                    in '٠'..'٩' -> append(('0'.code + (ch.code - '٠'.code)).toChar())
+                    ',', '٬', ' ' -> Unit
+                    else -> append(ch)
+                }
+            }
+        }.trim()
+        return normalized.toDoubleOrNull()?.takeIf { !it.isNaN() && !it.isInfinite() }
+    }
+
+    private fun fetchTgjuAjax(): TgjuAjaxResult? {
+        return try {
+            val request = Request.Builder()
+                .url(TGJU_AJAX_URL)
+                .header("Referer", "https://www.tgju.org/")
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json, text/plain, */*")
+                .build()
+
+            ScraperOkHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val body = response.body.string()
+                if (body.isEmpty()) return null
+                val parsed = parseTgjuAjaxJson(body)
+                parsed.prices[USD_SLUG]?.div(10.0)?.takeIf { it > 0.0 }?.let { usdToman ->
+                    cachedUsdToman = usdToman to System.currentTimeMillis()
+                }
+                parsed
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun fetchTv2History(
+        slug: String,
+        resolution: String,
+        fromTs: Long,
+        toTs: Long
+    ): TgjuTv2CloseResponse? {
+        return try {
+            val url = "$TGJU_TV2_HISTORY_URL?symbol=$slug&resolution=$resolution&from=$fromTs&to=$toTs"
+            val request = Request.Builder()
+                .url(url)
+                .header("Referer", "https://www.tgju.org/")
+                .header("User-Agent", USER_AGENT)
+                .header("Accept", "application/json, text/plain, */*")
+                .build()
+
+            ScraperOkHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val body = response.body.string()
+                if (body.isEmpty()) return null
+                val decoded = JsonConfig.decodeFromString<TgjuTv2CloseResponse>(body)
+                if (decoded.status == "ok" && !decoded.closePrices.isNullOrEmpty()) decoded else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun getLiveUsdTomanRate(): Double? {
+        val now = System.currentTimeMillis()
+        val cached = cachedUsdToman
+        if (cached != null && (now - cached.second) < USD_CACHE_TTL_MS && cached.first > 0.0) {
+            return cached.first
+        }
+        return fetchTgjuAjax()?.prices?.get(USD_SLUG)?.div(10.0)?.takeIf { it > 0.0 }
+    }
+
+    private fun round2(value: Double): Double {
+        if (value.isNaN() || value.isInfinite()) return 0.0
+        return round(value * 100.0) / 100.0
+    }
+
+    private fun roundValue(value: Double): Double {
+        if (value.isNaN() || value.isInfinite() || value == 0.0) return 0.0
+        return if (abs(value) >= 1.0) round(value * 100.0) / 100.0 else round(value * 10000.0) / 10000.0
+    }
+
+    private fun jsonResponse(request: Request, code: Int, message: String, body: String): Response {
+        return Response.Builder()
+            .code(code)
+            .message(message)
+            .request(request)
+            .protocol(Protocol.HTTP_1_1)
+            .body(body.toResponseBody("application/json".toMediaType()))
+            .addHeader("content-type", "application/json")
+            .build()
+    }
+
+    private fun errorResponse(request: Request, code: Int, message: String): Response {
+        val errorBody = buildJsonObject { put("error", message) }.toString()
+        return jsonResponse(request, code, message, errorBody)
+    }
+
+    private const val USER_AGENT =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
     private val OkHttpClientInstance = OkHttpClient.Builder()
-        .addInterceptor(MockInterceptor)
+        .addInterceptor(LiveTgjuInterceptor)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
     val RetrofitInstance: Retrofit by lazy {
-        val ContentType = "application/json".toMediaType()
+        val contentType = "application/json".toMediaType()
         Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(OkHttpClientInstance)
-            .addConverterFactory(JsonConfig.asConverterFactory(ContentType))
+            .addConverterFactory(JsonConfig.asConverterFactory(contentType))
             .build()
     }
 
     val CheghadApiService: CheghadApi by lazy {
         RetrofitInstance.create(CheghadApi::class.java)
-    }
-
-    private val KifpoolOkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
-
-    val KifpoolRetrofit: Retrofit by lazy {
-        val ContentType = "application/json".toMediaType()
-        Retrofit.Builder()
-            .baseUrl("https://api.kifpool.app/")
-            .client(KifpoolOkHttpClient)
-            .addConverterFactory(JsonConfig.asConverterFactory(ContentType))
-            .build()
-    }
-
-    val KifpoolApiService: KifpoolApi by lazy {
-        KifpoolRetrofit.create(KifpoolApi::class.java)
     }
 }

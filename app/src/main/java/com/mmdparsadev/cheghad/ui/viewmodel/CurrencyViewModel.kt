@@ -16,6 +16,7 @@ import com.mmdparsadev.cheghad.data.repository.NetworkResult
 import com.mmdparsadev.cheghad.utils.ConnectivityStatus
 import com.mmdparsadev.cheghad.utils.NetworkConnectivityObserver
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -182,8 +183,11 @@ class CurrencyViewModel(
         }
     }
 
+    private var historyFetchJob: Job? = null
+
     fun fetchHistory(symbol: String, range: String, currentPrice: Double? = null, changePercentage: Double? = null) {
-        viewModelScope.launch(exceptionHandler) {
+        historyFetchJob?.cancel()
+        historyFetchJob = viewModelScope.launch(exceptionHandler) {
             _uiState.update { it.copy(isHistoryLoading = true) }
             val points = repository.fetchHistory(symbol, range, currentPrice, changePercentage)
             _uiState.update {

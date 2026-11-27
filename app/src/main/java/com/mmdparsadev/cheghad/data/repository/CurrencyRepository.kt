@@ -2,21 +2,22 @@ package com.mmdparsadev.cheghad.data.repository
 
 import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.api.CheghadApi
-import com.mmdparsadev.cheghad.data.api.KifpoolApi
 import com.mmdparsadev.cheghad.data.database.CurrencyDao
 import com.mmdparsadev.cheghad.data.models.CurrencyItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
-import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
+import java.util.concurrent.ConcurrentHashMap
 
 class CurrencyRepository(
     private val api: CheghadApi,
-    private val kifpoolApi: KifpoolApi,
     private val currencyDao: CurrencyDao
 ) {
+
+    // In-memory cache for historical points per symbol and range (valid for 60 seconds)
+    private val historyCache = ConcurrentHashMap<String, Pair<Long, List<Double>>>()
 
     val allCurrenciesFlow: Flow<List<CurrencyItem>> = currencyDao.getAllCurrenciesFlow()
 
@@ -73,134 +74,43 @@ class CurrencyRepository(
         }
     }
 
+    /**
+     * Fetch real historical close prices from TGJU via [CheghadApi.getHistory].
+     * Windowing and currency unit conversions are handled consistently by ApiClient.
+     * Guaranteed NO random/mock data generator.
+     */
     suspend fun fetchHistory(
         symbol: String,
         range: String,
         currentPrice: Double? = null,
-        changePercentage: Double? = null
+        @Suppress("UNUSED_PARAMETER") changePercentage: Double? = null
     ): List<Double> {
         return withContext(Dispatchers.IO) {
+            val cacheKey = "${symbol.uppercase()}_${range.uppercase()}"
+            val cachedEntry = historyCache[cacheKey]
+            val nowMs = System.currentTimeMillis()
+            if (cachedEntry != null && (nowMs - cachedEntry.first < 60_000L)) {
+                return@withContext cachedEntry.second
+            }
+
             try {
-                val to = System.currentTimeMillis() / 1000
-                val from = when(range) {
-                    "HOUR" -> to - 3600
-                    "DAY" -> to - 86400
-                    "WEEK" -> to - 604800
-                    "MONTH" -> to - 2592000
-                    "YEAR" -> to - 31536000
-                    else -> to - 86400
-                }
-                
-                val resolution = when(range) {
-                    "HOUR" -> "5"
-                    "DAY" -> "60"
-                    "WEEK" -> "D"
-                    "MONTH" -> "D"
-                    "YEAR" -> "W"
-                    else -> "60"
-                }
-
-                val primarySymbol = when(symbol.uppercase()) {
-                    "USD", "USDT", "USOON" -> "USDTIRT"
-                    "BTC" -> "BTCIRT"
-                    "ETH" -> "ETHIRT"
-                    "GOLD", "XAU" -> "PAXGIRT"
-                    else -> if (symbol.endsWith("IRT")) symbol else "${symbol}IRT"
-                }
-                
-                var response = kifpoolApi.getHistory(primarySymbol, resolution, from, to)
-                
-                // Fallback to non-IRT symbol if primary symbol fails
-                if (response.status != "ok" || response.close.isNullOrEmpty()) {
-                    val fallbackSymbol = symbol.uppercase().replace("IRT", "")
-                    if (fallbackSymbol != primarySymbol) {
-                        response = kifpoolApi.getHistory(fallbackSymbol, resolution, from, to)
-                    }
-                }
-
-                // If symbol is not directly on Kifpool (e.g. EUR, GBP, CAD, AED, GOLD, MESGHAL, etc.),
-                // fetch USDTIRT history as baseline trend for exchange rate fluctuations
-                if (response.status != "ok" || response.close.isNullOrEmpty()) {
-                    if (primarySymbol != "USDTIRT") {
-                        response = kifpoolApi.getHistory("USDTIRT", resolution, from, to)
-                    }
-                }
-
-                if (response.status == "ok" && !response.close.isNullOrEmpty()) {
-                    val rawPrices = response.close
-                    val lastRaw = rawPrices.lastOrNull() ?: 1.0
-
-                    if (currentPrice != null && currentPrice > 0) {
-                        // Kifpool quotes IRT pairs in Rials
-                        val baseLast = if (primarySymbol == "USDTIRT" && symbol != "USD" && symbol != "USDT") (lastRaw / 10.0) else (if (lastRaw > currentPrice * 5) lastRaw / 10.0 else lastRaw)
-                        val scaleFactor = currentPrice / (if (baseLast <= 0) 1.0 else baseLast)
-                        
-                        rawPrices.map { rawPoint ->
-                            val pointToman = if (primarySymbol == "USDTIRT" && symbol != "USD" && symbol != "USDT") (rawPoint / 10.0) else (if (rawPoint > currentPrice * 5) rawPoint / 10.0 else rawPoint)
-                            pointToman * scaleFactor
-                        }
-                    } else {
-                        // Default fallback
-                        rawPrices.map { if (it > 10000000000.0) it / 10.0 else it / 10.0 }
-                    }
-                } else {
-                    generateMockHistory(symbol, range, currentPrice, changePercentage)
+                val resultPrices = api.getHistory(symbol, range)
+                    .filter { it > 0.0 && !it.isNaN() && !it.isInfinite() }
+                if (resultPrices.size >= 2) {
+                    historyCache[cacheKey] = Pair(nowMs, resultPrices)
+                    return@withContext resultPrices
                 }
             } catch (e: Exception) {
-                generateMockHistory(symbol, range, currentPrice, changePercentage)
+                android.util.Log.e("CurrencyRepository", "fetchHistory failed for $symbol $range", e)
+            }
+
+            // Real data fallback: flat line at current price or empty list.
+            // NEVER generate random noise or fake walk data.
+            if (currentPrice != null && currentPrice > 0) {
+                listOf(currentPrice, currentPrice)
+            } else {
+                emptyList()
             }
         }
-    }
-
-    private fun generateMockHistory(
-        symbol: String,
-        range: String,
-        currentPrice: Double?,
-        changePercentage: Double?
-    ): List<Double> {
-        val targetEndPrice = currentPrice ?: when(symbol.uppercase()) {
-            "USD", "USDT" -> 63500.0
-            "BTC" -> 4120000000.0
-            "ETH" -> 220000000.0
-            "GOLD" -> 45000000.0
-            "EUR" -> 69120.0
-            "GBP" -> 81000.0
-            "TRY" -> 1950.0
-            "AED" -> 17200.0
-            else -> 100000.0
-        }
-
-        val changePct = changePercentage ?: 1.2
-        val steps = when(range) {
-            "HOUR" -> 12
-            "DAY" -> 24
-            "WEEK" -> 14
-            "MONTH" -> 30
-            "YEAR" -> 24
-            else -> 20
-        }
-
-        val startPrice = targetEndPrice / (1.0 + (changePct / 100.0))
-        val points = mutableListOf<Double>()
-        val random = java.util.Random((symbol + range).hashCode().toLong())
-
-        val volatility = when(range) {
-            "HOUR" -> 0.002
-            "DAY" -> 0.008
-            "WEEK" -> 0.015
-            "MONTH" -> 0.03
-            "YEAR" -> 0.06
-            else -> 0.01
-        }
-
-        points.add(startPrice)
-        for (i in 1 until steps - 1) {
-            val progress = i.toDouble() / (steps - 1)
-            val linearTarget = startPrice + (targetEndPrice - startPrice) * progress
-            val noise = (random.nextDouble() - 0.49) * volatility * targetEndPrice
-            points.add(linearTarget + noise)
-        }
-        points.add(targetEndPrice)
-        return points
     }
 }
