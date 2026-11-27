@@ -1,3 +1,58 @@
+## [v1.1.4 - Stable] - 2026-11-27
+
+# 🚀 نسسسسسخه جدیییییدددددد!
+## تغییرات:
+
+- جایگزینی اسکرپینگ HTML سایت TGJU با وب‌سرویس واقعی call.tgju.org/ajax.json همراه با مدیریت صحیح بستن ریسپانس‌ها و برگرداندن کد 503 در صورت عدم دسترسی به نرخ لحظه‌ای
+- حذف کامل داده‌های فیک و تصادفی (fluctuate، درصدهای تصادفی، تولیدکننده نمودار آزمایشی timeRandom و نرخ ثابت دلار)
+- حذف کامل سرویس‌ها و مدل‌های بلااستفاده KifpoolApiService، KifpoolApi، KifpoolOkHttpClient، KifpoolRetrofit و KifpoolModels
+- دریافت کندل‌ها و تاریخچه واقعی قیمت از dashboard-api.tgju.org/v1/tv2/history برای نمودار تکنیکال و نمودار ساده (CurrencyRepository.fetchHistory و مدیریت هم‌زمانی با historyFetchJob)
+- دریافت هم‌زمان USOON از تاریخچه TV2 و تبدیل ارزهای دلاری (BTC، ETH، USOON) به تومان بر اساس نرخ لحظه‌ای دلار
+- استفاده از kotlinx.serialization برای ساخت ایمن خروجی JSON اندپوینت‌ها
+- افزودن تایم‌فریم‌های ساعتی/دقیقه‌ای 1m (MIN1) و 5m (MIN5) در چارت تکنیکال با مپینگ به رزولوشن‌های "1" و "5" در TGJU
+- تنظیم خودکار زوم اولیه نمودار تکنیکال روی کل تاریخچه بارگذاری‌شده هنگام باز شدن و افزودن دکمه تغییر حالت افقی/عمودی (Landscape / Portrait)
+- پشتیبانی هم‌زمان از چند اندیکاتور میانگین متحرک نمایی (EMA 25، EMA 50، EMA 100 و EMA 200) با رنگ‌ها و استروک‌های متمایز، پیش‌تنظیم‌های سریع و خروجی PNG/PDF
+- نمایش تاریخ و زمان دقیق همراه با مقادیر OHLC هنگام بررسی کندل با کراس‌هر (formatCandleDateTime)
+- تکمیل ترجمه فارسی و انگلیسی تمام بخش‌های نمودار تکنیکال، ابزارهای رسم و گزارش PDF/PNG
+- جایگزینی فونت وزیر با فونت یکپارچه google_sans_vazirmatn_rounded.ttf در رابط کاربری و ویجت صفحه خانه
+- پشتیبانی از رندر Markdown در یادداشت‌های انتشار (MarkdownContent در UpdateDialog) و بهبود فرآیند بررسی آپدیت
+- افزودن متن منبع "تمام اطلاعات از tgju.com گرفته شده" در انتهای لیست صفحه بازار
+- جایگزینی نمایش بینهایت با متن "Overflow" در صفحه ماشین‌حساب ارز
+- اصلاح برچسب "ردیف سوم" (third_row_customize)، ساده شدن رنگ پیش‌فرض ردیف سوم کارت‌های خانه (row3Colored = false) و بهبود کارت‌های سوییچ و انیمیشن نرم مرتب‌سازی بازه‌های زمانی در تنظیمات
+- غیرفعال شدن پیش‌فرض خبرها، دسته‌بندی‌ها و خبرگزاری‌ها (newsEnabled و فیلترهای پیش‌فرض)
+- یکپارچه‌سازی تشخیص تلویزیون (isTvDevice) با بررسی UiModeManager و Configuration.uiMode و افزودن هلپرهای مشترک فوکوس TV (rememberTvFocusState و TvFocusableIconButton)
+- بهینه‌سازی کامل نمودار تکنیکال و کندل‌استیک برای Android TV شامل دکمه‌های کندل قبلی/بعدی و زوم، میانبرهای ریموت/کیبورد و ابعاد خواناتر در نمایشگر تلویزیون
+- بهینه‌سازی تمام صفحات (خانه، بازار، تنظیمات، ماشین‌حساب، اخبار با گرید ۲ ستونه، دیالوگ جزئیات با کنترل D-pad نمودار ساده، و دیالوگ آپدیت) برای ناوبری یک‌کلیکی با ریموت تلویزیون
+- به‌روزرسانی پیکربندی بیلد و رپر گرادل و افزودن تست‌های واحد، Robolectric حالت تلویزیون و تست‌های Compose دستگاهی (ApiClientParsingTest، MarkdownParserTest، PriceFormattingTest، TechnicalChartEnhancementsTest، TvOptimizationRobolectricTest، CheghadDeviceInstrumentedTest)
+
+-----
+
+# NEEEWWW VEERRRSSSIIIIOOONNNNNNNN🚀
+## The Changes:
+
+- Replaced TGJU HTML scraping with the real call.tgju.org/ajax.json endpoint with safe response closing and HTTP 503 responses when live rates are unavailable
+- Removed all synthetic/random fallbacks (fluctuate(), seeded percentages, timeRandom mock chart generator, and hardcoded USD fallback prices)
+- Removed unused KifpoolApiService, KifpoolApi, KifpoolOkHttpClient, KifpoolRetrofit, and KifpoolModels
+- Connected both Technical Chart and Simple Chart (CurrencyRepository.fetchHistory with cancellation-safe historyFetchJob) to real candle history from dashboard-api.tgju.org/v1/tv2/history
+- Added concurrent USOON fetching via TV2 history and converted USD-denominated crypto assets (BTC, ETH, USOON) to Toman using the live USD rate
+- Used kotlinx.serialization for safe API JSON response building
+- Added 1m (MIN1) and 5m (MIN5) intraday timeframes mapped to TGJU resolutions "1" and "5"
+- Initialized the Technical Chart viewport to fit full loaded history on open and added a quick landscape/portrait toggle button
+- Implemented simultaneous Multi-EMA indicators (EMA 25, EMA 50, EMA 100, EMA 200 via EmaPeriod) with distinct colors/strokes, quick presets, and PNG/PDF export support
+- Added full date and time display alongside OHLC values on crosshair candle inspection (formatCandleDateTime)
+- Completed full English and Persian localization across Technical Chart controls, drawing tools, indicators, and PDF/PNG exports
+- Replaced Vazir font files with unified google_sans_vazirmatn_rounded.ttf across the app theme and Glance widget
+- Added Markdown release notes rendering in UpdateDialog (MarkdownContent) and streamlined update checking
+- Added "All data is sourced from tgju.com" footer at the bottom of the Market list
+- Replaced infinity output with "Overflow" in CurrencyCalculatorScreen
+- Fixed the "Third row" label (third_row_customize), set Row 3 default card style to simple (row3Colored = false), updated settings switch cards, and smoothed TimeRangeReorderSection spring animations
+- Disabled news feed, news categories, and news agencies by default
+- Unified isTvDevice() (UiModeManager + Configuration.uiMode) and added shared TV focus utilities (rememberTvFocusState, TvFocusableIconButton) plus ExpressiveConnectedButtonGroup D-pad focus highlights
+- Optimized Technical Chart and Candlestick view for Android TV with larger 10-foot labels/legend, Previous/Next candle and zoom quick controls, remote key shortcuts, and TV-sized export bottom sheets
+- Optimized Home, Market, Settings, Calculator, News (2-column TV grid), Asset Detail Dialog (with D-pad scrubbing on InteractiveAssetChart), and Update Dialog for widescreen TV and single-click D-pad focus without Switch focus traps
+- Updated Gradle wrapper/build config and added unit, TV Robolectric Compose, and on-device Compose instrumented tests (ApiClientParsingTest, MarkdownParserTest, PriceFormattingTest, TechnicalChartEnhancementsTest, TvOptimizationRobolectricTest, CheghadDeviceInstrumentedTest)
+
+
 ## [v1.1.1 - Stable] - 2026-09-08
 
 #  یه اپدیت کوچیک
