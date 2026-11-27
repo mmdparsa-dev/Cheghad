@@ -215,7 +215,7 @@ fun renderWidgetBitmap(
     val canvas = Canvas(bitmap)
 
     val vazirTypeface: Typeface? = try {
-        ResourcesCompat.getFont(context, R.font.vazir_regular)
+        ResourcesCompat.getFont(context, R.font.google_sans_vazirmatn_rounded)
     } catch (e: Exception) {
         Typeface.DEFAULT
     }

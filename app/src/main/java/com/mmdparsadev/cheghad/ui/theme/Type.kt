@@ -7,12 +7,14 @@ import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.PlatformTextStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -21,19 +23,57 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import com.mmdparsadev.cheghad.R
 
-// تعریف FontFamily با استفاده از نسخه‌های استاتیک (غیر وریبل) فونت وزیر برای سازگاری حداکثری
+// Define FontFamily using GoogleSansVazirmatnRounded variable font
 val VazirFontFamily: FontFamily = FontFamily(
-    Font(resId = R.font.vazir_thin, weight = FontWeight.Thin),
-    Font(resId = R.font.vazir_light, weight = FontWeight.Light),
-    Font(resId = R.font.vazir_regular, weight = FontWeight.Normal),
-    Font(resId = R.font.vazir_medium, weight = FontWeight.Medium),
-    Font(resId = R.font.vazir_bold, weight = FontWeight.Bold),
-    Font(resId = R.font.vazir_black, weight = FontWeight.ExtraBold), // نگاشت ExtraBold به Black برای حفظ ظاهر
-    Font(resId = R.font.vazir_black, weight = FontWeight.Black)
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.Thin,
+        variationSettings = FontVariation.Settings(FontVariation.weight(100))
+    ),
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.ExtraLight,
+        variationSettings = FontVariation.Settings(FontVariation.weight(200))
+    ),
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.Light,
+        variationSettings = FontVariation.Settings(FontVariation.weight(300))
+    ),
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.Normal,
+        variationSettings = FontVariation.Settings(FontVariation.weight(400))
+    ),
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.Medium,
+        variationSettings = FontVariation.Settings(FontVariation.weight(500))
+    ),
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.SemiBold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(600))
+    ),
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.Bold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(700))
+    ),
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.ExtraBold,
+        variationSettings = FontVariation.Settings(FontVariation.weight(800))
+    ),
+    Font(
+        resId = R.font.google_sans_vazirmatn_rounded,
+        weight = FontWeight.Black,
+        variationSettings = FontVariation.Settings(FontVariation.weight(900))
+    )
 )
 
 fun initializeVazirFont(context: Context) {
-    // برای پشتیبانی از نسخه‌های قبلی نگه داشته شده است
+    // Kept for backward compatibility
 }
 
 fun isPersianText(text: String): Boolean {
@@ -50,10 +90,10 @@ fun getFontFamilyForText(text: String): FontFamily {
     return VazirFontFamily
 }
 
-// تنظیمات مشترک برای حذف پدینگ اضافی فونت و بهبود تراز عمودی در زبان فارسی
+// Common settings to remove extra font padding and improve vertical alignment for Persian
 val defaultPlatformStyle = PlatformTextStyle(includeFontPadding = false)
 
-// تایپوگرافی متریال ۳ با استفاده از فونت‌های استاتیک
+// Material 3 Typography using static fonts
 val Typography: Typography
     get() = Typography(
         displayLarge = TextStyle(fontFamily = VazirFontFamily, fontWeight = FontWeight.Normal, fontSize = 57.sp, platformStyle = defaultPlatformStyle),
@@ -111,6 +151,48 @@ fun AppText(
         maxLines = maxLines,
         minLines = minLines,
         onTextLayout = onTextLayout,
+        style = style.merge(TextStyle(platformStyle = defaultPlatformStyle))
+    )
+}
+
+@Composable
+fun AppText(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    fontStyle: FontStyle? = null,
+    fontWeight: FontWeight? = null,
+    fontFamily: FontFamily? = null,
+    letterSpacing: TextUnit = TextUnit.Unspecified,
+    textDecoration: TextDecoration? = null,
+    textAlign: TextAlign? = null,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    overflow: TextOverflow = TextOverflow.Clip,
+    softWrap: Boolean = true,
+    maxLines: Int = Int.MAX_VALUE,
+    minLines: Int = 1,
+    onTextLayout: ((TextLayoutResult) -> Unit)? = null,
+    style: TextStyle = LocalTextStyle.current
+) {
+    val resolvedFontFamily = fontFamily ?: getFontFamilyForText(text.text)
+    Text(
+        text = text,
+        modifier = modifier,
+        color = color,
+        fontSize = fontSize,
+        fontStyle = fontStyle,
+        fontWeight = fontWeight,
+        fontFamily = resolvedFontFamily,
+        letterSpacing = letterSpacing,
+        textDecoration = textDecoration,
+        textAlign = textAlign,
+        lineHeight = lineHeight,
+        overflow = overflow,
+        softWrap = softWrap,
+        maxLines = maxLines,
+        minLines = minLines,
+        onTextLayout = onTextLayout ?: {},
         style = style.merge(TextStyle(platformStyle = defaultPlatformStyle))
     )
 }
