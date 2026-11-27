@@ -2,7 +2,7 @@ package com.mmdparsadev.cheghad
 
 import android.content.Context
 import androidx.compose.material3.Text
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import com.mmdparsadev.cheghad.ui.theme.MyApplicationTheme
 import org.junit.Assert.assertEquals
