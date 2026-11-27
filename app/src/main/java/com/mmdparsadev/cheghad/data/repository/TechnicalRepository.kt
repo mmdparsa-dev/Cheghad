@@ -47,29 +47,37 @@ class TechnicalRepository {
         try {
             val tgjuSymbol = TgjuSymbolMapper.toTgjuSymbol(currency.symbol)
             val toTimestamp = System.currentTimeMillis() / 1000L
-            // Ensure at least 250 candles for 200 EMA calculation
+            // Ensure at least 250+ candles for EMA 200 calculation
             val candleWindowSeconds = timeframe.secondsPerCandle * 350L
             val fromTimestamp = max(0L, toTimestamp - candleWindowSeconds)
 
-            val url = "https://dashboard-api.tgju.org/v1/tv2/history?symbol=$tgjuSymbol&resolution=${timeframe.resolution}&from=$fromTimestamp&to=$toTimestamp"
+            val resolutionsToTry = when (timeframe.resolution) {
+                "1" -> listOf("1", "5", "15", "60")
+                "5" -> listOf("5", "15", "60")
+                else -> listOf(timeframe.resolution)
+            }
 
-            val request = Request.Builder()
-                .url(url)
-                .header("Referer", "https://www.tgju.org/")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .header("Accept", "application/json, text/plain, */*")
-                .build()
+            for (res in resolutionsToTry) {
+                val url = "https://dashboard-api.tgju.org/v1/tv2/history?symbol=$tgjuSymbol&resolution=$res&from=$fromTimestamp&to=$toTimestamp"
+                val request = Request.Builder()
+                    .url(url)
+                    .header("Referer", "https://www.tgju.org/")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Accept", "application/json, text/plain, */*")
+                    .build()
 
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val responseBody = response.body?.string()
-                if (!responseBody.isNullOrEmpty()) {
-                    val history = json.decodeFromString<TgjuHistoryResponse>(responseBody)
-                    val rawCandles = convertToCandles(history, currency.symbol)
-                    if (rawCandles.isNotEmpty()) {
-                        val computedCandles = computeIndicators(rawCandles)
-                        candleCache[cacheKey] = computedCandles
-                        return@withContext computedCandles
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val responseBody = response.body.string()
+                        if (responseBody.isNotEmpty()) {
+                            val history = json.decodeFromString<TgjuHistoryResponse>(responseBody)
+                            val rawCandles = convertToCandles(history, currency)
+                            if (rawCandles.isNotEmpty()) {
+                                val computedCandles = computeIndicators(rawCandles)
+                                candleCache[cacheKey] = computedCandles
+                                return@withContext computedCandles
+                            }
+                        }
                     }
                 }
             }
@@ -84,7 +92,11 @@ class TechnicalRepository {
         computed
     }
 
-    private fun convertToCandles(history: TgjuHistoryResponse, symbol: String): List<CandleData> {
+    private fun convertToCandles(
+        history: TgjuHistoryResponse,
+        currency: CurrencyItem,
+        maxCandles: Int = 350
+    ): List<CandleData> {
         val times = history.timestamps ?: return emptyList()
         val opens = history.openPrices ?: return emptyList()
         val highs = history.highPrices ?: return emptyList()
@@ -95,15 +107,26 @@ class TechnicalRepository {
         val count = minOf(times.size, opens.size, highs.size, lows.size, closes.size)
         if (count == 0) return emptyList()
 
-        val isToman = TgjuSymbolMapper.isTomanPrice(symbol)
+        // TGJU TV2 often returns full multi-year intraday arrays; keep the most recent maxCandles for fast viewport & EMA warm-up
+        val startIdx = max(0, count - maxCandles)
+
+        val isToman = TgjuSymbolMapper.isTomanPrice(currency.symbol)
         val divisor = if (isToman) 10.0 else 1.0
 
-        val list = ArrayList<CandleData>(count)
-        for (i in 0 until count) {
-            val o = opens[i] / divisor
-            val h = highs[i] / divisor
-            val l = lows[i] / divisor
-            val c = closes[i] / divisor
+        val lastClose = closes.lastOrNull() ?: 1.0
+        val baseLastClose = lastClose / divisor
+        val scaleFactor = if (currency.currentPrice > 0 && currency.currentPrice > baseLastClose * 5.0) {
+            currency.currentPrice / (if (baseLastClose <= 0) 1.0 else baseLastClose)
+        } else {
+            1.0
+        }
+
+        val list = ArrayList<CandleData>(count - startIdx)
+        for (i in startIdx until count) {
+            val o = (opens[i] / divisor) * scaleFactor
+            val h = (highs[i] / divisor) * scaleFactor
+            val l = (lows[i] / divisor) * scaleFactor
+            val c = (closes[i] / divisor) * scaleFactor
             val v = if (i < volumes.size) volumes[i] else 0.0
 
             list.add(
@@ -120,32 +143,40 @@ class TechnicalRepository {
         return list
     }
 
+    private fun computeEmaSeries(candles: List<CandleData>, period: Int): DoubleArray {
+        val n = candles.size
+        val emaList = DoubleArray(n)
+        if (n == 0) return emaList
+
+        val alpha = 2.0 / (period + 1.0)
+        val seedCount = min(period, n)
+        var runningSum = 0.0
+        var currentEma = candles[0].close
+
+        for (i in 0 until n) {
+            val close = candles[i].close
+            if (i < seedCount) {
+                runningSum += close
+                currentEma = runningSum / (i + 1).toDouble()
+            } else {
+                currentEma = (close * alpha) + (currentEma * (1.0 - alpha))
+            }
+            emaList[i] = currentEma
+        }
+        return emaList
+    }
+
     fun computeIndicators(candles: List<CandleData>): List<CandleData> {
         if (candles.isEmpty()) return candles
 
         val n = candles.size
-        val emaList = DoubleArray(n) { 0.0 }
+        val ema25List = computeEmaSeries(candles, 25)
+        val ema50List = computeEmaSeries(candles, 50)
+        val ema100List = computeEmaSeries(candles, 100)
+        val ema200List = computeEmaSeries(candles, 200)
         val rsiList = DoubleArray(n) { 50.0 }
 
-        // 1. Compute EMA 200
-        val emaPeriod = 200
-        val alpha = 2.0 / (emaPeriod + 1.0)
-
-        // Seed EMA with first available prices
-        val seedCount = min(emaPeriod, n)
-        var initialSum = 0.0
-        for (i in 0 until seedCount) {
-            initialSum += candles[i].close
-        }
-        var currentEma = initialSum / seedCount.toDouble()
-
-        for (i in 0 until n) {
-            val close = candles[i].close
-            currentEma = (close * alpha) + (currentEma * (1.0 - alpha))
-            emaList[i] = currentEma
-        }
-
-        // 2. Compute RSI 14
+        // Compute RSI 14
         val rsiPeriod = 14
         if (n > 1) {
             val gains = DoubleArray(n) { 0.0 }
@@ -182,7 +213,10 @@ class TechnicalRepository {
 
         return candles.mapIndexed { i, candle ->
             candle.copy(
-                ema200 = emaList[i],
+                ema25 = ema25List[i],
+                ema50 = ema50List[i],
+                ema100 = ema100List[i],
+                ema200 = ema200List[i],
                 rsi = rsiList[i]
             )
         }

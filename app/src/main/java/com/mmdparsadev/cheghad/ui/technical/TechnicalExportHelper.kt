@@ -16,9 +16,12 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.models.CandleData
 import com.mmdparsadev.cheghad.data.models.ChartTimeframe
 import com.mmdparsadev.cheghad.data.models.CurrencyItem
+import com.mmdparsadev.cheghad.data.models.EmaPeriod
+import com.mmdparsadev.cheghad.getLocalizedTitle
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -41,9 +44,10 @@ object TechnicalExportHelper {
         chartBitmap: Bitmap,
         currency: CurrencyItem,
         timeframe: ChartTimeframe,
-        candles: List<CandleData>
+        candles: List<CandleData>,
+        enabledEmas: Set<EmaPeriod> = setOf(EmaPeriod.EMA_200)
     ) {
-        sharePdf(context, chartBitmap, currency, timeframe, candles)
+        sharePdf(context, chartBitmap, currency, timeframe, candles, enabledEmas)
     }
 
     /**
@@ -70,19 +74,23 @@ object TechnicalExportHelper {
                 file
             )
 
+            val isEnglish = context.getString(R.string.tech_lang_code) == "en"
+            val localizedTitle = getLocalizedTitle(currency.symbol, currency.title)
+            val tfTitle = timeframe.localizedTitle(isEnglish)
+
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "image/png"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "نمودار تکنیکال ${currency.title} (${currency.symbol})")
-                putExtra(Intent.EXTRA_TEXT, "نمودار تکنیکال ${currency.title} (${currency.symbol}) - تایم‌فریم: ${timeframe.titleFa}\nبرنامه چقد؟")
+                putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.tech_share_png_subject, localizedTitle, currency.symbol))
+                putExtra(Intent.EXTRA_TEXT, context.getString(R.string.tech_share_png_body, localizedTitle, currency.symbol, tfTitle))
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            val chooser = Intent.createChooser(shareIntent, "اشتراک‌گذاری تصویر چارت")
+            val chooser = Intent.createChooser(shareIntent, context.getString(R.string.tech_share_png_chooser))
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooser)
         } catch (e: Exception) {
-            Toast.makeText(context, "خطا در اشتراک‌گذاری تصویر: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.tech_share_png_error, e.localizedMessage ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -116,7 +124,7 @@ object TechnicalExportHelper {
                     contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
                     resolver.update(uri, contentValues, null, null)
 
-                    Toast.makeText(context, "تصویر در گالری ذخیره شد:\nPictures/Cheghad/$fileName", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.getString(R.string.tech_save_png_gallery_ok, fileName), Toast.LENGTH_LONG).show()
                     uri
                 } else {
                     savePngToExternalLegacy(context, bitmap, fileName)
@@ -125,7 +133,7 @@ object TechnicalExportHelper {
                 savePngToExternalLegacy(context, bitmap, fileName)
             }
         } catch (e: Exception) {
-            Toast.makeText(context, "خطا در ذخیره تصویر: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.tech_save_png_error, e.localizedMessage ?: ""), Toast.LENGTH_SHORT).show()
             null
         }
     }
@@ -141,7 +149,7 @@ object TechnicalExportHelper {
         }
         MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf("image/png"), null)
         val uri = Uri.fromFile(file)
-        Toast.makeText(context, "تصویر در پوشه تصاویر ذخیره شد:\n${file.name}", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, context.getString(R.string.tech_save_png_dir_ok, file.name), Toast.LENGTH_LONG).show()
         return uri
     }
 
@@ -153,10 +161,11 @@ object TechnicalExportHelper {
         chartBitmap: Bitmap,
         currency: CurrencyItem,
         timeframe: ChartTimeframe,
-        candles: List<CandleData>
+        candles: List<CandleData>,
+        enabledEmas: Set<EmaPeriod> = setOf(EmaPeriod.EMA_200)
     ) {
         try {
-            val pdfDocument = createPdfDocument(chartBitmap, currency, timeframe, candles)
+            val pdfDocument = createPdfDocument(context, chartBitmap, currency, timeframe, candles, enabledEmas)
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val file = File(exportDir, "Cheghad_Technical_${currency.symbol}_$timeStamp.pdf")
@@ -172,19 +181,20 @@ object TechnicalExportHelper {
                 file
             )
 
+            val localizedTitle = getLocalizedTitle(currency.symbol, currency.title)
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "سند تحلیل تکنیکال ${currency.title} (${currency.symbol})")
-                putExtra(Intent.EXTRA_TEXT, "فایل PDF تحلیل تکنیکال ${currency.title} - برنامه چقد؟")
+                putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.tech_share_pdf_subject, localizedTitle, currency.symbol))
+                putExtra(Intent.EXTRA_TEXT, context.getString(R.string.tech_share_pdf_body, localizedTitle))
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            val chooser = Intent.createChooser(shareIntent, "اشتراک‌گذاری سند PDF")
+            val chooser = Intent.createChooser(shareIntent, context.getString(R.string.tech_share_pdf_chooser))
             chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(chooser)
         } catch (e: Exception) {
-            Toast.makeText(context, "خطا در اشتراک‌گذاری PDF: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.tech_share_pdf_error, e.localizedMessage ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -196,13 +206,14 @@ object TechnicalExportHelper {
         chartBitmap: Bitmap,
         currency: CurrencyItem,
         timeframe: ChartTimeframe,
-        candles: List<CandleData>
+        candles: List<CandleData>,
+        enabledEmas: Set<EmaPeriod> = setOf(EmaPeriod.EMA_200)
     ): Uri? {
         val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val fileName = "Cheghad_Technical_${currency.symbol}_$timeStamp.pdf"
 
         return try {
-            val pdfDocument = createPdfDocument(chartBitmap, currency, timeframe, candles)
+            val pdfDocument = createPdfDocument(context, chartBitmap, currency, timeframe, candles, enabledEmas)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val contentValues = ContentValues().apply {
@@ -222,18 +233,18 @@ object TechnicalExportHelper {
                     contentValues.put(MediaStore.MediaColumns.IS_PENDING, 0)
                     resolver.update(uri, contentValues, null, null)
 
-                    Toast.makeText(context, "فایل PDF در پوشه دانلودها ذخیره شد:\nDownloads/Cheghad/$fileName", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.getString(R.string.tech_save_pdf_downloads_ok, fileName), Toast.LENGTH_LONG).show()
                     uri
                 } else {
                     pdfDocument.close()
-                    savePdfToExternalLegacy(context, chartBitmap, currency, timeframe, candles, fileName)
+                    savePdfToExternalLegacy(context, chartBitmap, currency, timeframe, candles, fileName, enabledEmas)
                 }
             } else {
                 pdfDocument.close()
-                savePdfToExternalLegacy(context, chartBitmap, currency, timeframe, candles, fileName)
+                savePdfToExternalLegacy(context, chartBitmap, currency, timeframe, candles, fileName, enabledEmas)
             }
         } catch (e: Exception) {
-            Toast.makeText(context, "خطا در ذخیره PDF: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.tech_save_pdf_error, e.localizedMessage ?: ""), Toast.LENGTH_SHORT).show()
             null
         }
     }
@@ -244,21 +255,22 @@ object TechnicalExportHelper {
         currency: CurrencyItem,
         timeframe: ChartTimeframe,
         candles: List<CandleData>,
-        fileName: String
+        fileName: String,
+        enabledEmas: Set<EmaPeriod> = setOf(EmaPeriod.EMA_200)
     ): Uri? {
         val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             ?: context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         val targetDir = File(downloadsDir, "Cheghad").apply { mkdirs() }
         val file = File(targetDir, fileName)
 
-        val pdfDoc = createPdfDocument(chartBitmap, currency, timeframe, candles)
+        val pdfDoc = createPdfDocument(context, chartBitmap, currency, timeframe, candles, enabledEmas)
         FileOutputStream(file).use { out ->
             pdfDoc.writeTo(out)
         }
         pdfDoc.close()
         MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), arrayOf("application/pdf"), null)
         val uri = Uri.fromFile(file)
-        Toast.makeText(context, "فایل PDF در پوشه دانلودها ذخیره شد:\n${file.name}", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, context.getString(R.string.tech_save_pdf_dir_ok, file.name), Toast.LENGTH_LONG).show()
         return uri
     }
 
@@ -266,10 +278,12 @@ object TechnicalExportHelper {
      * Common method to construct the PDF document.
      */
     private fun createPdfDocument(
+        context: Context,
         chartBitmap: Bitmap,
         currency: CurrencyItem,
         timeframe: ChartTimeframe,
-        candles: List<CandleData>
+        candles: List<CandleData>,
+        enabledEmas: Set<EmaPeriod> = setOf(EmaPeriod.EMA_200)
     ): PdfDocument {
         val pdfDocument = PdfDocument()
         val pageWidth = 842 // A4 Landscape
@@ -292,7 +306,7 @@ object TechnicalExportHelper {
             isFakeBoldText = true
             isAntiAlias = true
         }
-        canvas.drawText("گزارش تحلیل تکنیکال - چقد؟ (Cheghad)", 30f, 42f, textPaint)
+        canvas.drawText(context.getString(R.string.tech_pdf_header_title), 30f, 42f, textPaint)
 
         val subTextPaint = Paint().apply {
             color = android.graphics.Color.rgb(200, 210, 230)
@@ -300,7 +314,7 @@ object TechnicalExportHelper {
             isAntiAlias = true
         }
         val dateStr = SimpleDateFormat("yyyy/MM/dd - HH:mm", Locale.getDefault()).format(Date())
-        canvas.drawText("تاریخ گزارش: $dateStr", pageWidth - 200f, 42f, subTextPaint)
+        canvas.drawText(context.getString(R.string.tech_pdf_report_date, dateStr), pageWidth - 200f, 42f, subTextPaint)
 
         // Asset Info Strip
         val assetPaint = Paint().apply {
@@ -309,7 +323,8 @@ object TechnicalExportHelper {
             isFakeBoldText = true
             isAntiAlias = true
         }
-        canvas.drawText("${currency.title} (${currency.symbol})", 30f, 105f, assetPaint)
+        val localizedTitle = getLocalizedTitle(currency.symbol, currency.title)
+        canvas.drawText("$localizedTitle (${currency.symbol})", 30f, 105f, assetPaint)
 
         val metaPaint = Paint().apply {
             color = android.graphics.Color.rgb(100, 116, 139)
@@ -318,10 +333,26 @@ object TechnicalExportHelper {
         }
         val priceStr = String.format(Locale.US, "%,.2f", currency.currentPrice)
         val latestCandle = candles.lastOrNull()
-        val emaStr = latestCandle?.ema200?.let { String.format(Locale.US, "%,.2f", it) } ?: "-"
+        val activeEmas = if (enabledEmas.isEmpty()) listOf(EmaPeriod.EMA_200) else EmaPeriod.entries.filter { it in enabledEmas }
+        val emaSummary = activeEmas.joinToString(" | ") { period ->
+            val valStr = latestCandle?.let { period.extractFrom(it) }?.let { String.format(Locale.US, "%,.2f", it) } ?: "-"
+            "${period.label}: $valStr"
+        }
         val rsiStr = latestCandle?.rsi?.let { String.format(Locale.US, "%.1f", it) } ?: "-"
+        val isEnglish = context.getString(R.string.tech_lang_code) == "en"
 
-        canvas.drawText("قیمت: $priceStr تومان  |  تایم‌فریم: ${timeframe.titleFa} (${timeframe.titleEn})  |  EMA 200: $emaStr  |  RSI (14): $rsiStr", 30f, 125f, metaPaint)
+        canvas.drawText(
+            context.getString(
+                R.string.tech_pdf_meta_line,
+                priceStr,
+                timeframe.localizedTitle(isEnglish),
+                emaSummary,
+                rsiStr
+            ),
+            30f,
+            125f,
+            metaPaint
+        )
 
         // Draw Chart Bitmap
         val chartTop = 140f
@@ -347,8 +378,8 @@ object TechnicalExportHelper {
             textSize = 10f
             isAntiAlias = true
         }
-        canvas.drawText("منبع دیتا: شبکه اطلاع‌رسانی طلا، سکه و ارز (TGJU UDF TV2)  •  طراحی و تولید شده توسط اپلیکیشن چقد؟", 30f, 530f, footerPaint)
-        canvas.drawText("توجه: این نمودار جنبه تحلیلی دارد و به منزله پیشنهاد خرید یا فروش نیست.", 30f, 550f, footerPaint)
+        canvas.drawText(context.getString(R.string.tech_pdf_footer_source), 30f, 530f, footerPaint)
+        canvas.drawText(context.getString(R.string.tech_pdf_footer_disclaimer), 30f, 550f, footerPaint)
 
         pdfDocument.finishPage(page)
         return pdfDocument

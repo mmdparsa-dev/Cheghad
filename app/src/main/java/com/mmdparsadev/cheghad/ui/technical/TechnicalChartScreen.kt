@@ -22,10 +22,14 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import android.app.Activity
 import android.app.UiModeManager
 import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -53,6 +57,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ShowChart
+import androidx.compose.material.icons.automirrored.filled.TrendingDown
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.AutoGraph
 import androidx.compose.material.icons.filled.Brush
@@ -69,34 +76,34 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.StayCurrentLandscape
+import androidx.compose.material.icons.filled.StayCurrentPortrait
 import androidx.compose.material.icons.filled.TextFields
-import androidx.compose.material.icons.filled.TrendingDown
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
@@ -108,15 +115,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.models.CandleData
 import com.mmdparsadev.cheghad.data.models.ChartDrawing
 import com.mmdparsadev.cheghad.data.models.ChartPoint
@@ -125,14 +138,14 @@ import com.mmdparsadev.cheghad.data.models.CurrencyItem
 import com.mmdparsadev.cheghad.data.models.CurrencyType
 import com.mmdparsadev.cheghad.data.models.DrawingToolType
 import com.mmdparsadev.cheghad.data.models.EmaAssetAnalysis
+import com.mmdparsadev.cheghad.data.models.EmaPeriod
 import com.mmdparsadev.cheghad.data.models.EmaTouchStatus
 import com.mmdparsadev.cheghad.data.repository.TechnicalRepository
 import com.mmdparsadev.cheghad.formatPrice
 import com.mmdparsadev.cheghad.getLocalizedTitle
+import com.mmdparsadev.cheghad.toLocalizedDigits
 import com.mmdparsadev.cheghad.ui.theme.getFontFamilyForText
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import kotlin.math.abs
@@ -151,24 +164,34 @@ fun isTvDevice(): Boolean {
     return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
 }
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TechnicalChartScreen(
     initialCurrency: CurrencyItem,
     allCurrencies: List<CurrencyItem>,
     digitType: String = "fa",
+    calendarType: String = "jalali",
     bullishColor: Color = Color(0xFF00C853),
     bearishColor: Color = Color(0xFFFF3D00),
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     val coroutineScope = rememberCoroutineScope()
     val repository = remember { TechnicalRepository() }
 
     var currentCurrency by remember { mutableStateOf(initialCurrency) }
     var selectedTimeframe by remember { mutableStateOf<ChartTimeframe?>(ChartTimeframe.D1) }
     var activeExportTimeframe by remember { mutableStateOf(ChartTimeframe.D1) }
-    var showEma by remember { mutableStateOf(true) }
+    var enabledEmas by remember { mutableStateOf(setOf(EmaPeriod.EMA_200)) }
+    var lastNonEmptyEmas by remember { mutableStateOf(setOf(EmaPeriod.EMA_200)) }
+    var showEmaMenu by remember { mutableStateOf(false) }
     var showRsi by remember { mutableStateOf(true) }
 
     var candles by remember { mutableStateOf<List<CandleData>>(emptyList()) }
@@ -187,7 +210,41 @@ fun TechnicalChartScreen(
     var textTargetPoint by remember { mutableStateOf<ChartPoint?>(null) }
     var inputNoteText by remember { mutableStateOf("") }
     var isFullScreen by remember { mutableStateOf(false) }
+    var isLandscape by remember { mutableStateOf(false) }
     var selectedCarouselTab by remember { mutableIntStateOf(0) }
+
+    DisposableEffect(activity) {
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    fun toggleLandscape(enable: Boolean) {
+        isLandscape = enable
+        if (enable) {
+            isFullScreen = true
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    fun toggleEmaPeriod(period: EmaPeriod) {
+        val next = if (period in enabledEmas) enabledEmas - period else enabledEmas + period
+        enabledEmas = next
+        if (next.isNotEmpty()) {
+            lastNonEmptyEmas = next
+        }
+    }
+
+    fun toggleHeaderEma() {
+        if (enabledEmas.isNotEmpty()) {
+            lastNonEmptyEmas = enabledEmas
+            enabledEmas = emptySet()
+        } else {
+            enabledEmas = lastNonEmptyEmas.ifEmpty { setOf(EmaPeriod.EMA_200) }
+        }
+    }
 
     // Clear drawings when switching to a different asset
     LaunchedEffect(currentCurrency.symbol) {
@@ -222,19 +279,22 @@ fun TechnicalChartScreen(
     }
 
     val latestCandle = hoveredCandle ?: candles.lastOrNull()
+    val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val isEnglish = stringResource(R.string.tech_lang_code) == "en"
+    val tomanShort = stringResource(R.string.tech_toman_short)
+    val tomanSuffix = stringResource(R.string.tech_toman_suffix)
 
-    val upColor = bullishColor
-    val downColor = bearishColor
-    val emaColor = Color(0xFFFFB300)
+    val hasAnyEma = enabledEmas.isNotEmpty()
+    val emaHeaderColor = Color(0xFF2196F3)
     val rsiColor = Color(0xFF7C4DFF)
 
     val animatedEmaBg by animateColorAsState(
-        targetValue = if (showEma) emaColor.copy(alpha = 0.25f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        targetValue = if (hasAnyEma) emaHeaderColor.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "emaBg"
     )
     val animatedEmaBorder by animateColorAsState(
-        targetValue = if (showEma) emaColor else Color.Transparent,
+        targetValue = if (hasAnyEma) emaHeaderColor else Color.Transparent,
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "emaBorder"
     )
@@ -267,8 +327,73 @@ fun TechnicalChartScreen(
         label = "chartCornerRadius"
     )
 
-    androidx.activity.compose.BackHandler(isFullScreen) {
+    androidx.activity.compose.BackHandler(isFullScreen || isLandscape) {
         isFullScreen = false
+        if (isLandscape) toggleLandscape(false)
+    }
+
+    @Composable
+    fun EmaDropdownMenu() {
+        DropdownMenu(
+            expanded = showEmaMenu,
+            onDismissRequest = { showEmaMenu = false }
+        ) {
+            for (period in EmaPeriod.entries) {
+                val style = emaVisualStyle(period, isDarkTheme)
+                val checked = period in enabledEmas
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Canvas(modifier = Modifier.size(width = 16.dp, height = 8.dp)) {
+                                drawLine(
+                                    color = style.color,
+                                    start = Offset(0f, size.height / 2f),
+                                    end = Offset(size.width, size.height / 2f),
+                                    strokeWidth = style.strokeWidthDp.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                    pathEffect = style.dashIntervals?.let { PathEffect.dashPathEffect(it, 0f) }
+                                )
+                            }
+                            Text(
+                                text = period.label,
+                                fontWeight = if (checked) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    },
+                    trailingIcon = {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = null
+                        )
+                    },
+                    onClick = { toggleEmaPeriod(period) }
+                )
+            }
+            HorizontalDivider()
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.tech_ema_preset_25_200)) },
+                onClick = {
+                    val preset = setOf(EmaPeriod.EMA_25, EmaPeriod.EMA_200)
+                    enabledEmas = preset
+                    lastNonEmptyEmas = preset
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.tech_ema_enable_all)) },
+                onClick = {
+                    val all = EmaPeriod.entries.toSet()
+                    enabledEmas = all
+                    lastNonEmptyEmas = all
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.tech_ema_disable_all)) },
+                onClick = { enabledEmas = emptySet() }
+            )
+        }
     }
 
     Scaffold(
@@ -293,7 +418,7 @@ fun TechnicalChartScreen(
                 label = "headerAnim"
             ) { full ->
                 if (full) {
-                    // Fullscreen compact header
+                    // Fullscreen / Landscape compact header
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = MaterialTheme.colorScheme.surface,
@@ -307,10 +432,13 @@ fun TechnicalChartScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = { isFullScreen = false }) {
+                                IconButton(onClick = {
+                                    isFullScreen = false
+                                    if (isLandscape) toggleLandscape(false)
+                                }) {
                                     Icon(
                                         imageVector = Icons.Default.FullscreenExit,
-                                        contentDescription = "خروج از تمام‌صفحه",
+                                        contentDescription = stringResource(R.string.tech_exit_fullscreen),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -334,29 +462,35 @@ fun TechnicalChartScreen(
                                     price = fsPrice,
                                     symbol = currentCurrency.symbol,
                                     digitType = digitType,
-                                    suffix = " ت",
+                                    suffix = tomanShort,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     defaultColor = MaterialTheme.colorScheme.primary
                                 )
                             }
 
-                            // EMA, RSI & Export
+                            // Multi-EMA dropdown, RSI, Landscape & Export
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Surface(
-                                    onClick = { showEma = !showEma },
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = animatedEmaBg,
-                                    border = BorderStroke(1.dp, animatedEmaBorder),
-                                    modifier = Modifier.padding(end = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "EMA",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (showEma) emaColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                                    )
+                                Box {
+                                    Surface(
+                                        onClick = { showEmaMenu = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = animatedEmaBg,
+                                        border = BorderStroke(1.dp, animatedEmaBorder),
+                                        modifier = Modifier.padding(end = 4.dp)
+                                    ) {
+                                        val emaBadge = if (enabledEmas.isNotEmpty()) {
+                                            "EMA (${enabledEmas.size})".toLocalizedDigits(digitType)
+                                        } else "EMA"
+                                        Text(
+                                            text = emaBadge,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                    EmaDropdownMenu()
                                 }
 
                                 Surface(
@@ -375,13 +509,27 @@ fun TechnicalChartScreen(
                                     )
                                 }
 
+                                if (!isTv) {
+                                    IconButton(
+                                        onClick = { toggleLandscape(!isLandscape) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isLandscape) Icons.Default.StayCurrentPortrait else Icons.Default.StayCurrentLandscape,
+                                            contentDescription = if (isLandscape) stringResource(R.string.tech_portrait_mode) else stringResource(R.string.tech_landscape_view),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
                                 IconButton(
                                     onClick = { showExportSheet = true },
                                     modifier = Modifier.size(32.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Share,
-                                        contentDescription = "خروجی",
+                                        contentDescription = stringResource(R.string.tech_export_chart),
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -403,11 +551,17 @@ fun TechnicalChartScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = onBack) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                IconButton(onClick = {
+                                    if (isLandscape) toggleLandscape(false)
+                                    onBack()
+                                }) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "بازگشت",
+                                        contentDescription = stringResource(R.string.tech_back),
                                         tint = MaterialTheme.colorScheme.onBackground
                                     )
                                 }
@@ -418,7 +572,8 @@ fun TechnicalChartScreen(
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onBackground,
-                                        fontFamily = getFontFamilyForText(localizedTitle)
+                                        fontFamily = getFontFamilyForText(localizedTitle),
+                                        maxLines = 1
                                     )
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
@@ -434,21 +589,22 @@ fun TechnicalChartScreen(
                                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
+                                        val tfLabel = selectedTimeframe?.localizedTitle(isEnglish) ?: stringResource(R.string.tech_custom_zoom)
                                         Text(
-                                            text = selectedTimeframe?.titleFa ?: "زوم سفارشی",
+                                            text = tfLabel,
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.SemiBold,
-                                            fontFamily = getFontFamilyForText("زوم سفارشی")
+                                            fontFamily = getFontFamilyForText(tfLabel)
                                         )
                                     }
                                 }
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                // Animated EMA button
+                                // Animated Multi-EMA toggle pill
                                 Surface(
-                                    onClick = { showEma = !showEma },
+                                    onClick = { toggleHeaderEma() },
                                     shape = RoundedCornerShape(12.dp),
                                     color = animatedEmaBg,
                                     border = BorderStroke(1.dp, animatedEmaBorder),
@@ -462,14 +618,17 @@ fun TechnicalChartScreen(
                                             modifier = Modifier
                                                 .size(7.dp)
                                                 .clip(CircleShape)
-                                                .background(if (showEma) emaColor else MaterialTheme.colorScheme.outline)
+                                                .background(if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.outline)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
+                                        val labelText = if (enabledEmas.size > 1) {
+                                            "EMA ${enabledEmas.size}".toLocalizedDigits(digitType)
+                                        } else "EMA"
                                         Text(
-                                            text = "EMA",
+                                            text = labelText,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (showEma) emaColor else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
@@ -480,7 +639,7 @@ fun TechnicalChartScreen(
                                     shape = RoundedCornerShape(12.dp),
                                     color = animatedRsiBg,
                                     border = BorderStroke(1.dp, animatedRsiBorder),
-                                    modifier = Modifier.padding(end = 4.dp)
+                                    modifier = Modifier.padding(end = 2.dp)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -502,14 +661,29 @@ fun TechnicalChartScreen(
                                     }
                                 }
 
+                                // Quick Landscape toggle button
+                                if (!isTv) {
+                                    IconButton(
+                                        onClick = { toggleLandscape(!isLandscape) },
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ScreenRotation,
+                                            contentDescription = stringResource(R.string.tech_landscape_view),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
                                 // Fullscreen button
                                 IconButton(
                                     onClick = { isFullScreen = true },
-                                    modifier = Modifier.size(36.dp)
+                                    modifier = Modifier.size(34.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Fullscreen,
-                                        contentDescription = "تمام‌صفحه",
+                                        contentDescription = stringResource(R.string.tech_fullscreen),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -517,11 +691,11 @@ fun TechnicalChartScreen(
                                 // Share button
                                 IconButton(
                                     onClick = { showExportSheet = true },
-                                    modifier = Modifier.size(36.dp)
+                                    modifier = Modifier.size(34.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Share,
-                                        contentDescription = "خروجی چارت",
+                                        contentDescription = stringResource(R.string.tech_export_chart),
                                         tint = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -531,7 +705,7 @@ fun TechnicalChartScreen(
                 }
             }
 
-            // 2. Timeframe Chips Row
+            // 2. Timeframe Chips Row (including 1m and 5m intraday)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -573,13 +747,121 @@ fun TechnicalChartScreen(
                             modifier = Modifier.padding(horizontal = if (isTv) 14.dp else 10.dp),
                             contentAlignment = Alignment.Center
                         ) {
+                            val tfTitle = tf.localizedTitle(isEnglish)
                             Text(
-                                text = tf.titleFa,
+                                text = tfTitle,
                                 fontSize = if (isTv) 13.sp else 11.sp,
                                 fontWeight = if (isSelected || (isTv && isFocused)) FontWeight.ExtraBold else FontWeight.Medium,
                                 color = if (isSelected || (isTv && isFocused)) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                fontFamily = getFontFamilyForText(tf.titleFa)
+                                fontFamily = getFontFamilyForText(tfTitle)
                             )
+                        }
+                    }
+                }
+            }
+
+            // 2.5 Multi-EMA Individual Toggles & Presets Bar (visible in normal view)
+            AnimatedVisibility(
+                visible = !isFullScreen,
+                enter = expandVertically(animationSpec = tween(260, easing = FastOutSlowInEasing)) + fadeIn(tween(220)),
+                exit = shrinkVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeOut(tween(160))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 10.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    for (period in EmaPeriod.entries) {
+                        val isActive = period in enabledEmas
+                        val style = emaVisualStyle(period, isDarkTheme)
+                        val isSubtleLine = period == EmaPeriod.EMA_50 || period == EmaPeriod.EMA_100
+                        val chipAccentText = if (isSubtleLine) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            style.color
+                        }
+
+                        Surface(
+                            onClick = { toggleEmaPeriod(period) },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isActive) {
+                                style.color.copy(alpha = if (isSubtleLine) 0.12f else 0.16f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerLow
+                            },
+                            border = BorderStroke(
+                                width = if (isActive) 1.3.dp else 1.dp,
+                                color = if (isActive) {
+                                    if (isSubtleLine) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f) else style.color
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                                }
+                            ),
+                            modifier = Modifier.height(if (isTv) 32.dp else 26.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            ) {
+                                Canvas(modifier = Modifier.size(width = 14.dp, height = 6.dp)) {
+                                    drawLine(
+                                        color = if (isActive) style.color else style.color.copy(alpha = 0.4f),
+                                        start = Offset(0f, size.height / 2f),
+                                        end = Offset(size.width, size.height / 2f),
+                                        strokeWidth = style.strokeWidthDp.dp.toPx(),
+                                        cap = StrokeCap.Round,
+                                        pathEffect = style.dashIntervals?.let { PathEffect.dashPathEffect(it, 0f) }
+                                    )
+                                }
+                                Text(
+                                    text = period.label,
+                                    fontSize = if (isTv) 12.sp else 10.sp,
+                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isActive) chipAccentText else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    // Quick Multi-EMA Presets
+                    val allEmaSet = EmaPeriod.entries.toSet()
+                    val duoPreset = setOf(EmaPeriod.EMA_25, EmaPeriod.EMA_200)
+                    val presets = listOf(
+                        stringResource(R.string.tech_ema_preset_25_200) to duoPreset,
+                        stringResource(R.string.tech_ema_chip_all) to allEmaSet,
+                        stringResource(R.string.tech_ema_chip_off) to emptySet()
+                    )
+                    for ((presetTitle, presetSet) in presets) {
+                        val matchesPreset = enabledEmas == presetSet
+                        Surface(
+                            onClick = {
+                                enabledEmas = presetSet
+                                if (presetSet.isNotEmpty()) lastNonEmptyEmas = presetSet
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (matchesPreset) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                            border = BorderStroke(
+                                1.dp,
+                                if (matchesPreset) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                            ),
+                            modifier = Modifier.height(if (isTv) 32.dp else 26.dp)
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            ) {
+                                Text(
+                                    text = presetTitle,
+                                    fontSize = if (isTv) 11.5.sp else 9.5.sp,
+                                    fontWeight = if (matchesPreset) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (matchesPreset) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontFamily = getFontFamilyForText(presetTitle)
+                                )
+                            }
                         }
                     }
                 }
@@ -631,9 +913,10 @@ fun TechnicalChartScreen(
                     candles = candles,
                     currency = currentCurrency,
                     timeframe = selectedTimeframe,
-                    showEma = showEma,
+                    enabledEmas = enabledEmas,
                     showRsi = showRsi,
                     digitType = digitType,
+                    calendarType = calendarType,
                     activeTool = activeTool,
                     activeColor = activeColor,
                     drawings = drawings,
@@ -692,8 +975,7 @@ fun TechnicalChartScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val candleTime = latestCandle?.time ?: System.currentTimeMillis()
-                            val formattedDate = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()).format(Date(candleTime))
-                            val dateStr = if (digitType == "fa") toPersianDigits(formattedDate) else formattedDate
+                            val dateStr = formatCandleDateTime(candleTime, digitType, calendarType)
                             AnimatedContent(
                                 targetState = dateStr,
                                 transitionSpec = {
@@ -710,7 +992,11 @@ fun TechnicalChartScreen(
                             }
 
                             val hudPrice = latestCandle?.close ?: currentCurrency.currentPrice
-                            val hudPriceLabel = if (hoveredCandle != null) "قیمت کندل: " else "قیمت فعلی: "
+                            val hudPriceLabel = if (hoveredCandle != null) {
+                                stringResource(R.string.tech_candle_price_label)
+                            } else {
+                                stringResource(R.string.tech_current_price_label)
+                            }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 AnimatedContent(
@@ -732,11 +1018,11 @@ fun TechnicalChartScreen(
                                     price = hudPrice,
                                     symbol = currentCurrency.symbol,
                                     digitType = digitType,
-                                    suffix = " تومان",
+                                    suffix = tomanSuffix,
                                     fontSize = if (isTv) 15.sp else 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     defaultColor = MaterialTheme.colorScheme.primary,
-                                    fontFamily = getFontFamilyForText("تومان")
+                                    fontFamily = getFontFamilyForText(tomanSuffix)
                                 )
                             }
                         }
@@ -747,10 +1033,10 @@ fun TechnicalChartScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                HudItem("باز", latestCandle.open, digitType, isTv = isTv)
-                                HudItem("بالا", latestCandle.high, digitType, isTv = isTv)
-                                HudItem("پایین", latestCandle.low, digitType, isTv = isTv)
-                                HudItem("بسته", latestCandle.close, digitType, isTv = isTv)
+                                HudItem(stringResource(R.string.tech_ohlc_open), latestCandle.open, digitType, isTv = isTv)
+                                HudItem(stringResource(R.string.tech_ohlc_high), latestCandle.high, digitType, isTv = isTv)
+                                HudItem(stringResource(R.string.tech_ohlc_low), latestCandle.low, digitType, isTv = isTv)
+                                HudItem(stringResource(R.string.tech_ohlc_close), latestCandle.close, digitType, isTv = isTv)
                             }
                         }
                     }
@@ -793,11 +1079,11 @@ fun TechnicalChartScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val tabs = listOf(
-                                "۱. ارزها",
-                                "۲. طلا و سکه",
-                                "۳. رمزارزها",
-                                "۴. کالاها",
-                                "۵. وضعیت EMA 200"
+                                stringResource(R.string.tech_tab_currencies),
+                                stringResource(R.string.tech_tab_gold),
+                                stringResource(R.string.tech_tab_crypto),
+                                stringResource(R.string.tech_tab_commodities),
+                                stringResource(R.string.tech_tab_ema_status)
                             )
                             tabs.forEachIndexed { index, tabTitle ->
                                 val isTabSelected = selectedCarouselTab == index
@@ -876,6 +1162,7 @@ fun TechnicalChartScreen(
                                     items = currenciesList,
                                     selectedSymbol = currentCurrency.symbol,
                                     digitType = digitType,
+                                    currencySuffix = tomanShort,
                                     showTitle = false,
                                     isTv = isTv,
                                     onSelect = { currentCurrency = it }
@@ -885,6 +1172,7 @@ fun TechnicalChartScreen(
                                     items = goldList,
                                     selectedSymbol = currentCurrency.symbol,
                                     digitType = digitType,
+                                    currencySuffix = tomanShort,
                                     showTitle = false,
                                     isTv = isTv,
                                     onSelect = { currentCurrency = it }
@@ -894,6 +1182,7 @@ fun TechnicalChartScreen(
                                     items = cryptoList,
                                     selectedSymbol = currentCurrency.symbol,
                                     digitType = digitType,
+                                    currencySuffix = tomanShort,
                                     showTitle = false,
                                     isTv = isTv,
                                     onSelect = { currentCurrency = it }
@@ -903,6 +1192,7 @@ fun TechnicalChartScreen(
                                     items = commoditiesList,
                                     selectedSymbol = currentCurrency.symbol,
                                     digitType = digitType,
+                                    currencySuffix = tomanShort,
                                     showTitle = false,
                                     isTv = isTv,
                                     onSelect = { currentCurrency = it }
@@ -911,6 +1201,7 @@ fun TechnicalChartScreen(
                                     analyses = emaAnalyses,
                                     selectedSymbol = currentCurrency.symbol,
                                     digitType = digitType,
+                                    currencySuffix = tomanShort,
                                     showTitle = false,
                                     isTv = isTv,
                                     onSelect = { currentCurrency = it }
@@ -930,7 +1221,7 @@ fun TechnicalChartScreen(
                 showExportSheet = false
                 selectedExportFormat = null
             },
-            sheetState = rememberModalBottomSheetState(),
+            sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden),
             containerColor = MaterialTheme.colorScheme.surface
         ) {
             AnimatedContent(
@@ -954,15 +1245,22 @@ fun TechnicalChartScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 24.dp, vertical = 16.dp)
                         ) {
+                            val exportTitle = stringResource(R.string.tech_export_sheet_title)
                             Text(
-                                text = "خروجی و اشتراک‌گذاری نمودار تکنیکال",
+                                text = exportTitle,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                fontFamily = getFontFamilyForText("خروجی")
+                                fontFamily = getFontFamilyForText(exportTitle)
                             )
+                            val exportTf = (selectedTimeframe ?: activeExportTimeframe).localizedTitle(isEnglish)
                             Text(
-                                text = "${currentCurrency.title} (${currentCurrency.symbol}) - تایم‌فریم ${selectedTimeframe?.titleFa ?: activeExportTimeframe.titleFa}",
+                                text = stringResource(
+                                    R.string.tech_export_sheet_subtitle,
+                                    getLocalizedTitle(currentCurrency.symbol, currentCurrency.title),
+                                    currentCurrency.symbol,
+                                    exportTf
+                                ),
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -992,15 +1290,16 @@ fun TechnicalChartScreen(
                                     }
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column(modifier = Modifier.weight(1f)) {
+                                        val pngTitle = stringResource(R.string.tech_export_png_title)
                                         Text(
-                                            text = "خروجی تصویر با کیفیت بالا (PNG)",
+                                            text = pngTitle,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText("خروجی")
+                                            fontFamily = getFontFamilyForText(pngTitle)
                                         )
                                         Text(
-                                            text = "شامل تصویر چارت، کندل‌ها، اندیکاتورها و رسم‌های تحلیلی",
+                                            text = stringResource(R.string.tech_export_png_desc),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1039,15 +1338,16 @@ fun TechnicalChartScreen(
                                     }
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column(modifier = Modifier.weight(1f)) {
+                                        val pdfTitle = stringResource(R.string.tech_export_pdf_title)
                                         Text(
-                                            text = "سند رسمی گزارش تحلیلی (PDF)",
+                                            text = pdfTitle,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText("گزارش")
+                                            fontFamily = getFontFamilyForText(pdfTitle)
                                         )
                                         Text(
-                                            text = "فایل PDF شامل چارت تکنیکال، ارقام آماری OHLC، EMA 200 و RSI",
+                                            text = stringResource(R.string.tech_export_pdf_desc),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1078,21 +1378,22 @@ fun TechnicalChartScreen(
                                 IconButton(onClick = { selectedExportFormat = null }) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "بازگشت",
+                                        contentDescription = stringResource(R.string.tech_back),
                                         tint = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Column {
+                                    val pngSheetTitle = stringResource(R.string.tech_export_png_sheet_title)
                                     Text(
-                                        text = "خروجی تصویر چارت (PNG)",
+                                        text = pngSheetTitle,
                                         fontSize = 17.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
-                                        fontFamily = getFontFamilyForText("خروجی")
+                                        fontFamily = getFontFamilyForText(pngSheetTitle)
                                     )
                                     Text(
-                                        text = "نحوه دریافت تصویر را انتخاب کنید:",
+                                        text = stringResource(R.string.tech_export_choose_how),
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1108,8 +1409,9 @@ fun TechnicalChartScreen(
                                     selectedExportFormat = null
                                     val bitmap = renderChartToBitmap(
                                         candles = candles,
-                                        showEma = showEma,
+                                        enabledEmas = enabledEmas,
                                         showRsi = showRsi,
+                                        isDark = isDarkTheme,
                                         drawings = drawings,
                                         bullishColor = bullishColor,
                                         bearishColor = bearishColor
@@ -1139,21 +1441,22 @@ fun TechnicalChartScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Share,
-                                            contentDescription = "اشتراک‌گذاری",
+                                            contentDescription = stringResource(R.string.tech_export_share),
                                             tint = MaterialTheme.colorScheme.onPrimary
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column {
+                                        val shareTitle = stringResource(R.string.tech_export_share)
                                         Text(
-                                            text = "اشتراک‌گذاری (Share)",
+                                            text = shareTitle,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText("اشتراک‌گذاری")
+                                            fontFamily = getFontFamilyForText(shareTitle)
                                         )
                                         Text(
-                                            text = "ارسال تصویر چارت به سایر برنامه‌ها (تلگرام، ایتا و...)",
+                                            text = stringResource(R.string.tech_export_share_png_desc),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1170,8 +1473,9 @@ fun TechnicalChartScreen(
                                     selectedExportFormat = null
                                     val bitmap = renderChartToBitmap(
                                         candles = candles,
-                                        showEma = showEma,
+                                        enabledEmas = enabledEmas,
                                         showRsi = showRsi,
+                                        isDark = isDarkTheme,
                                         drawings = drawings,
                                         bullishColor = bullishColor,
                                         bearishColor = bearishColor
@@ -1201,21 +1505,22 @@ fun TechnicalChartScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.FileDownload,
-                                            contentDescription = "ذخیره در فایل‌ها",
+                                            contentDescription = stringResource(R.string.tech_export_save_files),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column {
+                                        val saveTitle = stringResource(R.string.tech_export_save_files)
                                         Text(
-                                            text = "ذخیره در فایل‌ها (Save to Files)",
+                                            text = saveTitle,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText("ذخیره")
+                                            fontFamily = getFontFamilyForText(saveTitle)
                                         )
                                         Text(
-                                            text = "ذخیره مستقیم در گالری و پوشه تصاویر دستگاه (Pictures/Cheghad)",
+                                            text = stringResource(R.string.tech_export_save_png_desc),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1240,21 +1545,22 @@ fun TechnicalChartScreen(
                                 IconButton(onClick = { selectedExportFormat = null }) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = "بازگشت",
+                                        contentDescription = stringResource(R.string.tech_back),
                                         tint = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Column {
+                                    val pdfSheetTitle = stringResource(R.string.tech_export_pdf_title)
                                     Text(
-                                        text = "سند رسمی گزارش تحلیلی (PDF)",
+                                        text = pdfSheetTitle,
                                         fontSize = 17.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
-                                        fontFamily = getFontFamilyForText("گزارش")
+                                        fontFamily = getFontFamilyForText(pdfSheetTitle)
                                     )
                                     Text(
-                                        text = "نحوه دریافت فایل PDF را انتخاب کنید:",
+                                        text = stringResource(R.string.tech_export_choose_how_pdf),
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1270,8 +1576,9 @@ fun TechnicalChartScreen(
                                     selectedExportFormat = null
                                     val bitmap = renderChartToBitmap(
                                         candles = candles,
-                                        showEma = showEma,
+                                        enabledEmas = enabledEmas,
                                         showRsi = showRsi,
+                                        isDark = isDarkTheme,
                                         drawings = drawings,
                                         bullishColor = bullishColor,
                                         bearishColor = bearishColor
@@ -1281,7 +1588,8 @@ fun TechnicalChartScreen(
                                         chartBitmap = bitmap,
                                         currency = currentCurrency,
                                         timeframe = activeExportTimeframe,
-                                        candles = candles
+                                        candles = candles,
+                                        enabledEmas = enabledEmas
                                     )
                                 },
                                 shape = RoundedCornerShape(16.dp),
@@ -1302,21 +1610,22 @@ fun TechnicalChartScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Share,
-                                            contentDescription = "اشتراک‌گذاری",
+                                            contentDescription = stringResource(R.string.tech_export_share),
                                             tint = MaterialTheme.colorScheme.onSecondary
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column {
+                                        val sharePdfTitle = stringResource(R.string.tech_export_share)
                                         Text(
-                                            text = "اشتراک‌گذاری (Share)",
+                                            text = sharePdfTitle,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText("اشتراک‌گذاری")
+                                            fontFamily = getFontFamilyForText(sharePdfTitle)
                                         )
                                         Text(
-                                            text = "ارسال فایل PDF به پیام‌رسان‌ها، ایمیل و برنامه‌ها",
+                                            text = stringResource(R.string.tech_export_share_pdf_desc),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1333,8 +1642,9 @@ fun TechnicalChartScreen(
                                     selectedExportFormat = null
                                     val bitmap = renderChartToBitmap(
                                         candles = candles,
-                                        showEma = showEma,
+                                        enabledEmas = enabledEmas,
                                         showRsi = showRsi,
+                                        isDark = isDarkTheme,
                                         drawings = drawings,
                                         bullishColor = bullishColor,
                                         bearishColor = bearishColor
@@ -1344,7 +1654,8 @@ fun TechnicalChartScreen(
                                         chartBitmap = bitmap,
                                         currency = currentCurrency,
                                         timeframe = activeExportTimeframe,
-                                        candles = candles
+                                        candles = candles,
+                                        enabledEmas = enabledEmas
                                     )
                                 },
                                 shape = RoundedCornerShape(16.dp),
@@ -1365,21 +1676,22 @@ fun TechnicalChartScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.FileDownload,
-                                            contentDescription = "ذخیره در دانلودها",
+                                            contentDescription = stringResource(R.string.tech_export_save_files),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column {
+                                        val savePdfTitle = stringResource(R.string.tech_export_save_files)
                                         Text(
-                                            text = "ذخیره در فایل‌ها (Save to Files)",
+                                            text = savePdfTitle,
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText("ذخیره")
+                                            fontFamily = getFontFamilyForText(savePdfTitle)
                                         )
                                         Text(
-                                            text = "ذخیره مستقیم سند در پوشه دانلودهای دستگاه (Downloads/Cheghad)",
+                                            text = stringResource(R.string.tech_export_save_pdf_desc),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1404,16 +1716,17 @@ fun TechnicalChartScreen(
                 inputNoteText = ""
             },
             title = {
+                val noteTitle = stringResource(R.string.tech_note_dialog_title)
                 Text(
-                    text = "درج یادداشت روی نمودار",
+                    text = noteTitle,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = getFontFamilyForText("یادداشت")
+                    fontFamily = getFontFamilyForText(noteTitle)
                 )
             },
             text = {
                 Column {
                     Text(
-                        text = "متن یا برچسب تحلیلی مورد نظر را وارد کنید:",
+                        text = stringResource(R.string.tech_note_dialog_desc),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1421,7 +1734,7 @@ fun TechnicalChartScreen(
                     OutlinedTextField(
                         value = inputNoteText,
                         onValueChange = { inputNoteText = it },
-                        placeholder = { Text("مثال: مقاومت هفتگی / هدف قیمتی") },
+                        placeholder = { Text(stringResource(R.string.tech_note_dialog_hint)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1445,7 +1758,7 @@ fun TechnicalChartScreen(
                         inputNoteText = ""
                     }
                 ) {
-                    Text("ثبت", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.tech_note_dialog_confirm), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -1456,7 +1769,7 @@ fun TechnicalChartScreen(
                         inputNoteText = ""
                     }
                 ) {
-                    Text("انصراف")
+                    Text(stringResource(R.string.cancel))
                 }
             }
         )
@@ -1586,7 +1899,7 @@ fun AnimatedPercentageText(
     val isNegative = percentage < 0
     val targetColor = if (isNegative) downColor else upColor
     val formatted = String.format(Locale.US, "%+.1f%%", percentage)
-    val displayText = if (digitType == "fa") toPersianDigits(formatted) else formatted
+    val displayText = formatted.toLocalizedDigits(digitType)
 
     AnimatedNumericText(
         value = percentage,
@@ -1614,8 +1927,8 @@ private fun HudItem(
             fontWeight = FontWeight.Medium,
             fontFamily = getFontFamilyForText(label)
         )
-        val formattedVal = String.format(Locale.US, "%,.1f", value)
-        val displayStr = if (digitType == "fa") toPersianDigits(formattedVal) else formattedVal
+        val formattedVal = if (abs(value) >= 1.0) String.format(Locale.US, "%,.1f", value) else String.format(Locale.US, "%.4f", value)
+        val displayStr = formattedVal.toLocalizedDigits(digitType)
         AnimatedNumericText(
             value = value,
             displayText = displayStr,
@@ -1632,6 +1945,7 @@ private fun CarouselSection(
     items: List<CurrencyItem>,
     selectedSymbol: String,
     digitType: String,
+    currencySuffix: String = "",
     showTitle: Boolean = true,
     isTv: Boolean = false,
     onSelect: (CurrencyItem) -> Unit
@@ -1716,7 +2030,7 @@ private fun CarouselSection(
                             price = item.currentPrice,
                             symbol = item.symbol,
                             digitType = digitType,
-                            suffix = " ت",
+                            suffix = currencySuffix,
                             fontSize = if (isTv) 14.sp else 12.sp,
                             fontWeight = FontWeight.Bold,
                             defaultColor = if (isSelected || (isTv && isFocused)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -1729,7 +2043,7 @@ private fun CarouselSection(
 }
 
 /**
- * 5th Carousel: Special Horizontal Reel ("گردون خوابیده") for EMA 200 touch status.
+ * 5th Carousel: Special Horizontal Reel ("Horizontal Carousel") for EMA 200 touch status.
  * - Items that reached EMA 200 from above -> Light Red
  * - Items that reached EMA 200 from below -> Light Green
  */
@@ -1738,6 +2052,7 @@ private fun EmaTouchCarouselSection(
     analyses: List<EmaAssetAnalysis>,
     selectedSymbol: String,
     digitType: String,
+    currencySuffix: String = "",
     showTitle: Boolean = true,
     isTv: Boolean = false,
     onSelect: (CurrencyItem) -> Unit
@@ -1769,12 +2084,13 @@ private fun EmaTouchCarouselSection(
                         .background(Color(0xFFFFB300))
                 )
                 Spacer(modifier = Modifier.width(6.dp))
+                val carouselTitle = stringResource(R.string.tech_ema_carousel_title)
                 Text(
-                    text = "۵. گردون خوابیده وضعیت برخورد با EMA 200",
+                    text = carouselTitle,
                     fontSize = if (isTv) 15.sp else 13.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onBackground,
-                    fontFamily = getFontFamilyForText("گردون")
+                    fontFamily = getFontFamilyForText(carouselTitle)
                 )
             }
 
@@ -1806,16 +2122,16 @@ private fun EmaTouchCarouselSection(
                     label = "emaCardScale"
                 )
 
-                // Determine background and border colors according to user specification:
-                // "ارزهایی که در بالای رشد به ای ام آی ۲۰۰ رسیده باشند قرمز کم رنگ شوند . ارزهایی که از پایبن به ema 200 رسیده باشند سبز کم رنگ شوند"
-                val (cardBgColor, borderColor, statusBadgeFa, statusIcon, statusColor) = when (analysis.status) {
+                // Determine background and border colors according to specification:
+                // "Currencies reaching EMA 200 from above should be light red. Currencies reaching EMA 200 from below should be light green"
+                val (cardBgColor, borderColor, statusBadge, statusIcon, statusColor) = when (analysis.status) {
                     EmaTouchStatus.TOUCHED_FROM_ABOVE -> {
                         // Light Red tint
                         Tuple5(
                             Color(0x38FF5252), // Pale red background
                             Color(0xFFFF5252), // Red border
-                            "رسیده به EMA 200 (از بالا)",
-                            Icons.Default.TrendingDown,
+                            stringResource(R.string.tech_ema_touched_above),
+                            Icons.AutoMirrored.Filled.TrendingDown,
                             Color(0xFFFF1744)
                         )
                     }
@@ -1824,8 +2140,8 @@ private fun EmaTouchCarouselSection(
                         Tuple5(
                             Color(0x384CAF50), // Pale green background
                             Color(0xFF4CAF50), // Green border
-                            "رسیده به EMA 200 (از پایین)",
-                            Icons.Default.TrendingUp,
+                            stringResource(R.string.tech_ema_touched_below),
+                            Icons.AutoMirrored.Filled.TrendingUp,
                             Color(0xFF00C853)
                         )
                     }
@@ -1833,8 +2149,8 @@ private fun EmaTouchCarouselSection(
                         Tuple5(
                             MaterialTheme.colorScheme.surfaceContainerLow,
                             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                            "بالای میانگین ۲۰۰",
-                            Icons.Default.TrendingUp,
+                            stringResource(R.string.tech_ema_above),
+                            Icons.AutoMirrored.Filled.TrendingUp,
                             Color(0xFF4CAF50)
                         )
                     }
@@ -1842,8 +2158,8 @@ private fun EmaTouchCarouselSection(
                         Tuple5(
                             MaterialTheme.colorScheme.surfaceContainerLow,
                             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                            "پایین میانگین ۲۰۰",
-                            Icons.Default.TrendingDown,
+                            stringResource(R.string.tech_ema_below),
+                            Icons.AutoMirrored.Filled.TrendingDown,
                             Color(0xFFFF5252)
                         )
                     }
@@ -1912,7 +2228,7 @@ private fun EmaTouchCarouselSection(
                             price = analysis.currentPrice,
                             symbol = analysis.currencyItem.symbol,
                             digitType = digitType,
-                            suffix = " ت",
+                            suffix = currencySuffix,
                             fontSize = if (isTv) 15.sp else 13.sp,
                             fontWeight = FontWeight.Bold,
                             defaultColor = MaterialTheme.colorScheme.onSurface
@@ -1941,11 +2257,11 @@ private fun EmaTouchCarouselSection(
 
                         // Status pill
                         Text(
-                            text = statusBadgeFa,
+                            text = statusBadge,
                             fontSize = if (isTv) 11.sp else 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = statusColor,
-                            fontFamily = getFontFamilyForText(statusBadgeFa)
+                            fontFamily = getFontFamilyForText(statusBadge)
                         )
                     }
                 }
@@ -1961,12 +2277,6 @@ private data class Tuple5<A, B, C, D, E>(
     val d: D,
     val e: E
 )
-
-internal fun toPersianDigits(input: String): String {
-    return input.map { ch ->
-        if (ch in '0'..'9') ('۰'.code + (ch.code - '0'.code)).toChar() else ch
-    }.joinToString("")
-}
 
 @Composable
 fun DrawingToolbar(
@@ -2015,14 +2325,14 @@ fun DrawingToolbar(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val tools = listOf(
-                    DrawingToolType.NONE to (Icons.Default.PanTool to "پیمایش"),
-                    DrawingToolType.TREND_LINE to (Icons.Default.ShowChart to "خط روند"),
-                    DrawingToolType.HORIZONTAL_LINE to (Icons.Default.HorizontalRule to "خط افقی"),
-                    DrawingToolType.RAY to (Icons.Default.NorthEast to "پیکان"),
-                    DrawingToolType.RECTANGLE to (Icons.Default.CropSquare to "مستطیل"),
-                    DrawingToolType.FIBONACCI to (Icons.Default.AutoGraph to "فیبوناچی"),
-                    DrawingToolType.BRUSH to (Icons.Default.Brush to "قلم"),
-                    DrawingToolType.TEXT to (Icons.Default.TextFields to "متن")
+                    DrawingToolType.NONE to (Icons.Default.PanTool to stringResource(R.string.tech_tool_pan)),
+                    DrawingToolType.TREND_LINE to (Icons.AutoMirrored.Filled.ShowChart to stringResource(R.string.tech_tool_trend)),
+                    DrawingToolType.HORIZONTAL_LINE to (Icons.Default.HorizontalRule to stringResource(R.string.tech_tool_hline)),
+                    DrawingToolType.RAY to (Icons.Default.NorthEast to stringResource(R.string.tech_tool_ray)),
+                    DrawingToolType.RECTANGLE to (Icons.Default.CropSquare to stringResource(R.string.tech_tool_rect)),
+                    DrawingToolType.FIBONACCI to (Icons.Default.AutoGraph to stringResource(R.string.tech_tool_fib)),
+                    DrawingToolType.BRUSH to (Icons.Default.Brush to stringResource(R.string.tech_tool_brush)),
+                    DrawingToolType.TEXT to (Icons.Default.TextFields to stringResource(R.string.tech_tool_text))
                 )
 
                 tools.forEach { (tool, iconAndName) ->
@@ -2110,7 +2420,7 @@ fun DrawingToolbar(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Undo,
-                        contentDescription = "بازگردانی",
+                        contentDescription = stringResource(R.string.tech_tool_undo),
                         modifier = Modifier
                             .size(18.dp)
                             .graphicsLayer {
@@ -2148,7 +2458,7 @@ fun DrawingToolbar(
                 ) {
                     Icon(
                         imageVector = Icons.Default.DeleteSweep,
-                        contentDescription = "پاک کردن",
+                        contentDescription = stringResource(R.string.tech_tool_clear),
                         modifier = Modifier
                             .size(18.dp)
                             .graphicsLayer {
@@ -2181,12 +2491,13 @@ fun DrawingToolbar(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    val colorLabel = stringResource(R.string.tech_tool_color)
                     Text(
-                        text = "رنگ:",
+                        text = colorLabel,
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = getFontFamilyForText("رنگ")
+                        fontFamily = getFontFamilyForText(colorLabel)
                     )
 
                     drawingColors.forEach { col ->
@@ -2244,15 +2555,16 @@ fun DrawingToolbar(
                         },
                         label = "hintAnim"
                     ) { tool ->
+                        val hintText = when (tool) {
+                            DrawingToolType.HORIZONTAL_LINE, DrawingToolType.TEXT -> stringResource(R.string.tech_tool_hint_tap)
+                            else -> stringResource(R.string.tech_tool_hint_drag)
+                        }
                         Text(
-                            text = when (tool) {
-                                DrawingToolType.HORIZONTAL_LINE, DrawingToolType.TEXT -> "روی چارت لمس کنید"
-                                else -> "روی چارت بکشید"
-                            },
+                            text = hintText,
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Medium,
-                            fontFamily = getFontFamilyForText("روی چارت")
+                            fontFamily = getFontFamilyForText(hintText)
                         )
                     }
                 }

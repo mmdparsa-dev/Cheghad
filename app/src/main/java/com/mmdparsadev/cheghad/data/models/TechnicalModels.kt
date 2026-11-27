@@ -21,9 +21,26 @@ data class CandleData(
     val low: Double,
     val close: Double,
     val volume: Double,
+    val ema25: Double? = null,
+    val ema50: Double? = null,
+    val ema100: Double? = null,
     val ema200: Double? = null,
     val rsi: Double? = null
 )
+
+enum class EmaPeriod(val period: Int, val label: String) {
+    EMA_25(25, "EMA 25"),
+    EMA_50(50, "EMA 50"),
+    EMA_100(100, "EMA 100"),
+    EMA_200(200, "EMA 200");
+
+    fun extractFrom(candle: CandleData): Double? = when (this) {
+        EMA_25 -> candle.ema25
+        EMA_50 -> candle.ema50
+        EMA_100 -> candle.ema100
+        EMA_200 -> candle.ema200
+    }
+}
 
 enum class ChartTimeframe(
     val titleFa: String,
@@ -31,6 +48,8 @@ enum class ChartTimeframe(
     val resolution: String,
     val secondsPerCandle: Long
 ) {
+    MIN1("۱ دقیقه", "1m", "1", 60L),
+    MIN5("۵ دقیقه", "5m", "5", 5 * 60L),
     M15("۱۵ دقیقه", "15m", "15", 15 * 60L),
     H1("۱ ساعت", "1h", "60", 60 * 60L),
     H3("۳ ساعت", "3h", "180", 3 * 60 * 60L),
@@ -42,7 +61,9 @@ enum class ChartTimeframe(
     W1("۱ هفته", "1W", "1W", 7 * 24 * 60 * 60L),
     W2("۲ هفته", "2W", "2W", 14 * 24 * 60 * 60L),
     M1("۱ ماه", "1M", "1M", 30 * 24 * 60 * 60L),
-    M3("۳ ماه", "3M", "3M", 90 * 24 * 60 * 60L)
+    M3("۳ ماه", "3M", "3M", 90 * 24 * 60 * 60L);
+
+    fun localizedTitle(isEnglish: Boolean): String = if (isEnglish) titleEn else titleFa
 }
 
 enum class EmaTouchStatus {
@@ -84,20 +105,32 @@ object TgjuSymbolMapper {
         "XAU" to "ons",
         "BTC" to "crypto-bitcoin",
         "ETH" to "crypto-ethereum",
-        "USOON" to "crypto-tether",
+        "USOON" to "crypto-united-states-oil-tokenized-fund-ondo",
+        "USDT" to "crypto-tether",
         "BRENT" to "oil_brent",
         "BOURSE" to "gc30"
     )
 
     fun toTgjuSymbol(symbol: String): String {
-        return mapping[symbol.uppercase()] ?: mapping[symbol] ?: "price_dollar_rl"
+        return findTgjuSymbol(symbol) ?: "price_dollar_rl"
+    }
+
+    fun findTgjuSymbol(symbol: String): String? {
+        return mapping[symbol.uppercase()] ?: mapping[symbol]
     }
 
     fun isTomanPrice(symbol: String): Boolean {
         // These are quoted in IRR by TGJU, so dividing by 10 converts to Toman
         return when (symbol.uppercase()) {
             "USD", "EUR", "GBP", "AED", "CAD", "AUD", "TRY", "CHF", "CNY", "IQD", "SEK", "SAR", "QAR", "OMR", "RUB",
-            "GOLD", "GOLD18K", "MESGHAL" -> true
+            "GOLD", "GOLD18K", "MESGHAL", "USDT" -> true
+            else -> false
+        }
+    }
+
+    fun isUsdCrypto(symbol: String): Boolean {
+        return when (symbol.uppercase()) {
+            "BTC", "ETH", "USOON" -> true
             else -> false
         }
     }

@@ -26,10 +26,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -71,19 +73,24 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.models.CandleData
 import com.mmdparsadev.cheghad.data.models.ChartDrawing
 import com.mmdparsadev.cheghad.data.models.ChartPoint
 import com.mmdparsadev.cheghad.data.models.ChartTimeframe
 import com.mmdparsadev.cheghad.data.models.CurrencyItem
 import com.mmdparsadev.cheghad.data.models.DrawingToolType
+import com.mmdparsadev.cheghad.data.models.EmaPeriod
+import com.mmdparsadev.cheghad.toLocalizedDigits
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -235,10 +242,10 @@ fun DrawScope.drawChartDrawings(
                     val angle = kotlin.math.atan2(dy, dx)
                     val arrowLen = 16.dp.toPx()
                     val arrowAngle = 0.45f
-                    val xLeft = x2 - arrowLen * kotlin.math.cos(angle - arrowAngle).toFloat()
-                    val yLeft = y2 - arrowLen * kotlin.math.sin(angle - arrowAngle).toFloat()
-                    val xRight = x2 - arrowLen * kotlin.math.cos(angle + arrowAngle).toFloat()
-                    val yRight = y2 - arrowLen * kotlin.math.sin(angle + arrowAngle).toFloat()
+                    val xLeft = x2 - arrowLen * kotlin.math.cos(angle - arrowAngle)
+                    val yLeft = y2 - arrowLen * kotlin.math.sin(angle - arrowAngle)
+                    val xRight = x2 - arrowLen * kotlin.math.cos(angle + arrowAngle)
+                    val yRight = y2 - arrowLen * kotlin.math.sin(angle + arrowAngle)
 
                     drawLine(color = color, start = Offset(x2, y2), end = Offset(xLeft, yLeft), strokeWidth = strokePx, cap = StrokeCap.Round)
                     drawLine(color = color, start = Offset(x2, y2), end = Offset(xRight, yRight), strokeWidth = strokePx, cap = StrokeCap.Round)
@@ -392,18 +399,95 @@ fun DrawScope.drawChartDrawings(
     }
 }
 
+internal class EmaVisualStyle(
+    val color: Color,
+    val strokeWidthDp: Float,
+    val dashIntervals: FloatArray?
+)
+
+internal fun emaVisualStyle(period: EmaPeriod, isDark: Boolean): EmaVisualStyle {
+    val subtleCharcoal = if (isDark) Color.White.copy(alpha = 0.45f) else Color.Black.copy(alpha = 0.45f)
+    return when (period) {
+        EmaPeriod.EMA_25 -> EmaVisualStyle(Color(0xFFFF9800), 1.8f, null)
+        EmaPeriod.EMA_50 -> EmaVisualStyle(subtleCharcoal, 1.3f, floatArrayOf(8f, 6f))
+        EmaPeriod.EMA_100 -> EmaVisualStyle(subtleCharcoal, 2.2f, null)
+        EmaPeriod.EMA_200 -> EmaVisualStyle(Color(0xFF2196F3), 2.1f, null)
+    }
+}
+
+/**
+ * Formats exact date and time cleanly (Jalali or Gregorian) with localized digits.
+ */
+fun formatCandleDateTime(
+    timestamp: Long,
+    digitType: String,
+    calendarType: String = "jalali"
+): String {
+    val formatted = if (calendarType == "jalali") {
+        try {
+            val uLocale = android.icu.util.ULocale("fa_IR@calendar=persian")
+            val cal = android.icu.util.Calendar.getInstance(uLocale).apply { timeInMillis = timestamp }
+            String.format(
+                Locale.US,
+                "%04d/%02d/%02d %02d:%02d",
+                cal.get(android.icu.util.Calendar.YEAR),
+                cal.get(android.icu.util.Calendar.MONTH) + 1,
+                cal.get(android.icu.util.Calendar.DAY_OF_MONTH),
+                cal.get(android.icu.util.Calendar.HOUR_OF_DAY),
+                cal.get(android.icu.util.Calendar.MINUTE)
+            )
+        } catch (_: Throwable) {
+            SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.US).format(Date(timestamp))
+        }
+    } else {
+        SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.US).format(Date(timestamp))
+    }
+    return formatted.toLocalizedDigits(digitType)
+}
+
 /**
  * Formats timestamp dynamically based on the current visible time span.
  */
-fun formatTimeAxisLabel(timestamp: Long, timeSpanMs: Long, digitType: String): String {
-    val pattern = when {
-        timeSpanMs < 36 * 3600 * 1000L -> "HH:mm"
-        timeSpanMs < 14 * 86400 * 1000L -> "MM/dd HH:mm"
-        timeSpanMs < 120 * 86400 * 1000L -> "yyyy/MM/dd"
-        else -> "yyyy/MM"
+fun formatTimeAxisLabel(
+    timestamp: Long,
+    timeSpanMs: Long,
+    digitType: String,
+    calendarType: String = "jalali"
+): String {
+    val formatted = if (calendarType == "jalali") {
+        try {
+            val uLocale = android.icu.util.ULocale("fa_IR@calendar=persian")
+            val cal = android.icu.util.Calendar.getInstance(uLocale).apply { timeInMillis = timestamp }
+            val y = cal.get(android.icu.util.Calendar.YEAR)
+            val m = cal.get(android.icu.util.Calendar.MONTH) + 1
+            val d = cal.get(android.icu.util.Calendar.DAY_OF_MONTH)
+            val hh = cal.get(android.icu.util.Calendar.HOUR_OF_DAY)
+            val mm = cal.get(android.icu.util.Calendar.MINUTE)
+            when {
+                timeSpanMs < 36 * 3600 * 1000L -> String.format(Locale.US, "%02d:%02d", hh, mm)
+                timeSpanMs < 14 * 86400 * 1000L -> String.format(Locale.US, "%02d/%02d %02d:%02d", m, d, hh, mm)
+                timeSpanMs < 120 * 86400 * 1000L -> String.format(Locale.US, "%04d/%02d/%02d", y, m, d)
+                else -> String.format(Locale.US, "%04d/%02d", y, m)
+            }
+        } catch (_: Throwable) {
+            val pattern = when {
+                timeSpanMs < 36 * 3600 * 1000L -> "HH:mm"
+                timeSpanMs < 14 * 86400 * 1000L -> "MM/dd HH:mm"
+                timeSpanMs < 120 * 86400 * 1000L -> "yyyy/MM/dd"
+                else -> "yyyy/MM"
+            }
+            SimpleDateFormat(pattern, Locale.US).format(Date(timestamp))
+        }
+    } else {
+        val pattern = when {
+            timeSpanMs < 36 * 3600 * 1000L -> "HH:mm"
+            timeSpanMs < 14 * 86400 * 1000L -> "MM/dd HH:mm"
+            timeSpanMs < 120 * 86400 * 1000L -> "yyyy/MM/dd"
+            else -> "yyyy/MM"
+        }
+        SimpleDateFormat(pattern, Locale.US).format(Date(timestamp))
     }
-    val formatted = SimpleDateFormat(pattern, Locale.US).format(Date(timestamp))
-    return if (digitType == "fa") toPersianDigits(formatted) else formatted
+    return formatted.toLocalizedDigits(digitType)
 }
 
 @Composable
@@ -411,9 +495,10 @@ fun TechnicalCandlestickChart(
     candles: List<CandleData>,
     currency: CurrencyItem,
     timeframe: ChartTimeframe? = null,
-    showEma: Boolean = true,
+    enabledEmas: Set<EmaPeriod> = setOf(EmaPeriod.EMA_200),
     showRsi: Boolean = true,
     digitType: String = "fa",
+    calendarType: String = "jalali",
     activeTool: DrawingToolType = DrawingToolType.NONE,
     activeColor: Color = Color(0xFFFFEB3B),
     drawings: List<ChartDrawing> = emptyList(),
@@ -436,7 +521,7 @@ fun TechnicalCandlestickChart(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "در حال بارگذاری داده‌های چارت...",
+                text = stringResource(R.string.tech_loading_chart),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -444,17 +529,32 @@ fun TechnicalCandlestickChart(
         return
     }
 
-    // Interactive view state
-    var visibleCandlesCount by remember { mutableIntStateOf(candles.size.coerceIn(25, 60)) }
-    var panOffset by remember { mutableFloatStateOf(0f) }
+    // Fit full loaded history cleanly into the viewport on open and timeframe/asset reload
+    var visibleCandlesCount by remember(candles) { mutableIntStateOf(candles.size.coerceAtLeast(1)) }
+    var panOffset by remember(candles) { mutableFloatStateOf(0f) }
     var hoveredIndex by remember { mutableStateOf<Int?>(null) }
     var draftDrawing by remember { mutableStateOf<ChartDrawing?>(null) }
 
-    // Animated visibility for EMA and RSI indicators
-    val emaAlpha by animateFloatAsState(
-        targetValue = if (showEma) 1f else 0f,
-        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-        label = "emaAlpha"
+    // Animated visibility per EMA period and RSI indicator
+    val ema25Alpha by animateFloatAsState(
+        targetValue = if (EmaPeriod.EMA_25 in enabledEmas) 1f else 0f,
+        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+        label = "ema25Alpha"
+    )
+    val ema50Alpha by animateFloatAsState(
+        targetValue = if (EmaPeriod.EMA_50 in enabledEmas) 1f else 0f,
+        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+        label = "ema50Alpha"
+    )
+    val ema100Alpha by animateFloatAsState(
+        targetValue = if (EmaPeriod.EMA_100 in enabledEmas) 1f else 0f,
+        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+        label = "ema100Alpha"
+    )
+    val ema200Alpha by animateFloatAsState(
+        targetValue = if (EmaPeriod.EMA_200 in enabledEmas) 1f else 0f,
+        animationSpec = tween(durationMillis = 320, easing = FastOutSlowInEasing),
+        label = "ema200Alpha"
     )
     val rsiAnimProgress by animateFloatAsState(
         targetValue = if (showRsi) 1f else 0f,
@@ -462,20 +562,19 @@ fun TechnicalCandlestickChart(
         label = "rsiAnimProgress"
     )
 
-    // Reset zoom to default window when explicit timeframe is chosen
+    // Reset zoom to full-history fit when explicit timeframe is selected
     LaunchedEffect(timeframe) {
-        if (timeframe != null) {
-            visibleCandlesCount = candles.size.coerceIn(25, 60)
+        if (timeframe != null && candles.isNotEmpty()) {
+            visibleCandlesCount = candles.size.coerceAtLeast(1)
             panOffset = 0f
         }
     }
 
+    val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val upColor = bullishColor
     val downColor = bearishColor
-    val emaColor = Color(0xFFFFB300) // Amber / Gold
     val rsiColor = Color(0xFF7C4DFF) // Purple
     val gridColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-    val textLabelColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     val crosshairColor = MaterialTheme.colorScheme.primary
 
     val activeColorLong = remember(activeColor) {
@@ -484,18 +583,21 @@ fun TechnicalCandlestickChart(
 
     // Gesture detection
     val totalCandles = candles.size
-    val maxPan = max(0, totalCandles - visibleCandlesCount)
+    val minZoomCandles = min(15, totalCandles).coerceAtLeast(1)
+    val maxZoomCandles = totalCandles.coerceAtLeast(1)
+    val effectiveVisibleCount = visibleCandlesCount.coerceIn(minZoomCandles, maxZoomCandles)
+    val maxPan = max(0, totalCandles - effectiveVisibleCount)
     val currentPanIndex = (panOffset / 10f).roundToInt().coerceIn(0, maxPan)
 
     // Candlestick window
-    val startIndex = max(0, totalCandles - visibleCandlesCount - currentPanIndex)
-    val endIndex = min(totalCandles, startIndex + visibleCandlesCount)
+    val startIndex = max(0, totalCandles - effectiveVisibleCount - currentPanIndex)
+    val endIndex = min(totalCandles, startIndex + effectiveVisibleCount)
     val visibleCandles = remember(startIndex, endIndex, candles) {
         candles.subList(startIndex, endIndex)
     }
 
-    // Price scale bounds calculation
-    val (calcMinPrice, calcMaxPrice) = remember(visibleCandles, showEma) {
+    // Price scale bounds calculation including all enabled EMAs
+    val (calcMinPrice, calcMaxPrice) = remember(visibleCandles, enabledEmas) {
         if (visibleCandles.isEmpty()) {
             0.0 to 1.0
         } else {
@@ -504,9 +606,12 @@ fun TechnicalCandlestickChart(
             for (c in visibleCandles) {
                 if (c.low < minP) minP = c.low
                 if (c.high > maxP) maxP = c.high
-                if (showEma && c.ema200 != null && c.ema200 > 0) {
-                    if (c.ema200 < minP) minP = c.ema200
-                    if (c.ema200 > maxP) maxP = c.ema200
+                for (period in enabledEmas) {
+                    val emaVal = period.extractFrom(c)
+                    if (emaVal != null && emaVal > 0.0) {
+                        if (emaVal < minP) minP = emaVal
+                        if (emaVal > maxP) maxP = emaVal
+                    }
                 }
             }
             if (maxP == minP) {
@@ -519,7 +624,6 @@ fun TechnicalCandlestickChart(
     }
 
     val priceAxisWidthDp = if (isTvMode) 70.dp else 46.dp
-    val topPaddingDp = 0.dp
     val timeAxisHeightDp = if (isTvMode) 28.dp else 18.dp
 
     // Gesture Modifier according to activeTool
@@ -530,7 +634,7 @@ fun TechnicalCandlestickChart(
                     detectTransformGestures { _, pan, zoom, _ ->
                         if (zoom != 1f) {
                             val newCount = (visibleCandlesCount / zoom).roundToInt()
-                            val clamped = newCount.coerceIn(15, min(totalCandles, 140))
+                            val clamped = newCount.coerceIn(minZoomCandles, maxZoomCandles)
                             if (clamped != visibleCandlesCount) {
                                 visibleCandlesCount = clamped
                                 onZoomChanged()
@@ -615,7 +719,6 @@ fun TechnicalCandlestickChart(
                             DrawingToolType.RECTANGLE -> ChartDrawing.Rectangle(id, pt, pt, activeColorLong)
                             DrawingToolType.FIBONACCI -> ChartDrawing.Fibonacci(id, pt, pt, activeColorLong)
                             DrawingToolType.BRUSH -> ChartDrawing.Brush(id, listOf(pt), activeColorLong)
-                            else -> null
                         }
                     },
                     onDrag = { change, _ ->
@@ -664,7 +767,7 @@ fun TechnicalCandlestickChart(
                 val newHover = (currentHover - 1).coerceIn(0, totalCandles - 1)
                 hoveredIndex = newHover
                 if (newHover < startIndex) {
-                    panOffset = ((totalCandles - visibleCandlesCount - newHover) * 10f).coerceIn(0f, maxPan * 10f)
+                    panOffset = ((totalCandles - effectiveVisibleCount - newHover) * 10f).coerceIn(0f, maxPan * 10f)
                 }
                 onHoverCandleChanged(candles.getOrNull(newHover))
                 true
@@ -675,13 +778,13 @@ fun TechnicalCandlestickChart(
                 val newHover = (currentHover + 1).coerceIn(0, totalCandles - 1)
                 hoveredIndex = newHover
                 if (newHover >= endIndex) {
-                    panOffset = ((totalCandles - visibleCandlesCount - (newHover - visibleCandlesCount + 1)) * 10f).coerceIn(0f, maxPan * 10f)
+                    panOffset = ((totalCandles - effectiveVisibleCount - (newHover - effectiveVisibleCount + 1)) * 10f).coerceIn(0f, maxPan * 10f)
                 }
                 onHoverCandleChanged(candles.getOrNull(newHover))
                 true
             }
             Key.Plus, Key.Equals, Key.PageUp -> {
-                val newCount = (visibleCandlesCount - 5).coerceIn(15, min(totalCandles, 140))
+                val newCount = (visibleCandlesCount - 5).coerceIn(minZoomCandles, maxZoomCandles)
                 if (newCount != visibleCandlesCount) {
                     visibleCandlesCount = newCount
                     onZoomChanged()
@@ -689,7 +792,7 @@ fun TechnicalCandlestickChart(
                 true
             }
             Key.Minus, Key.PageDown -> {
-                val newCount = (visibleCandlesCount + 5).coerceIn(15, min(totalCandles, 140))
+                val newCount = (visibleCandlesCount + 5).coerceIn(minZoomCandles, maxZoomCandles)
                 if (newCount != visibleCandlesCount) {
                     visibleCandlesCount = newCount
                     onZoomChanged()
@@ -799,7 +902,7 @@ fun TechnicalCandlestickChart(
 
             // 2. Draw Candlesticks
             val candleWidth = chartWidth / visibleCandles.size
-            val bodyWidth = (candleWidth * 0.82f).coerceAtLeast(2f)
+            val bodyWidth = (candleWidth * 0.78f).coerceAtLeast(1.2f).coerceAtMost(candleWidth)
 
             for (i in visibleCandles.indices) {
                 val c = visibleCandles[i]
@@ -818,7 +921,7 @@ fun TechnicalCandlestickChart(
                     color = candleColor,
                     start = Offset(centerX, highY),
                     end = Offset(centerX, lowY),
-                    strokeWidth = 1.2.dp.toPx(),
+                    strokeWidth = (candleWidth * 0.22f).coerceIn(0.8f, 1.4.dp.toPx()),
                     cap = StrokeCap.Round
                 )
 
@@ -833,14 +936,25 @@ fun TechnicalCandlestickChart(
                 )
             }
 
-            // 3. Draw EMA 200 curve with smooth fade animation
-            if (emaAlpha > 0.005f) {
+            // 3. Draw Active Multi-EMA Curves (25, 50, 100, 200) with smooth animations
+            val emaAlphas = mapOf(
+                EmaPeriod.EMA_25 to ema25Alpha,
+                EmaPeriod.EMA_50 to ema50Alpha,
+                EmaPeriod.EMA_100 to ema100Alpha,
+                EmaPeriod.EMA_200 to ema200Alpha
+            )
+
+            for (period in EmaPeriod.entries) {
+                val alpha = emaAlphas[period] ?: 0f
+                if (alpha <= 0.005f) continue
+
+                val style = emaVisualStyle(period, isDarkTheme)
                 val emaPath = Path()
                 var hasStarted = false
 
                 for (i in visibleCandles.indices) {
-                    val ema = visibleCandles[i].ema200
-                    if (ema != null && ema > 0) {
+                    val ema = period.extractFrom(visibleCandles[i])
+                    if (ema != null && ema > 0.0) {
                         val x = (i * candleWidth) + (candleWidth / 2f)
                         val y = priceToY(ema)
                         if (!hasStarted) {
@@ -855,8 +969,12 @@ fun TechnicalCandlestickChart(
                 if (hasStarted) {
                     drawPath(
                         path = emaPath,
-                        color = emaColor.copy(alpha = emaAlpha),
-                        style = Stroke(width = 2.dp.toPx() * emaAlpha.coerceIn(0.6f, 1f), cap = StrokeCap.Round)
+                        color = style.color.copy(alpha = style.color.alpha * alpha),
+                        style = Stroke(
+                            width = style.strokeWidthDp.dp.toPx() * alpha.coerceIn(0.6f, 1f),
+                            cap = StrokeCap.Round,
+                            pathEffect = style.dashIntervals?.let { PathEffect.dashPathEffect(it, 0f) }
+                        )
                     )
                 }
             }
@@ -1044,20 +1162,19 @@ fun TechnicalCandlestickChart(
                         crossPricePaint
                     )
 
-                    // Crosshair Badge 2: Time Badge on Bottom Time Axis
-                    val timeSpanForCross = if (visibleCandles.size >= 2) visibleCandles.last().time - visibleCandles.first().time else 86400000L
-                    val crossTimeText = formatTimeAxisLabel(candle.time, timeSpanForCross, digitType)
+                    // Crosshair Badge 2: Full Date & Time Badge on Bottom Time Axis
+                    val crossTimeText = formatCandleDateTime(candle.time, digitType, calendarType)
                     val crossTimePaint = Paint().apply {
                         color = android.graphics.Color.WHITE
-                        textSize = if (isTvMode) 12.sp.toPx() else 8.5.sp.toPx()
+                        textSize = if (isTvMode) 11.5.sp.toPx() else 8.sp.toPx()
                         isAntiAlias = true
                         typeface = Typeface.DEFAULT_BOLD
                     }
                     val ctBounds = Rect()
                     crossTimePaint.getTextBounds(crossTimeText, 0, crossTimeText.length, ctBounds)
-                    val ctW = ctBounds.width().toFloat() + 12.dp.toPx()
+                    val ctW = (ctBounds.width().toFloat() + 12.dp.toPx()).coerceAtMost(chartWidth)
                     val ctH = if (isTvMode) 22.dp.toPx() else 16.dp.toPx()
-                    val ctX = (crossX - (ctW / 2f)).coerceIn(0f, chartWidth - ctW)
+                    val ctX = (crossX - (ctW / 2f)).coerceIn(0f, (chartWidth - ctW).coerceAtLeast(0f))
                     val ctY = usablePlotHeight + 2.dp.toPx()
 
                     drawRoundRect(
@@ -1113,11 +1230,11 @@ fun TechnicalCandlestickChart(
                     strokeWidth = 1.dp.toPx()
                 )
 
-                val label = formatTimeAxisLabel(c.time, timeSpanMs, digitType)
+                val label = formatTimeAxisLabel(c.time, timeSpanMs, digitType, calendarType)
                 val bounds = Rect()
                 timePaint.getTextBounds(label, 0, label.length, bounds)
                 val textW = bounds.width().toFloat()
-                val labelX = (cX - (textW / 2f)).coerceIn(0f, chartWidth - textW)
+                val labelX = (cX - (textW / 2f)).coerceIn(0f, (chartWidth - textW).coerceAtLeast(0f))
                 drawContext.canvas.nativeCanvas.drawText(
                     label,
                     labelX,
@@ -1169,51 +1286,119 @@ fun TechnicalCandlestickChart(
             }
         }
 
-        // Indicator badges at top
-        Row(
+        // Indicator legend & active crosshair inspection readout at top
+        Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             val activeCandle = hoveredIndex?.let { candles.getOrNull(it) } ?: candles.lastOrNull()
 
-            if (showEma && activeCandle?.ema200 != null) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = emaColor.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, emaColor.copy(alpha = 0.4f))
-                ) {
-                    Text(
-                        text = "EMA 200: " + formatPriceShort(activeCandle.ema200, digitType),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = emaColor,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(0.86f)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                for (period in EmaPeriod.entries) {
+                    if (period !in enabledEmas) continue
+                    val emaVal = activeCandle?.let { period.extractFrom(it) } ?: continue
+                    val style = emaVisualStyle(period, isDarkTheme)
+                    val isSubtleLine = period == EmaPeriod.EMA_50 || period == EmaPeriod.EMA_100
+                    val textColor = if (isSubtleLine) {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
+                    } else {
+                        style.color
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = style.color.copy(alpha = if (isSubtleLine) 0.08f else 0.14f),
+                        border = BorderStroke(1.dp, style.color.copy(alpha = if (isSubtleLine) 0.35f else 0.45f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Canvas(modifier = Modifier.size(width = 12.dp, height = 6.dp)) {
+                                drawLine(
+                                    color = style.color,
+                                    start = Offset(0f, size.height / 2f),
+                                    end = Offset(size.width, size.height / 2f),
+                                    strokeWidth = style.strokeWidthDp.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                    pathEffect = style.dashIntervals?.let { PathEffect.dashPathEffect(it, 0f) }
+                                )
+                            }
+                            Text(
+                                text = "${period.label}: ${formatPriceShort(emaVal, digitType)}",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textColor
+                            )
+                        }
+                    }
+                }
+
+                if (showRsi && activeCandle?.rsi != null) {
+                    val rVal = activeCandle.rsi
+                    val rColor = when {
+                        rVal >= 70 -> downColor
+                        rVal <= 30 -> upColor
+                        else -> rsiColor
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = rColor.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, rColor.copy(alpha = 0.4f))
+                    ) {
+                        Text(
+                            text = "RSI (14): " + String.format(Locale.US, "%.1f", rVal).toLocalizedDigits(digitType),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = rColor,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
-            if (showRsi && activeCandle?.rsi != null) {
-                val rVal = activeCandle.rsi
-                val rColor = when {
-                    rVal >= 70 -> downColor
-                    rVal <= 30 -> upColor
-                    else -> rsiColor
-                }
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = rColor.copy(alpha = 0.15f),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, rColor.copy(alpha = 0.4f))
-                ) {
-                    Text(
-                        text = "RSI (14): " + String.format(Locale.US, "%.1f", rVal),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = rColor,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
+            // Floating Date/Time + OHLC inspection readout when crosshair is active
+            hoveredIndex?.let { hIdx ->
+                candles.getOrNull(hIdx)?.let { inspected ->
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+                        border = BorderStroke(1.dp, crosshairColor.copy(alpha = 0.45f)),
+                        tonalElevation = 2.dp
+                    ) {
+                        val dateTimeText = formatCandleDateTime(inspected.time, digitType, calendarType)
+                        val oLabel = stringResource(R.string.tech_ohlc_open_short)
+                        val hLabel = stringResource(R.string.tech_ohlc_high_short)
+                        val lLabel = stringResource(R.string.tech_ohlc_low_short)
+                        val cLabel = stringResource(R.string.tech_ohlc_close_short)
+                        val ohlcSummary = "$oLabel: ${formatPriceShort(inspected.open, digitType)}  " +
+                            "$hLabel: ${formatPriceShort(inspected.high, digitType)}  " +
+                            "$lLabel: ${formatPriceShort(inspected.low, digitType)}  " +
+                            "$cLabel: ${formatPriceShort(inspected.close, digitType)}"
+                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                            Text(
+                                text = "$dateTimeText  •  ${formatPriceShort(inspected.close, digitType)}",
+                                fontSize = if (isTvMode) 12.sp else 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = crosshairColor
+                            )
+                            Text(
+                                text = ohlcSummary,
+                                fontSize = if (isTvMode) 11.sp else 9.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1234,9 +1419,9 @@ fun TechnicalCandlestickChart(
                 ) {
                     TvChartIconButton(
                         icon = Icons.Default.Add,
-                        contentDescription = "بزرگ‌نمایی",
+                        contentDescription = stringResource(R.string.tech_tv_zoom_in),
                         onClick = {
-                            val newCount = (visibleCandlesCount - 5).coerceIn(15, min(totalCandles, 140))
+                            val newCount = (visibleCandlesCount - 5).coerceIn(minZoomCandles, maxZoomCandles)
                             if (newCount != visibleCandlesCount) {
                                 visibleCandlesCount = newCount
                                 onZoomChanged()
@@ -1246,9 +1431,9 @@ fun TechnicalCandlestickChart(
                     Spacer(modifier = Modifier.width(4.dp))
                     TvChartIconButton(
                         icon = Icons.Default.Remove,
-                        contentDescription = "کوچک‌نمایی",
+                        contentDescription = stringResource(R.string.tech_tv_zoom_out),
                         onClick = {
-                            val newCount = (visibleCandlesCount + 5).coerceIn(15, min(totalCandles, 140))
+                            val newCount = (visibleCandlesCount + 5).coerceIn(minZoomCandles, maxZoomCandles)
                             if (newCount != visibleCandlesCount) {
                                 visibleCandlesCount = newCount
                                 onZoomChanged()
@@ -1258,16 +1443,16 @@ fun TechnicalCandlestickChart(
                     Spacer(modifier = Modifier.width(4.dp))
                     TvChartIconButton(
                         icon = Icons.Default.RestartAlt,
-                        contentDescription = "ریست زوم",
+                        contentDescription = stringResource(R.string.tech_tv_zoom_reset),
                         onClick = {
-                            visibleCandlesCount = candles.size.coerceIn(25, 60)
+                            visibleCandlesCount = candles.size.coerceAtLeast(1)
                             panOffset = 0f
                             onZoomChanged()
                         }
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "ریموت: ◀ ▶ کندل | OK نشانگر",
+                        text = stringResource(R.string.tech_tv_remote_hint),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1319,13 +1504,12 @@ private fun TvChartIconButton(
 }
 
 private fun formatPriceShort(price: Double, digitType: String): String {
-    val rounded = if (price >= 1000) price.roundToInt().toString() else String.format(Locale.US, "%.2f", price)
-    val formatted = java.text.NumberFormat.getNumberInstance(Locale.US).format(price.roundToInt())
-    return if (digitType == "fa") {
-        formatted.map { ch ->
-            if (ch in '0'..'9') ('۰'.code + (ch.code - '0'.code)).toChar() else ch
-        }.joinToString("")
-    } else formatted
+    val formatted = when {
+        abs(price) >= 1000.0 -> java.text.NumberFormat.getNumberInstance(Locale.US).format(price.roundToInt())
+        abs(price) >= 1.0 -> String.format(Locale.US, "%,.2f", price)
+        else -> String.format(Locale.US, "%.4f", price)
+    }
+    return formatted.toLocalizedDigits(digitType)
 }
 
 /**
@@ -1335,7 +1519,7 @@ fun renderChartToBitmap(
     candles: List<CandleData>,
     width: Int = 1200,
     height: Int = 680,
-    showEma: Boolean = true,
+    enabledEmas: Set<EmaPeriod> = setOf(EmaPeriod.EMA_200),
     showRsi: Boolean = true,
     isDark: Boolean = false,
     drawings: List<ChartDrawing> = emptyList(),
@@ -1362,7 +1546,7 @@ fun renderChartToBitmap(
     val rsiHeight = if (showRsi) totalHeight * 0.28f else 0f
     val separatorY = paddingTop + mainHeight + 10f
 
-    val visibleCandles = candles.takeLast(min(candles.size, 80))
+    val visibleCandles = candles.takeLast(min(candles.size, 350))
     if (visibleCandles.isEmpty()) return bitmap
 
     var minPrice = Double.MAX_VALUE
@@ -1370,9 +1554,12 @@ fun renderChartToBitmap(
     for (c in visibleCandles) {
         if (c.low < minPrice) minPrice = c.low
         if (c.high > maxPrice) maxPrice = c.high
-        if (showEma && c.ema200 != null && c.ema200 > 0) {
-            if (c.ema200 < minPrice) minPrice = c.ema200
-            if (c.ema200 > maxPrice) maxPrice = c.ema200
+        for (period in enabledEmas) {
+            val emaVal = period.extractFrom(c)
+            if (emaVal != null && emaVal > 0.0) {
+                if (emaVal < minPrice) minPrice = emaVal
+                if (emaVal > maxPrice) maxPrice = emaVal
+            }
         }
     }
     if (maxPrice == minPrice) { maxPrice += 1.0; minPrice -= 1.0 }
@@ -1406,7 +1593,7 @@ fun renderChartToBitmap(
     }
 
     val candleW = chartWidth / visibleCandles.size
-    val bodyW = max(candleW * 0.7f, 2f)
+    val bodyW = max(candleW * 0.7f, 1.5f).coerceAtMost(candleW)
 
     val greenPaint = Paint().apply { color = bullishColor.toArgb(); isAntiAlias = true }
     val redPaint = Paint().apply { color = bearishColor.toArgb(); isAntiAlias = true }
@@ -1422,7 +1609,7 @@ fun renderChartToBitmap(
         val p = if (c.close >= c.open) greenPaint else redPaint
 
         // Wick
-        p.strokeWidth = 2f
+        p.strokeWidth = max(1f, min(2f, candleW * 0.25f))
         canvas.drawLine(cX, hY, cX, lY, p)
 
         // Body
@@ -1431,19 +1618,23 @@ fun renderChartToBitmap(
         canvas.drawRect(cX - (bodyW / 2f), bTop, cX + (bodyW / 2f), bTop + bH, p)
     }
 
-    // EMA 200
-    if (showEma) {
+    // Multi-EMA curves on static bitmap
+    for (period in EmaPeriod.entries) {
+        if (period !in enabledEmas) continue
+        val emaStyle = emaVisualStyle(period, isDark)
         val emaPaint = Paint().apply {
-            color = android.graphics.Color.rgb(255, 179, 0)
-            strokeWidth = 3f
+            color = emaStyle.color.toArgb()
+            strokeWidth = emaStyle.strokeWidthDp * 1.5f
             style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
             isAntiAlias = true
+            pathEffect = emaStyle.dashIntervals?.let { android.graphics.DashPathEffect(it, 0f) }
         }
         val emaPath = android.graphics.Path()
         var started = false
         for (i in visibleCandles.indices) {
-            val ema = visibleCandles[i].ema200
-            if (ema != null && ema > 0) {
+            val ema = period.extractFrom(visibleCandles[i])
+            if (ema != null && ema > 0.0) {
                 val x = paddingLeft + (i * candleW) + (candleW / 2f)
                 val y = toY(ema)
                 if (!started) { emaPath.moveTo(x, y); started = true } else { emaPath.lineTo(x, y) }
@@ -1564,10 +1755,10 @@ fun renderChartToBitmap(
                     val angle = kotlin.math.atan2(dy, dx)
                     val arrowLen = 20f
                     val arrowAngle = 0.45f
-                    val xLeft = x2 - arrowLen * kotlin.math.cos(angle - arrowAngle).toFloat()
-                    val yLeft = y2 - arrowLen * kotlin.math.sin(angle - arrowAngle).toFloat()
-                    val xRight = x2 - arrowLen * kotlin.math.cos(angle + arrowAngle).toFloat()
-                    val yRight = y2 - arrowLen * kotlin.math.sin(angle + arrowAngle).toFloat()
+                    val xLeft = x2 - arrowLen * kotlin.math.cos(angle - arrowAngle)
+                    val yLeft = y2 - arrowLen * kotlin.math.sin(angle - arrowAngle)
+                    val xRight = x2 - arrowLen * kotlin.math.cos(angle + arrowAngle)
+                    val yRight = y2 - arrowLen * kotlin.math.sin(angle + arrowAngle)
                     canvas.drawLine(x2, y2, xLeft, yLeft, dPaint)
                     canvas.drawLine(x2, y2, xRight, yRight, dPaint)
                 }
