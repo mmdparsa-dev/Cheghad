@@ -1,3 +1,21 @@
+## [v1.1.5 - Stable] - 2026-11-27
+
+#  یه اپدیت کوچیک
+## تغییرات:
+
+- رفع مشکل کرش برنامه در هنگام افقی کردن نمودار
+- اضافه شدن نسخه store برای استور ها 
+- رفع بعضی از مشکلات
+-----
+
+# a little update 
+## The Changes: 
+
+- Fixed an app crash that occurred when rotating the chart to landscape mode
+- Added a version for app stores
+- Fixed various issues
+
+
 ## [v1.1.4 - Stable] - 2026-11-27
 
 # 🚀 نسسسسسخه جدیییییدددددد!
