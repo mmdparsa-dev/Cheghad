@@ -66,6 +66,9 @@ fun NewsScreen(
     val allAgenciesDisabled = remember(disabledAgencies) {
         disabledAgencies.size >= NewsRepository.AGENCIES.size
     }
+    val allCategoriesDisabled = remember(disabledCategories) {
+        disabledCategories.size >= NewsCategory.entries.count { it != NewsCategory.All }
+    }
 
     // Filter articles based on category, agency, search query, bookmarks, and disabled settings
     val filteredArticles = remember(newsArticles, selectedCategory, selectedAgencyId, searchQuery, showOnlyBookmarks, bookmarkedIds, disabledCategories, disabledAgencies) {
@@ -84,7 +87,7 @@ fun NewsScreen(
         }.sortedByDescending { it.pubTimestamp }
     }
 
-    if (!newsEnabled || allAgenciesDisabled) {
+    if (!newsEnabled || allAgenciesDisabled || allCategoriesDisabled) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
