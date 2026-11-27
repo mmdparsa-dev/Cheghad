@@ -74,6 +74,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -138,7 +145,9 @@ import com.mmdparsadev.cheghad.data.update.UpdateWorker
 import com.mmdparsadev.cheghad.ui.ConnectivityStatusBanner
 import com.mmdparsadev.cheghad.ui.ExpressiveLoadingIndicator
 import com.mmdparsadev.cheghad.ui.ExpressivePullToRefreshBox
+import com.mmdparsadev.cheghad.ui.TvFocusableIconButton
 import com.mmdparsadev.cheghad.ui.UpdateDialog
+import com.mmdparsadev.cheghad.ui.rememberTvFocusState
 import com.mmdparsadev.cheghad.ui.viewmodel.SettingsViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
@@ -153,10 +162,12 @@ val LocalAdaptiveSpScale = staticCompositionLocalOf { 1.0f }
 @Composable
 fun isTvDevice(): Boolean {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
     val uiModeManager = remember(context) {
         context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
     }
-    return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
+    return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+        (configuration.uiMode and Configuration.UI_MODE_TYPE_MASK) == Configuration.UI_MODE_TYPE_TELEVISION
 }
 
 enum class TimeRange(val stringRes: Int, val id: String) {
@@ -1070,15 +1081,22 @@ class MainActivity : AppCompatActivity() {
                                                     BottomNavigationBar(currentScreen = currentScreen, onScreenSelected = { currentScreen = it })
                                                 }
                                                 // Expressive quick refresh button for Android TV
+                                                val tvRefreshFocus = rememberTvFocusState(
+                                                    isTv = true,
+                                                    focusedScale = 1.06f,
+                                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                                                )
                                                 Surface(
                                                     onClick = { viewModel.refreshData() },
+                                                    interactionSource = tvRefreshFocus.interactionSource,
                                                     shape = RoundedCornerShape(24.dp),
-                                                    color = MaterialTheme.colorScheme.surface,
+                                                    color = if (tvRefreshFocus.isFocused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                                                     tonalElevation = 4.dp,
-                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                                    border = BorderStroke(tvRefreshFocus.borderWidth, tvRefreshFocus.borderColor),
                                                     modifier = Modifier
                                                         .padding(horizontal = 16.dp)
                                                         .height(44.dp)
+                                                        .scale(tvRefreshFocus.scale)
                                                 ) {
                                                     Row(
                                                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -1825,12 +1843,34 @@ fun TopAppBar(
                 label = "EditBgColorAnim"
             )
 
+            val editFocus = rememberTvFocusState(
+                isTv = isTvDevice(),
+                focusedScale = 1.08f,
+                focusedBorderWidth = 2.dp,
+                unfocusedBorderWidth = 0.dp,
+                unfocusedBorderColor = Color.Transparent
+            )
+
             Box(
                 modifier = Modifier
                     .size(adaptiveDp(44f))
+                    .zIndex(if (editFocus.isFocused) 2f else 0f)
+                    .graphicsLayer {
+                        scaleX = editFocus.scale
+                        scaleY = editFocus.scale
+                    }
                     .clip(RoundedCornerShape(editCornerRadius))
                     .background(editBgColor)
-                    .clickable(onClick = onEditHome),
+                    .then(
+                        if (editFocus.isFocused) {
+                            Modifier.border(editFocus.borderWidth, editFocus.borderColor, RoundedCornerShape(editCornerRadius))
+                        } else Modifier
+                    )
+                    .clickable(
+                        interactionSource = editFocus.interactionSource,
+                        indication = ripple(bounded = true),
+                        onClick = onEditHome
+                    ),
                 contentAlignment = Alignment.Center
             ) {
                 androidx.compose.animation.AnimatedContent(
@@ -2023,13 +2063,29 @@ fun RenderCard(
             label = "HeroIconColor"
         )
 
+        val heroFocus = rememberTvFocusState(
+            isTv = isTv,
+            focusedScale = 1.025f,
+            focusedBorderWidth = adaptiveDp(2.5f),
+            unfocusedBorderWidth = adaptiveDp(1f),
+            unfocusedBorderColor = heroBorderColor
+        )
+
         Box(
             modifier = modifier
                 .fillMaxWidth()
+                .zIndex(if (heroFocus.isFocused) 5f else 0f)
+                .graphicsLayer {
+                    scaleX = heroFocus.scale
+                    scaleY = heroFocus.scale
+                }
                 .clip(RoundedCornerShape(adaptiveDp(32f)))
                 .background(heroBgColor)
-                .border(adaptiveDp(1f), heroBorderColor, RoundedCornerShape(adaptiveDp(32f)))
-                .clickable {
+                .border(heroFocus.borderWidth, heroFocus.borderColor, RoundedCornerShape(adaptiveDp(32f)))
+                .clickable(
+                    interactionSource = heroFocus.interactionSource,
+                    indication = ripple(bounded = true)
+                ) {
                     if (!isEditing) {
                         item?.let {
                             HapticUtils.vibrate(context, HapticType.LIGHT)
@@ -2183,15 +2239,34 @@ fun RenderCard(
             label = "SmallBorderColor"
         )
 
+        val smallFocus = rememberTvFocusState(
+            isTv = isTv,
+            focusedScale = 1.03f,
+            focusedBorderWidth = adaptiveDp(2.5f),
+            unfocusedBorderWidth = adaptiveDp(1f),
+            unfocusedBorderColor = smallBorderColor
+        )
+
         SmallCard(
-            modifier = modifier.fillMaxWidth().clickable {
-                if (!isEditing) {
-                    item?.let {
-                        HapticUtils.vibrate(context, HapticType.LIGHT)
-                        onClickItem(it)
-                    }
+            modifier = modifier
+                .fillMaxWidth()
+                .zIndex(if (smallFocus.isFocused) 5f else 0f)
+                .graphicsLayer {
+                    scaleX = smallFocus.scale
+                    scaleY = smallFocus.scale
                 }
-            },
+                .clip(RoundedCornerShape(adaptiveDp(28f)))
+                .clickable(
+                    interactionSource = smallFocus.interactionSource,
+                    indication = ripple(bounded = true)
+                ) {
+                    if (!isEditing) {
+                        item?.let {
+                            HapticUtils.vibrate(context, HapticType.LIGHT)
+                            onClickItem(it)
+                        }
+                    }
+                },
             icon = iconStr,
             value = if (item != null) formatPrice(item.currentPrice, digitType, item.symbol) else "------",
             trend = if (item != null) formatPercent(item.changePercentage, digitType) else "------",
@@ -2202,7 +2277,8 @@ fun RenderCard(
             },
             backgroundColor = smallBgColor,
             contentColor = smallContentColor,
-            borderColor = smallBorderColor
+            borderColor = smallFocus.borderColor,
+            borderWidth = smallFocus.borderWidth
         )
     } else {
         val isEngCard = java.util.Locale.getDefault().language == "en"
@@ -2266,15 +2342,34 @@ fun RenderCard(
             label = "CardBorderColor"
         )
 
+        val secondaryFocus = rememberTvFocusState(
+            isTv = isTv,
+            focusedScale = 1.03f,
+            focusedBorderWidth = adaptiveDp(2.5f),
+            unfocusedBorderWidth = adaptiveDp(1f),
+            unfocusedBorderColor = cardBorderColor
+        )
+
         SecondaryCard(
-            modifier = modifier.fillMaxWidth().clickable {
-                if (!isEditing) {
-                    item?.let {
-                        HapticUtils.vibrate(context, HapticType.LIGHT)
-                        onClickItem(it)
-                    }
+            modifier = modifier
+                .fillMaxWidth()
+                .zIndex(if (secondaryFocus.isFocused) 5f else 0f)
+                .graphicsLayer {
+                    scaleX = secondaryFocus.scale
+                    scaleY = secondaryFocus.scale
                 }
-            },
+                .clip(RoundedCornerShape(adaptiveDp(28f)))
+                .clickable(
+                    interactionSource = secondaryFocus.interactionSource,
+                    indication = ripple(bounded = true)
+                ) {
+                    if (!isEditing) {
+                        item?.let {
+                            HapticUtils.vibrate(context, HapticType.LIGHT)
+                            onClickItem(it)
+                        }
+                    }
+                },
             title = getLocalizedTitle(item?.symbol ?: "GOLD", item?.title ?: "سکه امامی"),
             subtitle = if (item?.symbol == "GOLD") {
                 if (isEngCard) "Emami Coin / New Design" else "سکه امامی / طرح جدید"
@@ -2288,7 +2383,8 @@ fun RenderCard(
             trendColor = cardTrendColor,
             backgroundColor = cardBgColor,
             contentColor = cardContentColor,
-            borderColor = cardBorderColor
+            borderColor = secondaryFocus.borderColor,
+            borderWidth = secondaryFocus.borderWidth
         )
     }
 }
@@ -3045,7 +3141,8 @@ fun SecondaryCard(
     trendColor: Color,
     backgroundColor: Color,
     contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
-    borderColor: Color = Color.Transparent
+    borderColor: Color = Color.Transparent,
+    borderWidth: Dp = adaptiveDp(1f)
 ) {
     val isTv = isTvDevice()
     val motionScheme = MaterialTheme.motionScheme
@@ -3053,7 +3150,7 @@ fun SecondaryCard(
         modifier = modifier
             .clip(RoundedCornerShape(adaptiveDp(28f)))
             .background(backgroundColor)
-            .border(adaptiveDp(1f), borderColor, RoundedCornerShape(adaptiveDp(28f)))
+            .border(borderWidth, borderColor, RoundedCornerShape(adaptiveDp(28f)))
             .padding(
                 top = adaptiveDp(18f),
                 bottom = if (isTv) adaptiveDp(44f) else adaptiveDp(22f),
@@ -3112,7 +3209,8 @@ fun SmallCard(
     trendColor: Color,
     backgroundColor: Color = MaterialTheme.colorScheme.surface,
     contentColor: Color = MaterialTheme.colorScheme.onBackground,
-    borderColor: Color = MaterialTheme.colorScheme.outlineVariant
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant,
+    borderWidth: Dp = adaptiveDp(1f)
 ) {
     val isTv = isTvDevice()
     val motionScheme = MaterialTheme.motionScheme
@@ -3120,7 +3218,7 @@ fun SmallCard(
         modifier = modifier
             .clip(RoundedCornerShape(adaptiveDp(28f)))
             .background(backgroundColor)
-            .border(adaptiveDp(1f), borderColor, RoundedCornerShape(adaptiveDp(28f)))
+            .border(borderWidth, borderColor, RoundedCornerShape(adaptiveDp(28f)))
             .padding(
                 top = adaptiveDp(16f),
                 bottom = if (isTv) adaptiveDp(42f) else adaptiveDp(20f),
@@ -3262,15 +3360,33 @@ fun AssetListItem(
     isDragging: Boolean = false
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
     val motionScheme = MaterialTheme.motionScheme
+    val tvFocus = rememberTvFocusState(
+        isTv = isTv,
+        focusedScale = 1.02f,
+        focusedBorderWidth = adaptiveDp(2.5f),
+        unfocusedBorderWidth = adaptiveDp(1f),
+        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+    )
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .zIndex(if (tvFocus.isFocused) 4f else 0f)
+            .graphicsLayer {
+                scaleX = tvFocus.scale
+                scaleY = tvFocus.scale
+            }
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surface)
-            .border(adaptiveDp(1f), MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            .background(
+                if (tvFocus.isFocused) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                else MaterialTheme.colorScheme.surface
+            )
+            .border(tvFocus.borderWidth, tvFocus.borderColor, CircleShape)
             .combinedClickable(
                 enabled = !isReordering,
+                interactionSource = tvFocus.interactionSource,
+                indication = ripple(bounded = true),
                 onClick = {
                     HapticUtils.vibrate(context, HapticType.LIGHT)
                     onClick()
@@ -3931,25 +4047,36 @@ fun SettingsSwitchRow(
     shape: Shape = RoundedCornerShape(adaptiveDp(18f))
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
+    val tvFocus = rememberTvFocusState(
+        isTv = isTv,
+        focusedScale = 1.015f,
+        focusedBorderWidth = adaptiveDp(2.5f),
+        unfocusedBorderWidth = if (isChecked) adaptiveDp(1.5f) else adaptiveDp(1f),
+        unfocusedBorderColor = if (isChecked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+    )
     OutlinedCard(
         onClick = {
             HapticUtils.vibrate(context, HapticType.LIGHT)
             onCheckedChange(!isChecked)
         },
-        modifier = modifier.fillMaxWidth(),
+        interactionSource = tvFocus.interactionSource,
+        modifier = modifier
+            .fillMaxWidth()
+            .zIndex(if (tvFocus.isFocused) 2f else 0f)
+            .graphicsLayer {
+                scaleX = tvFocus.scale
+                scaleY = tvFocus.scale
+            },
         shape = shape,
         colors = CardDefaults.outlinedCardColors(
-            containerColor = if (isChecked) {
-                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-            } else {
-                MaterialTheme.colorScheme.surface
+            containerColor = when {
+                tvFocus.isFocused -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                isChecked -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                else -> MaterialTheme.colorScheme.surface
             }
         ),
-        border = if (isChecked) {
-            BorderStroke(adaptiveDp(1.5f), MaterialTheme.colorScheme.primary)
-        } else {
-            BorderStroke(adaptiveDp(1f), MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-        }
+        border = BorderStroke(tvFocus.borderWidth, tvFocus.borderColor)
     ) {
         Row(
             modifier = Modifier
@@ -3990,9 +4117,11 @@ fun SettingsSwitchRow(
 
             Switch(
                 checked = isChecked,
-                onCheckedChange = {
-                    HapticUtils.vibrate(context, HapticType.LIGHT)
-                    onCheckedChange(it)
+                onCheckedChange = if (isTv) null else {
+                    {
+                        HapticUtils.vibrate(context, HapticType.LIGHT)
+                        onCheckedChange(it)
+                    }
                 },
                 thumbContent = if (isChecked) {
                     {
@@ -4016,6 +4145,7 @@ fun TimeRangeReorderSection(
     digitType: String = "fa"
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
 
@@ -4137,72 +4267,76 @@ fun TimeRangeReorderSection(
                             .padding(horizontal = adaptiveDp(10f)),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Drag handle
-                        Box(
-                            modifier = Modifier
-                                .size(adaptiveDp(40f))
-                                .pointerInput(range.id) {
-                                    detectDragGestures(
-                                        onDragStart = {
-                                            activeDragY = yAnim.value
-                                            draggedId = range.id
-                                            lastMovedId = range.id
-                                            HapticUtils.vibrate(context, HapticType.MEDIUM)
-                                        },
-                                        onDrag = { change, dragAmount ->
-                                            change.consume()
-                                            if (draggedId != range.id) return@detectDragGestures
-                                            val order = latestOrder
-                                            val stepPx = latestSlotDistancePx
-                                            val maxY = (order.lastIndex * stepPx).coerceAtLeast(0f)
-                                            activeDragY = (activeDragY + dragAmount.y).coerceIn(0f, maxY)
+                        // Drag handle (hidden on TV D-pad where Up/Down buttons handle reordering)
+                        if (!isTv) {
+                            Box(
+                                modifier = Modifier
+                                    .size(adaptiveDp(40f))
+                                    .pointerInput(range.id) {
+                                        detectDragGestures(
+                                            onDragStart = {
+                                                activeDragY = yAnim.value
+                                                draggedId = range.id
+                                                lastMovedId = range.id
+                                                HapticUtils.vibrate(context, HapticType.MEDIUM)
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                if (draggedId != range.id) return@detectDragGestures
+                                                val order = latestOrder
+                                                val stepPx = latestSlotDistancePx
+                                                val maxY = (order.lastIndex * stepPx).coerceAtLeast(0f)
+                                                activeDragY = (activeDragY + dragAmount.y).coerceIn(0f, maxY)
 
-                                            val currentIdx = order.indexOfFirst { it.id == range.id }
-                                            val targetIdx = (activeDragY / stepPx).roundToInt()
-                                                .coerceIn(0, order.lastIndex)
-                                            if (currentIdx != -1 && targetIdx != currentIdx) {
-                                                val mutable = order.toMutableList()
-                                                val moved = mutable.removeAt(currentIdx)
-                                                mutable.add(targetIdx, moved)
-                                                localOrder = mutable
-                                                HapticUtils.vibrate(context, HapticType.LIGHT)
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            if (draggedId == range.id) {
-                                                val finalOrder = latestOrder
-                                                val snapY = activeDragY
-                                                coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                    yAnim.snapTo(snapY)
-                                                    draggedId = null
+                                                val currentIdx = order.indexOfFirst { it.id == range.id }
+                                                val targetIdx = (activeDragY / stepPx).roundToInt()
+                                                    .coerceIn(0, order.lastIndex)
+                                                if (currentIdx != -1 && targetIdx != currentIdx) {
+                                                    val mutable = order.toMutableList()
+                                                    val moved = mutable.removeAt(currentIdx)
+                                                    mutable.add(targetIdx, moved)
+                                                    localOrder = mutable
+                                                    HapticUtils.vibrate(context, HapticType.LIGHT)
                                                 }
-                                                onTimeRangeOrderChanged(finalOrder)
-                                                HapticUtils.vibrate(context, HapticType.SUCCESS)
-                                            }
-                                        },
-                                        onDragCancel = {
-                                            if (draggedId == range.id) {
-                                                val finalOrder = latestOrder
-                                                val snapY = activeDragY
-                                                coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                                                    yAnim.snapTo(snapY)
-                                                    draggedId = null
+                                            },
+                                            onDragEnd = {
+                                                if (draggedId == range.id) {
+                                                    val finalOrder = latestOrder
+                                                    val snapY = activeDragY
+                                                    coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                        yAnim.snapTo(snapY)
+                                                        draggedId = null
+                                                    }
+                                                    onTimeRangeOrderChanged(finalOrder)
+                                                    HapticUtils.vibrate(context, HapticType.SUCCESS)
                                                 }
-                                                onTimeRangeOrderChanged(finalOrder)
+                                            },
+                                            onDragCancel = {
+                                                if (draggedId == range.id) {
+                                                    val finalOrder = latestOrder
+                                                    val snapY = activeDragY
+                                                    coroutineScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                                        yAnim.snapTo(snapY)
+                                                        draggedId = null
+                                                    }
+                                                    onTimeRangeOrderChanged(finalOrder)
+                                                }
                                             }
-                                        }
-                                    )
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DragHandle,
-                                contentDescription = "Drag to reorder",
-                                tint = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DragHandle,
+                                    contentDescription = "Drag to reorder",
+                                    tint = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(adaptiveDp(6f)))
+                        } else {
+                            Spacer(modifier = Modifier.width(adaptiveDp(4f)))
                         }
-
-                        Spacer(modifier = Modifier.width(adaptiveDp(6f)))
 
                         // Order badge
                         Surface(
@@ -4236,12 +4370,13 @@ fun TimeRangeReorderSection(
                         // Quick Move Up / Down Buttons
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(adaptiveDp(2f))
+                            horizontalArrangement = Arrangement.spacedBy(if (isTv) 8.dp else adaptiveDp(2f))
                         ) {
                             val canMoveUp = index > 0 && draggedId == null
                             val canMoveDown = index < localOrder.lastIndex && draggedId == null
+                            val reorderBtnSize = if (isTv) 40.dp else adaptiveDp(32f)
 
-                            IconButton(
+                            TvFocusableIconButton(
                                 onClick = {
                                     if (canMoveUp) {
                                         HapticUtils.vibrate(context, HapticType.LIGHT)
@@ -4254,17 +4389,18 @@ fun TimeRangeReorderSection(
                                     }
                                 },
                                 enabled = canMoveUp,
-                                modifier = Modifier.size(adaptiveDp(32f))
+                                isTv = isTv,
+                                modifier = Modifier.size(reorderBtnSize)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowUp,
                                     contentDescription = "Move Up",
                                     tint = if (canMoveUp) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
-                                    modifier = Modifier.size(adaptiveDp(20f))
+                                    modifier = Modifier.size(if (isTv) 22.dp else adaptiveDp(20f))
                                 )
                             }
 
-                            IconButton(
+                            TvFocusableIconButton(
                                 onClick = {
                                     if (canMoveDown) {
                                         HapticUtils.vibrate(context, HapticType.LIGHT)
@@ -4277,13 +4413,14 @@ fun TimeRangeReorderSection(
                                     }
                                 },
                                 enabled = canMoveDown,
-                                modifier = Modifier.size(adaptiveDp(32f))
+                                isTv = isTv,
+                                modifier = Modifier.size(reorderBtnSize)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowDown,
                                     contentDescription = "Move Down",
                                     tint = if (canMoveDown) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f),
-                                    modifier = Modifier.size(adaptiveDp(20f))
+                                    modifier = Modifier.size(if (isTv) 22.dp else adaptiveDp(20f))
                                 )
                             }
                         }
@@ -4336,6 +4473,7 @@ fun SettingsScreen(
     allCurrencies: List<CurrencyItem> = emptyList()
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
 
     var showCustomColorDialog by remember { mutableStateOf(false) }
     var isTargetBullish by remember { mutableStateOf(true) }
@@ -4693,13 +4831,18 @@ fun SettingsScreen(
             containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = adaptiveDp(8f)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = adaptiveDp(20f))
-                    .padding(bottom = adaptiveDp(32f))
-                    .verticalScroll(rememberScrollState())
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (isTv) Modifier.widthIn(max = 640.dp) else Modifier)
+                        .padding(horizontal = adaptiveDp(20f))
+                        .padding(bottom = adaptiveDp(32f))
+                        .verticalScroll(rememberScrollState())
+                ) {
                 Text(
                     text = stringResource(R.string.settings_news_agencies_title),
                     fontSize = adaptiveSp(20f),
@@ -4772,16 +4915,25 @@ fun SettingsScreen(
                     }
                 }
             }
+            }
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
-            .padding(horizontal = adaptiveDp(16f))
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState()),
+        contentAlignment = Alignment.TopCenter
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (isTv) Modifier.widthIn(max = 880.dp).padding(horizontal = 32.dp)
+                    else Modifier.padding(horizontal = adaptiveDp(16f))
+                )
+        ) {
         Spacer(modifier = Modifier.height(adaptiveDp(12f)))
 
         // Header Title
@@ -5532,14 +5684,23 @@ fun SettingsScreen(
             subtitle = androidx.compose.ui.res.stringResource(R.string.settings_news_agencies_subtitle),
             icon = Icons.Default.Newspaper
         ) {
+            val manageAgenciesFocus = rememberTvFocusState(
+                isTv = isTv,
+                focusedScale = 1.02f,
+                focusedBorderWidth = adaptiveDp(2.5f),
+                unfocusedBorderWidth = adaptiveDp(1f),
+                unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+            )
             Surface(
                 onClick = { onShowAgenciesSheetChanged(true) },
+                interactionSource = manageAgenciesFocus.interactionSource,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .scale(manageAgenciesFocus.scale)
                     .clip(RoundedCornerShape(adaptiveDp(24f))),
                 shape = RoundedCornerShape(adaptiveDp(24f)),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
-                border = BorderStroke(adaptiveDp(1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                color = if (manageAgenciesFocus.isFocused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f),
+                border = BorderStroke(manageAgenciesFocus.borderWidth, manageAgenciesFocus.borderColor)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = adaptiveDp(16f), vertical = adaptiveDp(12f)),
@@ -5580,14 +5741,23 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
+                val checkUpdateFocus = rememberTvFocusState(
+                    isTv = isTv,
+                    focusedScale = 1.02f,
+                    focusedBorderWidth = 2.5.dp,
+                    unfocusedBorderWidth = 1.dp,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                )
                 Surface(
                     onClick = onCheckForUpdates,
+                    interactionSource = checkUpdateFocus.interactionSource,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .scale(checkUpdateFocus.scale)
                         .clip(RoundedCornerShape(16.dp)),
                     shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f))
+                    color = if (checkUpdateFocus.isFocused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    border = BorderStroke(checkUpdateFocus.borderWidth, checkUpdateFocus.borderColor)
                 ) {
                     Row(
                         modifier = Modifier
@@ -5691,18 +5861,38 @@ fun SettingsScreen(
                 fontWeight = FontWeight.Medium
             )
             Spacer(modifier = Modifier.height(adaptiveDp(4f)))
+            val githubFocus = rememberTvFocusState(
+                isTv = isTv,
+                focusedScale = 1.08f,
+                focusedBorderWidth = 2.dp,
+                unfocusedBorderWidth = 0.dp,
+                unfocusedBorderColor = Color.Transparent
+            )
             Text(
                 text = stringResource(R.string.settings_footer_github),
                 fontSize = adaptiveSp(11f),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = if (githubFocus.isFocused) 1f else 0.8f),
                 textDecoration = TextDecoration.Underline,
-                modifier = Modifier.clickable {
-                    uriHandler.openUri("https://github.com/mmdparsa-dev/Cheghad")
-                }
+                modifier = Modifier
+                    .scale(githubFocus.scale)
+                    .clip(RoundedCornerShape(8.dp))
+                    .then(
+                        if (githubFocus.isFocused) {
+                            Modifier.border(githubFocus.borderWidth, githubFocus.borderColor, RoundedCornerShape(8.dp))
+                        } else Modifier
+                    )
+                    .clickable(
+                        interactionSource = githubFocus.interactionSource,
+                        indication = ripple(bounded = true)
+                    ) {
+                        uriHandler.openUri("https://github.com/mmdparsa-dev/Cheghad")
+                    }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             )
         }
 
         Spacer(modifier = Modifier.height(adaptiveDp(48f)))
+        }
     }
 }
 
@@ -5742,12 +5932,46 @@ fun InteractiveAssetChart(
         animationPlayed = true
     }
 
+    val isTv = isTvDevice()
+    var isChartFocused by remember { mutableStateOf(false) }
+    val tvBorderColor by androidx.compose.animation.animateColorAsState(
+        targetValue = if (isTv && isChartFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
+        animationSpec = tween(180),
+        label = "SimpleChartBorder"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp)
+            .height(if (isTv) 220.dp else 200.dp)
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f), RoundedCornerShape(24.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(24.dp))
+            .border(
+                width = if (isTv && isChartFocused) 2.5.dp else 1.dp,
+                color = tvBorderColor,
+                shape = RoundedCornerShape(24.dp)
+            )
+            .onFocusChanged { isChartFocused = it.isFocused }
+            .then(if (isTv) Modifier.focusable() else Modifier)
+            .onKeyEvent { keyEvent ->
+                if (!isTv || points.isEmpty() || keyEvent.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (keyEvent.key) {
+                    Key.DirectionLeft -> {
+                        val nextIdx = ((activeIndex ?: points.lastIndex) - 1).coerceIn(0, points.lastIndex)
+                        onActiveIndexChanged(nextIdx)
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        val nextIdx = ((activeIndex ?: 0) + 1).coerceIn(0, points.lastIndex)
+                        onActiveIndexChanged(nextIdx)
+                        true
+                    }
+                    Key.DirectionCenter, Key.Enter -> {
+                        onActiveIndexChanged(if (activeIndex != null) null else points.lastIndex)
+                        true
+                    }
+                    else -> false
+                }
+            }
             .padding(12.dp)
     ) {
         // Y-axis labels
@@ -6090,6 +6314,7 @@ fun AssetDetailDialog(
 
     val formattedDisplayPrice = formatPrice(displayPrice, digitType, item.symbol)
 
+    val isTv = isTvDevice()
     val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden)
 
     ModalBottomSheet(
@@ -6099,9 +6324,14 @@ fun AssetDetailDialog(
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = adaptiveDp(28f), topEnd = adaptiveDp(28f))
     ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.TopCenter
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(if (isTv) Modifier.widthIn(max = 760.dp) else Modifier)
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
                 .padding(horizontal = adaptiveDp(24f), vertical = adaptiveDp(8f))
@@ -6133,7 +6363,7 @@ fun AssetDetailDialog(
                         Text(item.symbol, fontSize = adaptiveSp(12f), color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
                     }
                 }
-                IconButton(onClick = onDismiss) {
+                TvFocusableIconButton(onClick = onDismiss, isTv = isTv) {
                     Icon(Icons.Default.Close, contentDescription = "Close")
                 }
             }
@@ -6266,12 +6496,22 @@ fun AssetDetailDialog(
             Spacer(modifier = Modifier.height(adaptiveDp(14f)))
 
             // Technical Chart Entry Button
+            val techBtnFocus = rememberTvFocusState(
+                isTv = isTv,
+                focusedScale = 1.02f,
+                focusedBorderWidth = adaptiveDp(2.5f),
+                unfocusedBorderWidth = adaptiveDp(1f),
+                unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+            )
             Surface(
                 onClick = onOpenTechnicalChart,
+                interactionSource = techBtnFocus.interactionSource,
                 shape = RoundedCornerShape(adaptiveDp(18f)),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                border = BorderStroke(adaptiveDp(1f), MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-                modifier = Modifier.fillMaxWidth()
+                color = if (techBtnFocus.isFocused) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                border = BorderStroke(techBtnFocus.borderWidth, techBtnFocus.borderColor),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scale(techBtnFocus.scale)
             ) {
                 Row(
                     modifier = Modifier.padding(adaptiveDp(12f)),
@@ -6431,6 +6671,7 @@ fun AssetDetailDialog(
             }
 
             Spacer(modifier = Modifier.height(adaptiveDp(16f)))
+        }
         }
     }
 }
@@ -6930,6 +7171,7 @@ fun CurrencyCalculatorScreen(
     innerPadding: PaddingValues
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
     var calcSelectedItemId by rememberSaveable { mutableStateOf(items.firstOrNull()?.id ?: "") }
     val selectedItem = items.find { it.id == calcSelectedItemId } ?: items.firstOrNull()
 
@@ -6966,14 +7208,22 @@ fun CurrencyCalculatorScreen(
     )
     var showHistorySheet by remember { mutableStateOf(false) }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
-            .padding(16.dp)
             .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentAlignment = Alignment.TopCenter
     ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (isTv) Modifier.widthIn(max = 880.dp).padding(horizontal = 32.dp, vertical = 16.dp)
+                    else Modifier.padding(16.dp)
+                ),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
         // Header
         Row(
             modifier = Modifier
@@ -7001,11 +7251,30 @@ fun CurrencyCalculatorScreen(
 
             // History Capsule
             val latestItem = historyList.firstOrNull()
+            val historyFocus = rememberTvFocusState(
+                isTv = isTv,
+                focusedScale = 1.06f,
+                focusedBorderWidth = 2.dp,
+                unfocusedBorderWidth = 0.dp,
+                unfocusedBorderColor = Color.Transparent
+            )
             Box(
                 modifier = Modifier
+                    .scale(historyFocus.scale)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f))
-                    .clickable { showHistorySheet = true }
+                    .background(
+                        if (historyFocus.isFocused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                        else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    )
+                    .then(
+                        if (historyFocus.isFocused) {
+                            Modifier.border(historyFocus.borderWidth, historyFocus.borderColor, CircleShape)
+                        } else Modifier
+                    )
+                    .clickable(
+                        interactionSource = historyFocus.interactionSource,
+                        indication = ripple(bounded = true)
+                    ) { showHistorySheet = true }
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -7508,6 +7777,7 @@ fun CurrencyCalculatorScreen(
                     }
                 }
             }
+        }
         }
     }
 }

@@ -3,6 +3,7 @@ package com.mmdparsadev.cheghad.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,6 +21,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -32,6 +34,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.update.GitHubRelease
 import com.mmdparsadev.cheghad.data.update.UpdateManager
+import com.mmdparsadev.cheghad.isTvDevice
 import kotlinx.coroutines.launch
 
 @Composable
@@ -41,6 +44,7 @@ fun UpdateDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
     val coroutineScope = rememberCoroutineScope()
 
     var isDownloading by remember { mutableStateOf(false) }
@@ -65,7 +69,8 @@ fun UpdateDialog(
     ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
+                .fillMaxWidth(if (isTv) 0.65f else 0.92f)
+                .widthIn(max = 560.dp)
                 .wrapContentHeight(),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
@@ -193,6 +198,14 @@ fun UpdateDialog(
 
                 // Action Buttons
                 if (!isDownloading) {
+                    val primaryFocus = rememberTvFocusState(
+                        isTv = isTv,
+                        focusedScale = 1.03f,
+                        focusedBorderWidth = 2.5.dp,
+                        unfocusedBorderWidth = 0.dp,
+                        focusedBorderColor = MaterialTheme.colorScheme.inversePrimary,
+                        unfocusedBorderColor = Color.Transparent
+                    )
                     Button(
                         onClick = {
                             if (apkAsset != null) {
@@ -232,9 +245,14 @@ fun UpdateDialog(
                                 onDismiss()
                             }
                         },
+                        interactionSource = primaryFocus.interactionSource,
+                        border = if (primaryFocus.isFocused) {
+                            BorderStroke(primaryFocus.borderWidth, primaryFocus.borderColor)
+                        } else null,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp),
+                            .height(52.dp)
+                            .scale(primaryFocus.scale),
                         shape = RoundedCornerShape(16.dp),
                         elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
@@ -253,16 +271,22 @@ fun UpdateDialog(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
+                    val secondaryFocus = rememberTvFocusState(
+                        isTv = isTv,
+                        focusedScale = 1.03f,
+                        focusedBorderWidth = 2.5.dp,
+                        unfocusedBorderWidth = 1.dp,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                    )
                     OutlinedButton(
                         onClick = onDismiss,
+                        interactionSource = secondaryFocus.interactionSource,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
+                            .height(48.dp)
+                            .scale(secondaryFocus.scale),
                         shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant
-                        )
+                        border = BorderStroke(secondaryFocus.borderWidth, secondaryFocus.borderColor)
                     ) {
                         Text(
                             text = stringResource(R.string.update_not_now),

@@ -5,11 +5,15 @@ import android.net.Uri
 import androidx.compose.animation.*
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -25,6 +29,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -33,12 +38,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.mmdparsadev.cheghad.MainActivity
 import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.models.NewsArticle
 import com.mmdparsadev.cheghad.data.models.NewsCategory
 import com.mmdparsadev.cheghad.data.repository.NewsRepository
 import com.mmdparsadev.cheghad.formatTimeAgo
+import com.mmdparsadev.cheghad.isTvDevice
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,6 +62,7 @@ fun NewsScreen(
     onOpenAgenciesSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
     val isEnglish = digitType == "en"
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(NewsCategory.All) }
@@ -96,13 +104,14 @@ fun NewsScreen(
             contentAlignment = Alignment.Center
         ) {
             Column(
+                modifier = Modifier.widthIn(max = 560.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Newspaper,
                     contentDescription = null,
-                    modifier = Modifier.size(80.dp),
+                    modifier = Modifier.size(if (isTv) 96.dp else 80.dp),
                     tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
 
@@ -110,7 +119,7 @@ fun NewsScreen(
 
                 Text(
                     text = stringResource(R.string.news_disabled_status),
-                    fontSize = 20.sp,
+                    fontSize = if (isTv) 22.sp else 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -119,7 +128,7 @@ fun NewsScreen(
 
                 Text(
                     text = stringResource(R.string.news_enable_description),
-                    fontSize = 14.sp,
+                    fontSize = if (isTv) 15.sp else 14.sp,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 22.sp
@@ -127,8 +136,19 @@ fun NewsScreen(
 
                 Spacer(modifier = Modifier.height(32.dp))
 
+                val enableBtnFocus = rememberTvFocusState(
+                    isTv = isTv,
+                    focusedScale = 1.05f,
+                    focusedBorderWidth = 2.5.dp,
+                    unfocusedBorderWidth = 0.dp,
+                    focusedBorderColor = MaterialTheme.colorScheme.inversePrimary,
+                    unfocusedBorderColor = Color.Transparent
+                )
                 Button(
                     onClick = onOpenAgenciesSettings,
+                    interactionSource = enableBtnFocus.interactionSource,
+                    border = if (enableBtnFocus.isFocused) BorderStroke(enableBtnFocus.borderWidth, enableBtnFocus.borderColor) else null,
+                    modifier = Modifier.scale(enableBtnFocus.scale),
                     shape = RoundedCornerShape(16.dp),
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
                 ) {
@@ -149,7 +169,7 @@ fun NewsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = if (isTv) 32.dp else 16.dp)
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
 
@@ -162,21 +182,22 @@ fun NewsScreen(
                     Column {
                         Text(
                             text = stringResource(R.string.news_title),
-                            fontSize = 20.sp,
+                            fontSize = if (isTv) 22.sp else 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
                         Text(
                             text = stringResource(R.string.news_subtitle),
-                            fontSize = 12.sp,
+                            fontSize = if (isTv) 13.sp else 12.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
                         )
                     }
 
                     // Bookmark toggle button
-                    IconButton(
+                    TvFocusableIconButton(
                         onClick = { showOnlyBookmarks = !showOnlyBookmarks },
+                        isTv = isTv,
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(
@@ -339,35 +360,52 @@ fun NewsScreen(
                             }
                         }
                     } else {
-                        LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            contentPadding = PaddingValues(bottom = 24.dp)
-                        ) {
-                            items(articles, key = { it.id }) { article ->
-                                val isBookmarked = bookmarkedIds.contains(article.id)
-                                NewsArticleCard(
-                                    article = article,
-                                    isEnglish = isEnglish,
-                                    isBookmarked = isBookmarked,
-                                    onBookmarkToggle = {
-                                        bookmarkedIds = if (isBookmarked) {
-                                            bookmarkedIds - article.id
-                                        } else {
-                                            bookmarkedIds + article.id
-                                        }
-                                    },
-                                    onShare = {
-                                        val shareIntent = Intent().apply {
-                                            action = Intent.ACTION_SEND
-                                            putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
-                                            type = "text/plain"
-                                        }
-                                        context.startActivity(Intent.createChooser(shareIntent, article.title))
-                                    },
-                                    onClick = {
-                                        selectedArticleForDetail = article
+                        val articleItemContent: @Composable (NewsArticle) -> Unit = { article ->
+                            val isBookmarked = bookmarkedIds.contains(article.id)
+                            NewsArticleCard(
+                                article = article,
+                                isEnglish = isEnglish,
+                                isBookmarked = isBookmarked,
+                                onBookmarkToggle = {
+                                    bookmarkedIds = if (isBookmarked) {
+                                        bookmarkedIds - article.id
+                                    } else {
+                                        bookmarkedIds + article.id
                                     }
-                                )
+                                },
+                                onShare = {
+                                    val shareIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
+                                        type = "text/plain"
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, article.title))
+                                },
+                                onClick = {
+                                    selectedArticleForDetail = article
+                                }
+                            )
+                        }
+
+                        if (isTv) {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                contentPadding = PaddingValues(top = 6.dp, bottom = 28.dp)
+                            ) {
+                                gridItems(articles, key = { it.id }) { article ->
+                                    articleItemContent(article)
+                                }
+                            }
+                        } else {
+                            LazyColumn(
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                                contentPadding = PaddingValues(bottom = 24.dp)
+                            ) {
+                                items(articles, key = { it.id }) { article ->
+                                    articleItemContent(article)
+                                }
                             }
                         }
                     }
@@ -385,98 +423,128 @@ fun NewsScreen(
                 enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
             )
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                // Agency & Time Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (isTv) Modifier.widthIn(max = 680.dp) else Modifier)
+                        .padding(24.dp)
                 ) {
-                    Surface(
-                        color = article.agency.brandColor.copy(alpha = 0.15f),
-                        shape = RoundedCornerShape(8.dp)
+                    // Agency & Time Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Surface(
+                            color = article.agency.brandColor.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = if (isEnglish) article.agency.nameEn else article.agency.nameFa,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = article.agency.brandColor,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
                         Text(
-                            text = if (isEnglish) article.agency.nameEn else article.agency.nameFa,
+                            text = formatTimeAgo(context, article.pubTimestamp),
                             fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = article.agency.brandColor,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Title
                     Text(
-                        text = formatTimeAgo(context, article.pubTimestamp),
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = article.title,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 26.sp
                     )
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                // Title
-                Text(
-                    text = article.title,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 26.sp
-                )
+                    // Summary / Body
+                    Text(
+                        text = article.summary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 22.sp
+                    )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
 
-                // Summary / Body
-                Text(
-                    text = article.summary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 22.sp
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Action Buttons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            try {
-                                val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(article.link))
-                                context.startActivity(browserIntent)
-                            } catch (e: Exception) {
-                            }
-                        },
-                        modifier = Modifier.weight(1f).height(48.dp),
-                        shape = RoundedCornerShape(20.dp)
+                    // Action Buttons
+                    val readBtnFocus = rememberTvFocusState(
+                        isTv = isTv,
+                        focusedScale = 1.03f,
+                        focusedBorderWidth = 2.5.dp,
+                        unfocusedBorderWidth = 0.dp,
+                        focusedBorderColor = MaterialTheme.colorScheme.inversePrimary,
+                        unfocusedBorderColor = Color.Transparent
+                    )
+                    val shareBtnFocus = rememberTvFocusState(
+                        isTv = isTv,
+                        focusedScale = 1.05f,
+                        focusedBorderWidth = 2.5.dp,
+                        unfocusedBorderWidth = 0.dp,
+                        unfocusedBorderColor = Color.Transparent
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.news_read_more))
+                        Button(
+                            onClick = {
+                                try {
+                                    val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(article.link))
+                                    context.startActivity(browserIntent)
+                                } catch (e: Exception) {
+                                }
+                            },
+                            interactionSource = readBtnFocus.interactionSource,
+                            border = if (readBtnFocus.isFocused) BorderStroke(readBtnFocus.borderWidth, readBtnFocus.borderColor) else null,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp)
+                                .scale(readBtnFocus.scale),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(R.string.news_read_more))
+                        }
+
+                        FilledTonalButton(
+                            onClick = {
+                                val shareIntent = Intent().apply {
+                                    action = Intent.ACTION_SEND
+                                    putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(shareIntent, article.title))
+                            },
+                            interactionSource = shareBtnFocus.interactionSource,
+                            border = if (shareBtnFocus.isFocused) BorderStroke(shareBtnFocus.borderWidth, shareBtnFocus.borderColor) else null,
+                            modifier = Modifier
+                                .height(48.dp)
+                                .scale(shareBtnFocus.scale),
+                            shape = RoundedCornerShape(20.dp)
+                        ) {
+                            Icon(Icons.Outlined.Share, contentDescription = null)
+                        }
                     }
 
-                    FilledTonalButton(
-                        onClick = {
-                            val shareIntent = Intent().apply {
-                                action = Intent.ACTION_SEND
-                                putExtra(Intent.EXTRA_TEXT, "${article.title}\n\n${article.link}")
-                                type = "text/plain"
-                            }
-                            context.startActivity(Intent.createChooser(shareIntent, article.title))
-                        },
-                        modifier = Modifier.height(48.dp),
-                        shape = RoundedCornerShape(20.dp)
-                    ) {
-                        Icon(Icons.Outlined.Share, contentDescription = null)
-                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
-
-                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -492,13 +560,30 @@ fun NewsArticleCard(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
+    val isTv = isTvDevice()
+    val tvFocus = rememberTvFocusState(
+        isTv = isTv,
+        focusedScale = 1.02f,
+        focusedBorderWidth = 2.5.dp,
+        unfocusedBorderWidth = 1.dp,
+        unfocusedBorderColor = Color.Transparent
+    )
     Card(
+        onClick = onClick,
+        interactionSource = tvFocus.interactionSource,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .clickable { onClick() },
+            .zIndex(if (tvFocus.isFocused) 2f else 0f)
+            .scale(tvFocus.scale),
         shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        border = if (tvFocus.isFocused) BorderStroke(tvFocus.borderWidth, tvFocus.borderColor) else null,
+        colors = CardDefaults.cardColors(
+            containerColor = if (tvFocus.isFocused) {
+                MaterialTheme.colorScheme.surfaceContainerHighest
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            }
+        ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -531,14 +616,22 @@ fun NewsArticleCard(
                 }
 
                 Row {
-                    IconButton(onClick = onBookmarkToggle, modifier = Modifier.size(32.dp)) {
+                    TvFocusableIconButton(
+                        onClick = onBookmarkToggle,
+                        isTv = isTv,
+                        modifier = Modifier.size(if (isTv) 36.dp else 32.dp)
+                    ) {
                         Icon(
                             imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
                             contentDescription = "Bookmark",
                             tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    IconButton(onClick = onShare, modifier = Modifier.size(32.dp)) {
+                    TvFocusableIconButton(
+                        onClick = onShare,
+                        isTv = isTv,
+                        modifier = Modifier.size(if (isTv) 36.dp else 32.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Outlined.Share,
                             contentDescription = "Share",
