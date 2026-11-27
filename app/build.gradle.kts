@@ -27,8 +27,8 @@ android {
         applicationId = "com.mmdparsadev.cheghad"
         minSdk = 24
         targetSdk = 37
-        versionCode = 114
-        versionName = "1.1.4 - Stable"
+        versionCode = 115
+        versionName = "1.1.5 - Stable"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -46,6 +46,18 @@ android {
                 ?: "upload"
             keyPassword = System.getenv("KEY_PASSWORD")
                 ?: keystoreProperties.getProperty("keyPassword")
+        }
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        create("direct") {
+            dimension = "distribution"
+            buildConfigField("boolean", "ENABLE_SELF_UPDATE", "true")
+        }
+        create("store") {
+            dimension = "distribution"
+            buildConfigField("boolean", "ENABLE_SELF_UPDATE", "false")
         }
     }
 
