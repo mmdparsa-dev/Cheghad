@@ -21,6 +21,7 @@ plugins {
 android {
     namespace = "com.mmdparsadev.cheghad"
     compileSdk = 37
+    compileSdkMinor = 2
 
     defaultConfig {
         applicationId = "com.mmdparsadev.cheghad"
@@ -124,8 +125,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.room3.runtime)
     implementation(libs.androidx.work.runtime.ktx)
-    implementation("androidx.tv:tv-foundation:1.0.0")
-    implementation("androidx.tv:tv-material:1.1.0")
     implementation(libs.retrofit)
     implementation(libs.converter.moshi)
     implementation(libs.retrofit2.kotlinx.serialization.converter)
@@ -146,6 +145,7 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.roborazzi.junit.rule)
     androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.runner)
