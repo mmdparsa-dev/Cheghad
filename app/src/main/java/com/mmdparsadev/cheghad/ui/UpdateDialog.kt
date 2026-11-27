@@ -141,23 +141,17 @@ fun UpdateDialog(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(max = 160.dp),
+                        .heightIn(min = 90.dp, max = 220.dp),
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 ) {
-                    Column(
+                    MarkdownContent(
+                        markdown = bodyText,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(14.dp)
                             .verticalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            text = bodyText,
-                            fontSize = 13.sp,
-                            lineHeight = 20.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))

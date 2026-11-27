@@ -39,13 +39,18 @@ class UpdateWorker(
             val release = result.getOrNull()
 
             if (release != null) {
+                // If update is available, cache it in UpdateManager for direct dialog display
+                UpdateManager.pendingUpdateRelease = release
+
                 val prefs = appContext.getSharedPreferences("cheghad_update_prefs", Context.MODE_PRIVATE)
                 val lastNotifiedTag = prefs.getString("last_notified_tag", "")
 
-                // Notify if this version tag hasn't been notified yet
-                if (lastNotifiedTag != release.tagName) {
-                    sendUpdateNotification(appContext, release)
-                    prefs.edit().putString("last_notified_tag", release.tagName).apply()
+                // Only send system notification if the user is outside the app (background/closed)
+                if (!MainActivity.isAppInForeground) {
+                    if (lastNotifiedTag != release.tagName) {
+                        sendUpdateNotification(appContext, release)
+                        prefs.edit().putString("last_notified_tag", release.tagName).apply()
+                    }
                 }
             }
             Result.success()
@@ -97,6 +102,7 @@ class UpdateWorker(
                 val intent = Intent(context, MainActivity::class.java).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     putExtra("SHOW_UPDATE_DIALOG", true)
+                    putExtra("RELEASE_DATA", UpdateManager.encodeRelease(release))
                 }
 
                 val pendingIntent = PendingIntent.getActivity(

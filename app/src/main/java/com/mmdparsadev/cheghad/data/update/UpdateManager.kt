@@ -5,6 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import androidx.core.content.FileProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -35,11 +38,23 @@ data class GitHubAsset(
 
 object UpdateManager {
 
+    var pendingUpdateRelease: GitHubRelease? by mutableStateOf(null)
+
     private const val GITHUB_API_URL = "https://api.github.com/repos/mmdparsa-dev/Cheghad/releases"
 
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
+    }
+
+    fun encodeRelease(release: GitHubRelease): String {
+        return json.encodeToString(GitHubRelease.serializer(), release)
+    }
+
+    fun decodeRelease(jsonString: String): GitHubRelease? {
+        return runCatching {
+            json.decodeFromString<GitHubRelease>(jsonString)
+        }.getOrNull()
     }
 
     private val client = OkHttpClient.Builder()
