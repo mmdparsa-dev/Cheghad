@@ -26,6 +26,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -41,10 +42,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -113,6 +116,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -124,7 +128,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -180,13 +189,18 @@ fun TechnicalChartScreen(
     val coroutineScope = rememberCoroutineScope()
     val repository = remember { TechnicalRepository() }
 
-    var currentCurrency by remember { mutableStateOf(initialCurrency) }
-    var selectedTimeframe by remember { mutableStateOf<ChartTimeframe?>(ChartTimeframe.D1) }
-    var activeExportTimeframe by remember { mutableStateOf(ChartTimeframe.D1) }
+    var currentCurrency by remember(initialCurrency.symbol) { mutableStateOf(initialCurrency) }
+    var selectedTimeframeName by rememberSaveable { mutableStateOf<String?>(ChartTimeframe.D1.name) }
+    var activeExportTimeframeName by rememberSaveable { mutableStateOf(ChartTimeframe.D1.name) }
+    val selectedTimeframe = selectedTimeframeName?.let { tfName ->
+        ChartTimeframe.entries.find { it.name == tfName }
+    }
+    val activeExportTimeframe = ChartTimeframe.entries.find { it.name == activeExportTimeframeName }
+        ?: ChartTimeframe.D1
     var enabledEmas by remember { mutableStateOf(setOf(EmaPeriod.EMA_200)) }
     var lastNonEmptyEmas by remember { mutableStateOf(setOf(EmaPeriod.EMA_200)) }
     var showEmaMenu by remember { mutableStateOf(false) }
-    var showRsi by remember { mutableStateOf(true) }
+    var showRsi by rememberSaveable { mutableStateOf(true) }
 
     var candles by remember { mutableStateOf<List<CandleData>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -203,13 +217,43 @@ fun TechnicalChartScreen(
     var showTextDialog by remember { mutableStateOf(false) }
     var textTargetPoint by remember { mutableStateOf<ChartPoint?>(null) }
     var inputNoteText by remember { mutableStateOf("") }
-    var isFullScreen by remember { mutableStateOf(false) }
-    var isLandscape by remember { mutableStateOf(false) }
-    var selectedCarouselTab by remember { mutableIntStateOf(0) }
+    var isFullScreen by rememberSaveable { mutableStateOf(false) }
+    var isLandscape by rememberSaveable { mutableStateOf(false) }
+    var showDrawToolsInLandscape by rememberSaveable { mutableStateOf(false) }
+    var selectedCarouselTab by rememberSaveable { mutableIntStateOf(0) }
 
+    val isTv = isTvDevice()
+    val configuration = LocalConfiguration.current
+    val isSystemLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val isEffectiveLandscape = !isTv && (isLandscape || isSystemLandscape)
+    val hideSecondaryPanels = isFullScreen || isEffectiveLandscape
+    val view = LocalView.current
+
+    // Restore orientation only when leaving TechnicalChartScreen (not mid-configuration change)
     DisposableEffect(activity) {
         onDispose {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            if (activity != null && !activity.isChangingConfigurations) {
+                runCatching {
+                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                }
+            }
+        }
+    }
+
+    // Immersive system bars in landscape so the chart uses the entire widescreen viewport
+    DisposableEffect(activity, view, isEffectiveLandscape, isTv) {
+        val window = activity?.window
+        val insetsController = window?.let { WindowCompat.getInsetsController(it, view) }
+        if (isEffectiveLandscape && insetsController != null) {
+            insetsController.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
+        } else if (!isTv && insetsController != null) {
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            if (!isTv && activity != null && !activity.isChangingConfigurations && insetsController != null) {
+                insetsController.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -217,9 +261,16 @@ fun TechnicalChartScreen(
         isLandscape = enable
         if (enable) {
             isFullScreen = true
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            runCatching {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
         } else {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            showDrawToolsInLandscape = false
+            activeTool = DrawingToolType.NONE
+            isFullScreen = false
+            runCatching {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            }
         }
     }
 
@@ -253,7 +304,7 @@ fun TechnicalChartScreen(
     // Fetch candles when currency or timeframe changes
     LaunchedEffect(currentCurrency.symbol, selectedTimeframe) {
         val tf = selectedTimeframe ?: return@LaunchedEffect
-        activeExportTimeframe = tf
+        activeExportTimeframeName = tf.name
         isLoading = true
         candles = repository.getCandles(currentCurrency, tf)
         isLoading = false
@@ -303,27 +354,29 @@ fun TechnicalChartScreen(
         label = "rsiBorder"
     )
 
-    val isTv = isTvDevice()
-
     val chartMarginH by animateDpAsState(
-        targetValue = if (isFullScreen || isTv) 0.dp else 10.dp,
+        targetValue = if (hideSecondaryPanels || isTv) 0.dp else 10.dp,
         animationSpec = tween(350, easing = FastOutSlowInEasing),
         label = "chartMarginH"
     )
     val chartMarginV by animateDpAsState(
-        targetValue = if (isFullScreen || isTv) 0.dp else 4.dp,
+        targetValue = if (hideSecondaryPanels || isTv) 0.dp else 4.dp,
         animationSpec = tween(350, easing = FastOutSlowInEasing),
         label = "chartMarginV"
     )
     val chartCornerRadius by animateDpAsState(
-        targetValue = if (isFullScreen) 0.dp else (if (isTv) 12.dp else 16.dp),
+        targetValue = if (hideSecondaryPanels) 0.dp else (if (isTv) 12.dp else 16.dp),
         animationSpec = tween(350, easing = FastOutSlowInEasing),
         label = "chartCornerRadius"
     )
 
-    androidx.activity.compose.BackHandler(isFullScreen || isLandscape) {
-        isFullScreen = false
-        if (isLandscape) toggleLandscape(false)
+    androidx.activity.compose.BackHandler(isFullScreen || isLandscape || showDrawToolsInLandscape) {
+        if (isLandscape) {
+            toggleLandscape(false)
+        } else {
+            isFullScreen = false
+            showDrawToolsInLandscape = false
+        }
     }
 
     @Composable
@@ -390,8 +443,161 @@ fun TechnicalChartScreen(
         }
     }
 
+    @Composable
+    fun TimeframeChipsRow(
+        compact: Boolean,
+        modifier: Modifier = Modifier
+    ) {
+        Row(
+            modifier = modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(
+                    horizontal = if (compact) 4.dp else 10.dp,
+                    vertical = if (isTv) 5.dp else if (compact) 2.dp else 3.dp
+                ),
+            horizontalArrangement = Arrangement.spacedBy(if (isTv) 8.dp else if (compact) 4.dp else 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ChartTimeframe.entries.forEach { tf ->
+                val isSelected = selectedTimeframe == tf
+                val tfFocus = rememberTvFocusState(
+                    isTv = isTv,
+                    focusedScale = 1.08f,
+                    focusedBorderWidth = 2.5.dp,
+                    unfocusedBorderWidth = 1.dp,
+                    unfocusedBorderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                )
+
+                Surface(
+                    onClick = { selectedTimeframeName = tf.name },
+                    interactionSource = tfFocus.interactionSource,
+                    shape = RoundedCornerShape(if (compact) 10.dp else 14.dp),
+                    color = if (tfFocus.isFocused || isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                    border = BorderStroke(tfFocus.borderWidth, tfFocus.borderColor),
+                    modifier = Modifier
+                        .height(if (isTv) 36.dp else if (compact) 26.dp else 28.dp)
+                        .zIndex(if (tfFocus.isFocused) 1f else 0f)
+                        .scale(tfFocus.scale)
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = if (isTv) 14.dp else if (compact) 8.dp else 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val tfTitle = tf.localizedTitle(isEnglish)
+                        Text(
+                            text = tfTitle,
+                            fontSize = if (isTv) 13.sp else if (compact) 10.sp else 11.sp,
+                            fontWeight = if (isSelected || tfFocus.isFocused) FontWeight.ExtraBold else FontWeight.Medium,
+                            color = if (isSelected || tfFocus.isFocused) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                            fontFamily = getFontFamilyForText(tfTitle)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun HeaderEmaAndRsiControls(
+        compact: Boolean,
+        openMenuFromEma: Boolean
+    ) {
+        val emaFocus = rememberTvFocusState(
+            isTv = isTv,
+            focusedScale = 1.08f,
+            unfocusedBorderColor = animatedEmaBorder
+        )
+        Box {
+            Surface(
+                onClick = {
+                    if (openMenuFromEma) showEmaMenu = true else toggleHeaderEma()
+                },
+                interactionSource = emaFocus.interactionSource,
+                shape = RoundedCornerShape(if (compact) 8.dp else 12.dp),
+                color = animatedEmaBg,
+                border = BorderStroke(emaFocus.borderWidth, emaFocus.borderColor),
+                modifier = Modifier
+                    .padding(end = 2.dp)
+                    .scale(emaFocus.scale)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(
+                        horizontal = if (isTv) 10.dp else if (compact) 6.dp else 7.dp,
+                        vertical = if (isTv) 5.dp else if (compact) 4.dp else 5.dp
+                    )
+                ) {
+                    if (!compact) {
+                        Box(
+                            modifier = Modifier
+                                .size(if (isTv) 8.dp else 7.dp)
+                                .clip(CircleShape)
+                                .background(if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.outline)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    val emaBadge = when {
+                        compact && enabledEmas.isNotEmpty() -> "EMA (${enabledEmas.size})".toLocalizedDigits(digitType)
+                        !compact && enabledEmas.size > 1 -> "EMA ${enabledEmas.size}".toLocalizedDigits(digitType)
+                        else -> "EMA"
+                    }
+                    Text(
+                        text = emaBadge,
+                        fontSize = if (isTv) 12.sp else if (compact) 10.sp else 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (openMenuFromEma) {
+                EmaDropdownMenu()
+            }
+        }
+
+        val rsiFocus = rememberTvFocusState(
+            isTv = isTv,
+            focusedScale = 1.08f,
+            unfocusedBorderColor = animatedRsiBorder
+        )
+        Surface(
+            onClick = { showRsi = !showRsi },
+            interactionSource = rsiFocus.interactionSource,
+            shape = RoundedCornerShape(if (compact) 8.dp else 12.dp),
+            color = animatedRsiBg,
+            border = BorderStroke(rsiFocus.borderWidth, rsiFocus.borderColor),
+            modifier = Modifier
+                .padding(end = 2.dp)
+                .scale(rsiFocus.scale)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(
+                    horizontal = if (isTv) 10.dp else if (compact) 6.dp else 7.dp,
+                    vertical = if (isTv) 5.dp else if (compact) 4.dp else 5.dp
+                )
+            ) {
+                if (!compact) {
+                    Box(
+                        modifier = Modifier
+                            .size(if (isTv) 8.dp else 7.dp)
+                            .clip(CircleShape)
+                            .background(if (showRsi) rsiColor else MaterialTheme.colorScheme.outline)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                Text(
+                    text = "RSI",
+                    fontSize = if (isTv) 12.sp else if (compact) 10.sp else 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (showRsi) rsiColor else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+
     Scaffold(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets.safeDrawing
     ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -402,426 +608,350 @@ fun TechnicalChartScreen(
                 )
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // 1. Header Bar with AnimatedContent
-            AnimatedContent(
-                targetState = isFullScreen,
-                transitionSpec = {
-                    (fadeIn(animationSpec = tween(300)) + slideInVertically(animationSpec = tween(300)) { -it / 2 })
-                        .togetherWith(fadeOut(animationSpec = tween(200)) + slideOutVertically(animationSpec = tween(200)) { -it / 2 })
-                },
-                label = "headerAnim"
-            ) { full ->
-                if (full) {
-                    // Fullscreen / Landscape compact header
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 2.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = if (isTv) 12.dp else 8.dp, vertical = if (isTv) 6.dp else 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                TvFocusableIconButton(
-                                    onClick = {
-                                        isFullScreen = false
-                                        if (isLandscape) toggleLandscape(false)
-                                    },
-                                    isTv = isTv,
-                                    modifier = Modifier.size(if (isTv) 40.dp else 36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.FullscreenExit,
-                                        contentDescription = stringResource(R.string.tech_exit_fullscreen),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                val localizedTitle = getLocalizedTitle(currentCurrency.symbol, currentCurrency.title)
-                                Text(
-                                    text = localizedTitle,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = if (isTv) 15.sp else 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    fontFamily = getFontFamilyForText(localizedTitle)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "(${currentCurrency.symbol})",
-                                    fontSize = if (isTv) 12.sp else 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                val fsPrice = latestCandle?.close ?: currentCurrency.currentPrice
-                                AnimatedPriceText(
-                                    price = fsPrice,
-                                    symbol = currentCurrency.symbol,
-                                    digitType = digitType,
-                                    suffix = tomanShort,
-                                    fontSize = if (isTv) 14.sp else 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    defaultColor = MaterialTheme.colorScheme.primary
-                                )
-                            }
-
-                            // Multi-EMA dropdown, RSI, Landscape & Export
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(if (isTv) 6.dp else 2.dp)
-                            ) {
-                                val fsEmaFocus = rememberTvFocusState(
-                                    isTv = isTv,
-                                    focusedScale = 1.08f,
-                                    unfocusedBorderColor = animatedEmaBorder
-                                )
-                                Box {
-                                    Surface(
-                                        onClick = { showEmaMenu = true },
-                                        interactionSource = fsEmaFocus.interactionSource,
-                                        shape = RoundedCornerShape(if (isTv) 10.dp else 8.dp),
-                                        color = animatedEmaBg,
-                                        border = BorderStroke(fsEmaFocus.borderWidth, fsEmaFocus.borderColor),
-                                        modifier = Modifier
-                                            .padding(end = 2.dp)
-                                            .scale(fsEmaFocus.scale)
-                                    ) {
-                                        val emaBadge = if (enabledEmas.isNotEmpty()) {
-                                            "EMA (${enabledEmas.size})".toLocalizedDigits(digitType)
-                                        } else "EMA"
-                                        Text(
-                                            text = emaBadge,
-                                            fontSize = if (isTv) 12.sp else 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(
-                                                horizontal = if (isTv) 10.dp else 6.dp,
-                                                vertical = if (isTv) 5.dp else 3.dp
-                                            )
-                                        )
-                                    }
-                                    EmaDropdownMenu()
-                                }
-
-                                val fsRsiFocus = rememberTvFocusState(
-                                    isTv = isTv,
-                                    focusedScale = 1.08f,
-                                    unfocusedBorderColor = animatedRsiBorder
-                                )
-                                Surface(
-                                    onClick = { showRsi = !showRsi },
-                                    interactionSource = fsRsiFocus.interactionSource,
-                                    shape = RoundedCornerShape(if (isTv) 10.dp else 8.dp),
-                                    color = animatedRsiBg,
-                                    border = BorderStroke(fsRsiFocus.borderWidth, fsRsiFocus.borderColor),
-                                    modifier = Modifier
-                                        .padding(end = 2.dp)
-                                        .scale(fsRsiFocus.scale)
-                                ) {
-                                    Text(
-                                        text = "RSI",
-                                        fontSize = if (isTv) 12.sp else 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (showRsi) rsiColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(
-                                            horizontal = if (isTv) 10.dp else 6.dp,
-                                            vertical = if (isTv) 5.dp else 3.dp
-                                        )
-                                    )
-                                }
-
-                                if (!isTv) {
-                                    IconButton(
-                                        onClick = { toggleLandscape(!isLandscape) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isLandscape) Icons.Default.StayCurrentPortrait else Icons.Default.StayCurrentLandscape,
-                                            contentDescription = if (isLandscape) stringResource(R.string.tech_portrait_mode) else stringResource(R.string.tech_landscape_view),
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-
-                                TvFocusableIconButton(
-                                    onClick = { showExportSheet = true },
-                                    isTv = isTv,
-                                    modifier = Modifier.size(if (isTv) 38.dp else 32.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = stringResource(R.string.tech_export_chart),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(if (isTv) 20.dp else 18.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    // Normal Top Bar
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.background,
-                        tonalElevation = 1.dp
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = if (isTv) 12.dp else 8.dp, vertical = if (isTv) 8.dp else 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                TvFocusableIconButton(
-                                    onClick = {
-                                        if (isLandscape) toggleLandscape(false)
-                                        onBack()
-                                    },
-                                    isTv = isTv
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = stringResource(R.string.tech_back),
-                                        tint = MaterialTheme.colorScheme.onBackground
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(if (isTv) 6.dp else 0.dp))
-                                Column {
-                                    val localizedTitle = getLocalizedTitle(currentCurrency.symbol, currentCurrency.title)
-                                    Text(
-                                        text = localizedTitle,
-                                        fontSize = if (isTv) 17.sp else 15.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                        fontFamily = getFontFamilyForText(localizedTitle),
-                                        maxLines = 1
-                                    )
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = currentCurrency.symbol,
-                                            fontSize = if (isTv) 12.sp else 11.sp,
-                                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-                                            fontWeight = FontWeight.Medium
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "•",
-                                            fontSize = 10.sp,
-                                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        val tfLabel = selectedTimeframe?.localizedTitle(isEnglish) ?: stringResource(R.string.tech_custom_zoom)
-                                        Text(
-                                            text = tfLabel,
-                                            fontSize = if (isTv) 12.sp else 11.sp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontFamily = getFontFamilyForText(tfLabel)
-                                        )
-                                    }
-                                }
-                            }
-
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(if (isTv) 6.dp else 2.dp)
-                            ) {
-                                // Animated Multi-EMA toggle pill
-                                val topEmaFocus = rememberTvFocusState(
-                                    isTv = isTv,
-                                    focusedScale = 1.08f,
-                                    unfocusedBorderColor = animatedEmaBorder
-                                )
-                                Surface(
-                                    onClick = { toggleHeaderEma() },
-                                    interactionSource = topEmaFocus.interactionSource,
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = animatedEmaBg,
-                                    border = BorderStroke(topEmaFocus.borderWidth, topEmaFocus.borderColor),
-                                    modifier = Modifier
-                                        .padding(end = 2.dp)
-                                        .scale(topEmaFocus.scale)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(
-                                            horizontal = if (isTv) 10.dp else 7.dp,
-                                            vertical = if (isTv) 6.dp else 5.dp
-                                        )
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(if (isTv) 8.dp else 7.dp)
-                                                .clip(CircleShape)
-                                                .background(if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.outline)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        val labelText = if (enabledEmas.size > 1) {
-                                            "EMA ${enabledEmas.size}".toLocalizedDigits(digitType)
-                                        } else "EMA"
-                                        Text(
-                                            text = labelText,
-                                            fontSize = if (isTv) 12.5.sp else 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                // Animated RSI button
-                                val topRsiFocus = rememberTvFocusState(
-                                    isTv = isTv,
-                                    focusedScale = 1.08f,
-                                    unfocusedBorderColor = animatedRsiBorder
-                                )
-                                Surface(
-                                    onClick = { showRsi = !showRsi },
-                                    interactionSource = topRsiFocus.interactionSource,
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = animatedRsiBg,
-                                    border = BorderStroke(topRsiFocus.borderWidth, topRsiFocus.borderColor),
-                                    modifier = Modifier
-                                        .padding(end = 2.dp)
-                                        .scale(topRsiFocus.scale)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(
-                                            horizontal = if (isTv) 10.dp else 7.dp,
-                                            vertical = if (isTv) 6.dp else 5.dp
-                                        )
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(if (isTv) 8.dp else 7.dp)
-                                                .clip(CircleShape)
-                                                .background(if (showRsi) rsiColor else MaterialTheme.colorScheme.outline)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "RSI",
-                                            fontSize = if (isTv) 12.5.sp else 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (showRsi) rsiColor else MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-
-                                // Quick Landscape toggle button
-                                if (!isTv) {
-                                    IconButton(
-                                        onClick = { toggleLandscape(!isLandscape) },
-                                        modifier = Modifier.size(34.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.ScreenRotation,
-                                            contentDescription = stringResource(R.string.tech_landscape_view),
-                                            tint = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-
-                                // Fullscreen button
-                                TvFocusableIconButton(
-                                    onClick = { isFullScreen = true },
-                                    isTv = isTv,
-                                    modifier = Modifier.size(if (isTv) 38.dp else 34.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Fullscreen,
-                                        contentDescription = stringResource(R.string.tech_fullscreen),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-
-                                // Share button
-                                TvFocusableIconButton(
-                                    onClick = { showExportSheet = true },
-                                    isTv = isTv,
-                                    modifier = Modifier.size(if (isTv) 38.dp else 34.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Share,
-                                        contentDescription = stringResource(R.string.tech_export_chart),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2. Timeframe Chips Row (including 1m and 5m intraday)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 10.dp, vertical = if (isTv) 5.dp else 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(if (isTv) 8.dp else 6.dp)
-            ) {
-                ChartTimeframe.entries.forEach { tf ->
-                    val isSelected = selectedTimeframe == tf
-                    val interactionSource = remember { MutableInteractionSource() }
-                    val isFocused by interactionSource.collectIsFocusedAsState()
-                    val chipScale by animateFloatAsState(
-                        targetValue = if (isTv && isFocused) 1.08f else 1.0f,
-                        label = "chipScale"
-                    )
-
-                    Surface(
-                        onClick = { selectedTimeframe = tf },
-                        interactionSource = interactionSource,
-                        shape = RoundedCornerShape(14.dp),
-                        color = when {
-                            isTv && isFocused -> MaterialTheme.colorScheme.primaryContainer
-                            isSelected -> MaterialTheme.colorScheme.primaryContainer
-                            else -> MaterialTheme.colorScheme.surfaceContainerLow
-                        },
-                        border = BorderStroke(
-                            if (isTv && isFocused) 2.5.dp else 1.dp,
-                            when {
-                                isTv && isFocused -> MaterialTheme.colorScheme.primary
-                                isSelected -> MaterialTheme.colorScheme.primary
-                                else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                            }
-                        ),
+            // 1. Header Bar: Dedicated Landscape Single-Row Bar OR Fullscreen/Normal Portrait Header
+            if (isEffectiveLandscape) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 2.dp
+                ) {
+                    Row(
                         modifier = Modifier
-                            .height(if (isTv) 36.dp else 28.dp)
-                            .zIndex(if (isTv && isFocused) 1f else 0f)
-                            .scale(chipScale)
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier.padding(horizontal = if (isTv) 14.dp else 10.dp),
-                            contentAlignment = Alignment.Center
+                        IconButton(
+                            onClick = {
+                                if (isLandscape) toggleLandscape(false) else onBack()
+                            },
+                            modifier = Modifier.size(32.dp)
                         ) {
-                            val tfTitle = tf.localizedTitle(isEnglish)
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.tech_back),
+                                tint = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        Column(modifier = Modifier.widthIn(min = 72.dp, max = 160.dp)) {
                             Text(
-                                text = tfTitle,
-                                fontSize = if (isTv) 13.sp else 11.sp,
-                                fontWeight = if (isSelected || (isTv && isFocused)) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (isSelected || (isTv && isFocused)) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                                fontFamily = getFontFamilyForText(tfTitle)
+                                text = currentCurrency.symbol,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                            val lsPrice = latestCandle?.close ?: currentCurrency.currentPrice
+                            AnimatedPriceText(
+                                price = lsPrice,
+                                symbol = currentCurrency.symbol,
+                                digitType = digitType,
+                                suffix = tomanShort,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                defaultColor = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        // Inline Timeframes take full horizontal center space in landscape
+                        TimeframeChipsRow(
+                            compact = true,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Drawing Tools toggle icon in landscape (keeps canvas spacious unless drawing)
+                        Surface(
+                            onClick = { showDrawToolsInLandscape = !showDrawToolsInLandscape },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (showDrawToolsInLandscape || activeTool != DrawingToolType.NONE) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            },
+                            border = BorderStroke(
+                                1.dp,
+                                if (showDrawToolsInLandscape || activeTool != DrawingToolType.NONE) {
+                                    MaterialTheme.colorScheme.primary
+                                } else Color.Transparent
+                            ),
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Brush,
+                                    contentDescription = stringResource(R.string.tech_drawing_tools),
+                                    tint = if (showDrawToolsInLandscape || activeTool != DrawingToolType.NONE) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+
+                        HeaderEmaAndRsiControls(compact = true, openMenuFromEma = true)
+
+                        if (isLandscape) {
+                            IconButton(
+                                onClick = { toggleLandscape(false) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.StayCurrentPortrait,
+                                    contentDescription = stringResource(R.string.tech_portrait_mode),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = { showExportSheet = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = stringResource(R.string.tech_export_chart),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
+            } else {
+                AnimatedContent(
+                    targetState = isFullScreen,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(300)) + slideInVertically(animationSpec = tween(300)) { -it / 2 })
+                            .togetherWith(fadeOut(animationSpec = tween(200)) + slideOutVertically(animationSpec = tween(200)) { -it / 2 })
+                    },
+                    label = "headerAnim"
+                ) { full ->
+                    if (full) {
+                        // Fullscreen compact header (Portrait/TV)
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 2.dp
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = if (isTv) 12.dp else 8.dp, vertical = if (isTv) 6.dp else 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TvFocusableIconButton(
+                                        onClick = {
+                                            isFullScreen = false
+                                            if (isLandscape) toggleLandscape(false)
+                                        },
+                                        isTv = isTv,
+                                        modifier = Modifier.size(if (isTv) 40.dp else 36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.FullscreenExit,
+                                            contentDescription = stringResource(R.string.tech_exit_fullscreen),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    val localizedTitle = getLocalizedTitle(currentCurrency.symbol, currentCurrency.title)
+                                    Text(
+                                        text = localizedTitle,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = if (isTv) 15.sp else 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        fontFamily = getFontFamilyForText(localizedTitle)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "(${currentCurrency.symbol})",
+                                        fontSize = if (isTv) 12.sp else 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    val fsPrice = latestCandle?.close ?: currentCurrency.currentPrice
+                                    AnimatedPriceText(
+                                        price = fsPrice,
+                                        symbol = currentCurrency.symbol,
+                                        digitType = digitType,
+                                        suffix = tomanShort,
+                                        fontSize = if (isTv) 14.sp else 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        defaultColor = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(if (isTv) 6.dp else 2.dp)
+                                ) {
+                                    HeaderEmaAndRsiControls(compact = true, openMenuFromEma = true)
+
+                                    if (!isTv) {
+                                        IconButton(
+                                            onClick = { toggleLandscape(!isLandscape) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isLandscape) Icons.Default.StayCurrentPortrait else Icons.Default.StayCurrentLandscape,
+                                                contentDescription = if (isLandscape) stringResource(R.string.tech_portrait_mode) else stringResource(R.string.tech_landscape_view),
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    TvFocusableIconButton(
+                                        onClick = { showExportSheet = true },
+                                        isTv = isTv,
+                                        modifier = Modifier.size(if (isTv) 38.dp else 32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = stringResource(R.string.tech_export_chart),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(if (isTv) 20.dp else 18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Normal Top Bar
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.background,
+                            tonalElevation = 1.dp
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = if (isTv) 12.dp else 8.dp, vertical = if (isTv) 8.dp else 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    TvFocusableIconButton(
+                                        onClick = {
+                                            if (isLandscape) toggleLandscape(false)
+                                            onBack()
+                                        },
+                                        isTv = isTv
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = stringResource(R.string.tech_back),
+                                            tint = MaterialTheme.colorScheme.onBackground
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(if (isTv) 6.dp else 0.dp))
+                                    Column {
+                                        val localizedTitle = getLocalizedTitle(currentCurrency.symbol, currentCurrency.title)
+                                        Text(
+                                            text = localizedTitle,
+                                            fontSize = if (isTv) 17.sp else 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onBackground,
+                                            fontFamily = getFontFamilyForText(localizedTitle),
+                                            maxLines = 1
+                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = currentCurrency.symbol,
+                                                fontSize = if (isTv) 12.sp else 11.sp,
+                                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "•",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            val tfLabel = selectedTimeframe?.localizedTitle(isEnglish) ?: stringResource(R.string.tech_custom_zoom)
+                                            Text(
+                                                text = tfLabel,
+                                                fontSize = if (isTv) 12.sp else 11.sp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.SemiBold,
+                                                fontFamily = getFontFamilyForText(tfLabel)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(if (isTv) 6.dp else 2.dp)
+                                ) {
+                                    HeaderEmaAndRsiControls(compact = false, openMenuFromEma = false)
+
+                                    if (!isTv) {
+                                        IconButton(
+                                            onClick = { toggleLandscape(!isLandscape) },
+                                            modifier = Modifier.size(34.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.ScreenRotation,
+                                                contentDescription = stringResource(R.string.tech_landscape_view),
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    TvFocusableIconButton(
+                                        onClick = { isFullScreen = true },
+                                        isTv = isTv,
+                                        modifier = Modifier.size(if (isTv) 38.dp else 34.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Fullscreen,
+                                            contentDescription = stringResource(R.string.tech_fullscreen),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+
+                                    TvFocusableIconButton(
+                                        onClick = { showExportSheet = true },
+                                        isTv = isTv,
+                                        modifier = Modifier.size(if (isTv) 38.dp else 34.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = stringResource(R.string.tech_export_chart),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
-            // 2.5 Multi-EMA Individual Toggles & Presets Bar (visible in normal view)
-            AnimatedVisibility(
-                visible = !isFullScreen,
-                enter = expandVertically(animationSpec = tween(260, easing = FastOutSlowInEasing)) + fadeIn(tween(220)),
-                exit = shrinkVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeOut(tween(160))
-            ) {
+            // 2. Timeframe Chips Row (Shown below header only when not in landscape single-row mode)
+            if (!isEffectiveLandscape) {
+                TimeframeChipsRow(compact = false, modifier = Modifier.fillMaxWidth())
+            }
+
+            // 2.5 Multi-EMA Individual Toggles & Presets Bar (visible in portrait normal view)
+            if (!isEffectiveLandscape) {
+                AnimatedVisibility(
+                    visible = !hideSecondaryPanels,
+                    enter = expandVertically(animationSpec = tween(260, easing = FastOutSlowInEasing)) + fadeIn(tween(220)),
+                    exit = shrinkVertically(animationSpec = tween(220, easing = FastOutSlowInEasing)) + fadeOut(tween(160))
+                ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -941,9 +1071,10 @@ fun TechnicalChartScreen(
                     }
                 }
             }
+            }
 
-            // 3. Drawing Toolbar with animated undo and clear (Hidden in TV mode to prioritize widescreen chart area)
-            if (!isTv) {
+            // 3. Drawing Toolbar (always visible in portrait non-TV; collapsible on demand in landscape)
+            if (!isTv && (!isEffectiveLandscape || showDrawToolsInLandscape)) {
                 DrawingToolbar(
                     activeTool = activeTool,
                     onToolSelected = { activeTool = it },
@@ -998,11 +1129,12 @@ fun TechnicalChartScreen(
                     drawingsAlpha = drawingsAlpha.value,
                     cornerRadius = chartCornerRadius,
                     isTvMode = isTv,
+                    isLandscapeMode = isEffectiveLandscape,
                     bullishColor = bullishColor,
                     bearishColor = bearishColor,
                     modifier = Modifier.fillMaxSize(),
                     onHoverCandleChanged = { hoveredCandle = it },
-                    onZoomChanged = { selectedTimeframe = null },
+                    onZoomChanged = { selectedTimeframeName = null },
                     onDrawingCreated = { newD ->
                         undoStack = undoStack + listOf(drawings)
                         drawings = drawings + newD
@@ -1030,12 +1162,13 @@ fun TechnicalChartScreen(
                 }
             }
 
-            // 5. HUD Info Bar (Collapsible with smooth animation, located directly below candlestick chart)
-            AnimatedVisibility(
-                visible = !isFullScreen,
-                enter = expandVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(300)),
-                exit = shrinkVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(200))
-            ) {
+            // 5. HUD Info Bar (Hidden immediately in landscape to maximize chart height)
+            if (!isEffectiveLandscape) {
+                AnimatedVisibility(
+                    visible = !hideSecondaryPanels,
+                    enter = expandVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(300)),
+                    exit = shrinkVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(200))
+                ) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1117,8 +1250,9 @@ fun TechnicalChartScreen(
                     }
                 }
             }
+            }
 
-            // 6. Five Bottom Carousels (Collapsible with smooth animation)
+            // 6. Five Bottom Carousels (Hidden immediately in landscape to maximize chart height)
             val currenciesList = remember(allCurrencies) { allCurrencies.filter { it.category == CurrencyType.Currency } }
             val goldList = remember(allCurrencies) { allCurrencies.filter { it.category == CurrencyType.GoldAndCoin } }
             val cryptoList = remember(allCurrencies) { allCurrencies.filter { it.category == CurrencyType.Crypto } }
@@ -1128,11 +1262,12 @@ fun TechnicalChartScreen(
                 }
             }
 
-            AnimatedVisibility(
-                visible = !isFullScreen,
-                enter = expandVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(300)),
-                exit = shrinkVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(200))
-            ) {
+            if (!isEffectiveLandscape) {
+                AnimatedVisibility(
+                    visible = !hideSecondaryPanels,
+                    enter = expandVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeIn(animationSpec = tween(300)),
+                    exit = shrinkVertically(animationSpec = tween(350, easing = FastOutSlowInEasing)) + fadeOut(animationSpec = tween(200))
+                ) {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceContainer,
@@ -1287,6 +1422,7 @@ fun TechnicalChartScreen(
                     }
                 }
             }
+            }
         }
     }
 
@@ -1318,6 +1454,7 @@ fun TechnicalChartScreen(
                     targetState = selectedExportFormat,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
                         .then(if (isTv) Modifier.widthIn(max = 600.dp) else Modifier),
                     transitionSpec = {
                         if (targetState != null) {

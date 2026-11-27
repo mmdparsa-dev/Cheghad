@@ -152,13 +152,19 @@ fun screenToChartPoint(
     maxPrice: Double,
     visibleCandles: List<CandleData>
 ): ChartPoint {
+    if (visibleCandles.isEmpty() || chartWidth <= 0f || mainHeight <= 0f) {
+        return ChartPoint(
+            time = visibleCandles.lastOrNull()?.time ?: System.currentTimeMillis(),
+            price = (minPrice + maxPrice) / 2.0
+        )
+    }
     val priceRange = if (maxPrice > minPrice) maxPrice - minPrice else 1.0
     val ratio = ((mainHeight - screenY) / mainHeight).toDouble().coerceIn(0.0, 1.0)
     val price = minPrice + (ratio * priceRange)
 
-    val candleWidth = if (visibleCandles.isNotEmpty()) chartWidth / visibleCandles.size else 1f
+    val candleWidth = chartWidth / visibleCandles.size
     val idx = (screenX / candleWidth).toInt().coerceIn(0, (visibleCandles.size - 1).coerceAtLeast(0))
-    val time = if (visibleCandles.isNotEmpty()) visibleCandles[idx].time else System.currentTimeMillis()
+    val time = visibleCandles[idx].time
 
     return ChartPoint(time, price)
 }
@@ -175,7 +181,7 @@ fun DrawScope.drawChartDrawings(
     digitType: String,
     drawingsAlpha: Float = 1f
 ) {
-    if (drawingsAlpha <= 0f) return
+    if (drawingsAlpha <= 0f || chartWidth <= 0f || mainHeight <= 0f) return
     for (drawing in drawings) {
         val baseColor = Color(drawing.color)
         val color = baseColor.copy(alpha = baseColor.alpha * drawingsAlpha)
@@ -302,7 +308,7 @@ fun DrawScope.drawChartDrawings(
                     drawRect(
                         color = color.copy(alpha = 0.14f * drawingsAlpha),
                         topLeft = Offset(minX, min(y382, y618)),
-                        size = Size(maxX - minX, abs(y618 - y382))
+                        size = Size((maxX - minX).coerceAtLeast(0f), abs(y618 - y382))
                     )
 
                     val fibAlphaInt = (255 * drawingsAlpha).toInt().coerceIn(0, 255)
@@ -505,6 +511,7 @@ fun TechnicalCandlestickChart(
     drawingsAlpha: Float = 1f,
     cornerRadius: Dp = 16.dp,
     isTvMode: Boolean = false,
+    isLandscapeMode: Boolean = false,
     bullishColor: Color = Color(0xFF00C853),
     bearishColor: Color = Color(0xFFFF3D00),
     modifier: Modifier = Modifier,
@@ -623,8 +630,16 @@ fun TechnicalCandlestickChart(
         }
     }
 
-    val priceAxisWidthDp = if (isTvMode) 76.dp else 46.dp
-    val timeAxisHeightDp = if (isTvMode) 30.dp else 18.dp
+    val priceAxisWidthDp = when {
+        isTvMode -> 76.dp
+        isLandscapeMode -> 56.dp
+        else -> 46.dp
+    }
+    val timeAxisHeightDp = when {
+        isTvMode -> 30.dp
+        isLandscapeMode -> 16.dp
+        else -> 18.dp
+    }
 
     // Gesture Modifier according to activeTool
     val gestureModifier = when (activeTool) {
@@ -650,7 +665,7 @@ fun TechnicalCandlestickChart(
                         onDragStart = { offset ->
                             val width = size.width.toFloat() - priceAxisWidthDp.toPx()
                             val offX = offset.x
-                            if (width > 0 && offX in 0f..width) {
+                            if (width > 0f && visibleCandles.isNotEmpty() && offX in 0f..width) {
                                 val candleWidth = width / visibleCandles.size
                                 val idx = (offX / candleWidth).toInt().coerceIn(0, visibleCandles.size - 1)
                                 hoveredIndex = startIndex + idx
@@ -660,7 +675,7 @@ fun TechnicalCandlestickChart(
                         onDrag = { change, _ ->
                             val width = size.width.toFloat() - priceAxisWidthDp.toPx()
                             val offX = change.position.x
-                            if (width > 0 && offX in 0f..width) {
+                            if (width > 0f && visibleCandles.isNotEmpty() && offX in 0f..width) {
                                 val candleWidth = width / visibleCandles.size
                                 val idx = (offX / candleWidth).toInt().coerceIn(0, visibleCandles.size - 1)
                                 hoveredIndex = startIndex + idx
@@ -853,17 +868,19 @@ fun TechnicalCandlestickChart(
             val totalHeight = size.height
 
             val timeAxisHeight = timeAxisHeightDp.toPx()
-            val usablePlotHeight = totalHeight - timeAxisHeight
+            val usablePlotHeight = (totalHeight - timeAxisHeight).coerceAtLeast(0f)
 
             val priceAxisWidth = priceAxisWidthDp.toPx()
-            val chartWidth = totalWidth - priceAxisWidth
+            val chartWidth = (totalWidth - priceAxisWidth).coerceAtLeast(0f)
 
             // Split into Main Chart and RSI Subchart with smooth animation
             val rsiHeight = usablePlotHeight * 0.24f * rsiAnimProgress
-            val mainHeight = usablePlotHeight - rsiHeight
+            val mainHeight = (usablePlotHeight - rsiHeight).coerceAtLeast(0f)
             val separatorY = mainHeight
 
-            if (visibleCandles.isEmpty()) return@Canvas
+            if (visibleCandles.isEmpty() || totalWidth <= 0f || totalHeight <= 0f || chartWidth <= 12f || mainHeight <= 12f) {
+                return@Canvas
+            }
 
             val minPrice = calcMinPrice
             val maxPrice = calcMaxPrice
@@ -1147,30 +1164,37 @@ fun TechnicalCandlestickChart(
                     }
                     val cpBounds = Rect()
                     crossPricePaint.getTextBounds(crossPriceText, 0, crossPriceText.length, cpBounds)
-                    val cpW = (cpBounds.width().toFloat() + 10.dp.toPx()).coerceAtMost(if (isTvMode) 72.dp.toPx() else 44.dp.toPx())
-                    val cpH = if (isTvMode) 22.dp.toPx() else 15.dp.toPx()
+                    val maxBadgeW = when {
+                        isTvMode -> 72.dp.toPx()
+                        isLandscapeMode -> 52.dp.toPx()
+                        else -> 44.dp.toPx()
+                    }
+                    val cpW = (cpBounds.width().toFloat() + 10.dp.toPx()).coerceAtMost(maxBadgeW)
+                    val cpH = (if (isTvMode) 22.dp.toPx() else 15.dp.toPx()).coerceAtMost(mainHeight)
                     val cpX = chartWidth + 2.dp.toPx()
-                    val cpY = (crossY - (cpH / 2f)).coerceIn(0f, mainHeight - cpH)
+                    val cpY = (crossY - (cpH / 2f)).coerceIn(0f, (mainHeight - cpH).coerceAtLeast(0f))
 
-                    drawRoundRect(
-                        color = Color(0xFF1E293B),
-                        topLeft = Offset(cpX, cpY),
-                        size = Size(cpW, cpH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = crosshairColor,
-                        topLeft = Offset(cpX, cpY),
-                        size = Size(cpW, cpH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                    drawContext.canvas.nativeCanvas.drawText(
-                        crossPriceText,
-                        cpX + 4.dp.toPx(),
-                        cpY + cpH - (if (isTvMode) 5.dp.toPx() else 3.5f.dp.toPx()),
-                        crossPricePaint
-                    )
+                    if (cpH >= 4f && cpW > 0f) {
+                        drawRoundRect(
+                            color = Color(0xFF1E293B),
+                            topLeft = Offset(cpX, cpY),
+                            size = Size(cpW, cpH),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                        )
+                        drawRoundRect(
+                            color = crosshairColor,
+                            topLeft = Offset(cpX, cpY),
+                            size = Size(cpW, cpH),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                        drawContext.canvas.nativeCanvas.drawText(
+                            crossPriceText,
+                            cpX + 4.dp.toPx(),
+                            cpY + cpH - (if (isTvMode) 5.dp.toPx() else 3.5f.dp.toPx()),
+                            crossPricePaint
+                        )
+                    }
 
                     // Crosshair Badge 2: Full Date & Time Badge on Bottom Time Axis
                     val crossTimeText = formatCandleDateTime(candle.time, digitType, calendarType)
@@ -1183,29 +1207,31 @@ fun TechnicalCandlestickChart(
                     val ctBounds = Rect()
                     crossTimePaint.getTextBounds(crossTimeText, 0, crossTimeText.length, ctBounds)
                     val ctW = (ctBounds.width().toFloat() + 12.dp.toPx()).coerceAtMost(chartWidth)
-                    val ctH = if (isTvMode) 24.dp.toPx() else 16.dp.toPx()
+                    val ctH = (if (isTvMode) 24.dp.toPx() else 16.dp.toPx()).coerceAtMost(timeAxisHeight.coerceAtLeast(1f))
                     val ctX = (crossX - (ctW / 2f)).coerceIn(0f, (chartWidth - ctW).coerceAtLeast(0f))
                     val ctY = usablePlotHeight + 2.dp.toPx()
 
-                    drawRoundRect(
-                        color = Color(0xFF1E293B),
-                        topLeft = Offset(ctX, ctY),
-                        size = Size(ctW, ctH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = crosshairColor,
-                        topLeft = Offset(ctX, ctY),
-                        size = Size(ctW, ctH),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                    drawContext.canvas.nativeCanvas.drawText(
-                        crossTimeText,
-                        ctX + 6.dp.toPx(),
-                        ctY + ctH - (if (isTvMode) 6.dp.toPx() else 4.dp.toPx()),
-                        crossTimePaint
-                    )
+                    if (ctH >= 4f && ctW > 0f) {
+                        drawRoundRect(
+                            color = Color(0xFF1E293B),
+                            topLeft = Offset(ctX, ctY),
+                            size = Size(ctW, ctH),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                        )
+                        drawRoundRect(
+                            color = crosshairColor,
+                            topLeft = Offset(ctX, ctY),
+                            size = Size(ctW, ctH),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()),
+                            style = Stroke(width = 1.dp.toPx())
+                        )
+                        drawContext.canvas.nativeCanvas.drawText(
+                            crossTimeText,
+                            ctX + 6.dp.toPx(),
+                            ctY + ctH - (if (isTvMode) 6.dp.toPx() else 4.dp.toPx()),
+                            crossTimePaint
+                        )
+                    }
                 }
             }
 
@@ -1218,7 +1244,7 @@ fun TechnicalCandlestickChart(
                 strokeWidth = 1.dp.toPx()
             )
 
-            val tickCount = 4
+            val tickCount = if (isTvMode || isLandscapeMode) 6 else 4
             val timeSpanMs = if (visibleCandles.size >= 2) visibleCandles.last().time - visibleCandles.first().time else 86400000L
             val timePaint = Paint().apply {
                 color = android.graphics.Color.GRAY
@@ -1248,7 +1274,7 @@ fun TechnicalCandlestickChart(
                 drawContext.canvas.nativeCanvas.drawText(
                     label,
                     labelX,
-                    timeAxisTop + (if (isTvMode) 18.dp.toPx() else 13.dp.toPx()),
+                    timeAxisTop + (if (isTvMode) 18.dp.toPx() else 12.dp.toPx()),
                     timePaint
                 )
             }
@@ -1267,10 +1293,15 @@ fun TechnicalCandlestickChart(
                 }
                 val bBounds = Rect()
                 badgePaint.getTextBounds(curPriceText, 0, curPriceText.length, bBounds)
-                val bW = (bBounds.width().toFloat() + 10.dp.toPx()).coerceAtMost(if (isTvMode) 68.dp.toPx() else 44.dp.toPx())
-                val bH = if (isTvMode) 22.dp.toPx() else 15.dp.toPx()
+                val maxCurBadgeW = when {
+                    isTvMode -> 72.dp.toPx()
+                    isLandscapeMode -> 52.dp.toPx()
+                    else -> 44.dp.toPx()
+                }
+                val bW = (bBounds.width().toFloat() + 10.dp.toPx()).coerceAtMost(maxCurBadgeW)
+                val bH = (if (isTvMode) 22.dp.toPx() else 15.dp.toPx()).coerceAtMost(mainHeight)
                 val bX = chartWidth + 2.dp.toPx()
-                val bY = (curY - (bH / 2f)).coerceIn(0f, mainHeight - bH)
+                val bY = (curY - (bH / 2f)).coerceIn(0f, (mainHeight - bH).coerceAtLeast(0f))
 
                 val lastCandleX = ((visibleCandles.size - 1) * candleWidth) + (candleWidth / 2f)
                 drawLine(
@@ -1281,18 +1312,20 @@ fun TechnicalCandlestickChart(
                     pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f), 0f)
                 )
 
-                drawRoundRect(
-                    color = curColor,
-                    topLeft = Offset(bX, bY),
-                    size = Size(bW, bH),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
-                )
-                drawContext.canvas.nativeCanvas.drawText(
-                    curPriceText,
-                    bX + 4.dp.toPx(),
-                    bY + bH - 3.5f.dp.toPx(),
-                    badgePaint
-                )
+                if (bH >= 4f && bW > 0f) {
+                    drawRoundRect(
+                        color = curColor,
+                        topLeft = Offset(bX, bY),
+                        size = Size(bW, bH),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx())
+                    )
+                    drawContext.canvas.nativeCanvas.drawText(
+                        curPriceText,
+                        bX + 4.dp.toPx(),
+                        bY + bH - 3.5f.dp.toPx(),
+                        badgePaint
+                    )
+                }
             }
         }
 
@@ -1307,7 +1340,7 @@ fun TechnicalCandlestickChart(
 
             Row(
                 modifier = Modifier
-                    .fillMaxWidth(if (isTvMode) 0.90f else 0.86f)
+                    .fillMaxWidth(if (isTvMode || isLandscapeMode) 0.92f else 0.86f)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(if (isTvMode) 8.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically
