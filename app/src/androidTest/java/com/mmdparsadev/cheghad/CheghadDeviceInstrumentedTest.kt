@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -230,5 +231,51 @@ class CheghadDeviceInstrumentedTest {
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithText(disabledText).assertIsDisplayed()
+    }
+
+    @Test
+    fun technicalChart_tvModeShowsControlsAndStepsCandlesOnDevice() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val prevDesc = context.getString(R.string.tech_tv_prev_candle)
+        val resetDesc = context.getString(R.string.tech_tv_zoom_reset)
+        val nowMs = System.currentTimeMillis()
+        val candles = (1..40).map { i ->
+            val p = 100_000.0 + i * 20.0
+            CandleData(
+                time = nowMs - (40 - i) * 60_000L,
+                open = p - 10.0,
+                high = p + 15.0,
+                low = p - 15.0,
+                close = p,
+                volume = 10.0,
+                ema25 = p - 5.0,
+                ema200 = p - 30.0,
+                rsi = 52.0
+            )
+        }
+        var inspected: CandleData? = null
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                TechnicalCandlestickChart(
+                    candles = candles,
+                    currency = sampleCurrency(),
+                    timeframe = ChartTimeframe.MIN1,
+                    enabledEmas = setOf(EmaPeriod.EMA_25, EmaPeriod.EMA_200),
+                    showRsi = true,
+                    isTvMode = true,
+                    digitType = "en",
+                    calendarType = "gregorian",
+                    onHoverCandleChanged = { inspected = it }
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithContentDescription(prevDesc).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithContentDescription(resetDesc).assertIsDisplayed()
+        composeTestRule.waitForIdle()
+
+        assertTrue("Expected TV step control to inspect a candle", inspected != null)
     }
 }
