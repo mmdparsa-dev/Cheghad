@@ -29,33 +29,38 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease -x validateSigningRelease -x lint -x test --no-daemon
+      - name: Build Direct & Store Release APKs
+        run: ./gradlew assembleDirectRelease assembleStoreRelease -x validateSigningDirectRelease -x validateSigningStoreRelease -x lint -x test --no-daemon
 
-   
-      - name: Sign Release APK
+      - name: Sign Release APKs
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > keystore.jks
-          APK_RAW=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          
-        
           BUILD_TOOLS_DIR=$(ls -d /usr/local/lib/android/sdk/build-tools/* | sort -V | tail -n 1)
-          
-       
-          $BUILD_TOOLS_DIR/zipalign -v -p 4 "$APK_RAW" Cheghad-release.apk
+
+          DIRECT_RAW=$(find app/build/outputs/apk/direct/release -name "*.apk" | head -n 1)
+          $BUILD_TOOLS_DIR/zipalign -v -p 4 "$DIRECT_RAW" Cheghad-release.apk
           $BUILD_TOOLS_DIR/apksigner sign --ks keystore.jks \
             --ks-pass pass:"${{ secrets.KEYSTORE_PASSWORD }}" \
             --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
             --key-pass pass:"${{ secrets.KEY_PASSWORD }}" \
             --out Cheghad-release.apk Cheghad-release.apk
-          
-       
+
+          STORE_RAW=$(find app/build/outputs/apk/store/release -name "*.apk" | head -n 1)
+          $BUILD_TOOLS_DIR/zipalign -v -p 4 "$STORE_RAW" Cheghad-store-release.apk
+          $BUILD_TOOLS_DIR/apksigner sign --ks keystore.jks \
+            --ks-pass pass:"${{ secrets.KEYSTORE_PASSWORD }}" \
+            --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
+            --key-pass pass:"${{ secrets.KEY_PASSWORD }}" \
+            --out Cheghad-store-release.apk Cheghad-store-release.apk
+
           rm keystore.jks
 
-      - name: Attach APK to GitHub Release
+      - name: Attach APKs to GitHub Release
         uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
         with:
-          files: Cheghad-release.apk
+          files: |
+            Cheghad-release.apk
+            Cheghad-store-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

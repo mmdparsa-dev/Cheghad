@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.mmdparsadev.cheghad.BuildConfig
 import com.mmdparsadev.cheghad.R
 import com.mmdparsadev.cheghad.data.update.GitHubRelease
 import com.mmdparsadev.cheghad.data.update.UpdateManager
@@ -43,6 +44,10 @@ fun UpdateDialog(
     digitType: String = "fa",
     onDismiss: () -> Unit
 ) {
+    if (!BuildConfig.ENABLE_SELF_UPDATE) {
+        SideEffect { onDismiss() }
+        return
+    }
     val context = LocalContext.current
     val isTv = isTvDevice()
     val coroutineScope = rememberCoroutineScope()
@@ -208,7 +213,7 @@ fun UpdateDialog(
                     )
                     Button(
                         onClick = {
-                            if (apkAsset != null) {
+                            if (BuildConfig.ENABLE_SELF_UPDATE && apkAsset != null) {
                                 isDownloading = true
                                 errorMessage = null
                                 downloadProgress = 0

@@ -8,6 +8,7 @@ import androidx.core.content.FileProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.mmdparsadev.cheghad.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
@@ -63,6 +64,9 @@ object UpdateManager {
         .build()
 
     suspend fun checkForUpdate(currentVersionName: String, downloadBeta: Boolean = false): Result<GitHubRelease?> = withContext(Dispatchers.IO) {
+        if (!BuildConfig.ENABLE_SELF_UPDATE) {
+            return@withContext Result.success(null)
+        }
         runCatching {
             val request = Request.Builder()
                 .url(GITHUB_API_URL)
@@ -138,6 +142,9 @@ object UpdateManager {
         downloadUrl: String,
         onProgress: (Int) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
+        if (!BuildConfig.ENABLE_SELF_UPDATE) {
+            return@withContext Result.failure(UnsupportedOperationException("Self-update disabled in store flavor"))
+        }
         runCatching {
             val request = Request.Builder()
                 .url(downloadUrl)
@@ -185,6 +192,7 @@ object UpdateManager {
     }
 
     fun installApk(context: Context, apkFile: File): Boolean {
+        if (!BuildConfig.ENABLE_SELF_UPDATE) return false
         return try {
             val uri: Uri = FileProvider.getUriForFile(
                 context,

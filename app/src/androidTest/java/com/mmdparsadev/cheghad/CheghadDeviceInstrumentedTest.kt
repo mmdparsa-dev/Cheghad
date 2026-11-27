@@ -2,8 +2,12 @@ package com.mmdparsadev.cheghad
 
 import android.content.Context
 import android.content.res.Configuration
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -277,5 +281,42 @@ class CheghadDeviceInstrumentedTest {
         composeTestRule.waitForIdle()
 
         assertTrue("Expected TV step control to inspect a candle", inspected != null)
+    }
+
+    @Test
+    fun technicalChart_handlesTinyAndLandscapeViewportWithoutCrashingOnDevice() {
+        val nowMs = System.currentTimeMillis()
+        val candles = (1..30).map { i ->
+            val p = 100_000.0 + i * 20.0
+            CandleData(
+                time = nowMs - (30 - i) * 60_000L,
+                open = p - 10.0,
+                high = p + 15.0,
+                low = p - 15.0,
+                close = p,
+                volume = 10.0,
+                ema25 = p - 5.0,
+                ema200 = p - 30.0,
+                rsi = 52.0
+            )
+        }
+
+        composeTestRule.setContent {
+            MaterialTheme {
+                Box(modifier = Modifier.width(640.dp).height(20.dp)) {
+                    TechnicalCandlestickChart(
+                        candles = candles,
+                        currency = sampleCurrency(),
+                        timeframe = ChartTimeframe.MIN1,
+                        enabledEmas = EmaPeriod.entries.toSet(),
+                        showRsi = true,
+                        isLandscapeMode = true,
+                        digitType = "en",
+                        calendarType = "gregorian"
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
     }
 }

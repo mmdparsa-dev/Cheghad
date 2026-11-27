@@ -214,6 +214,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun handleUpdateIntent(intent: Intent?) {
+        if (!BuildConfig.ENABLE_SELF_UPDATE) return
         if (intent?.getBooleanExtra("SHOW_UPDATE_DIALOG", false) == true) {
             val releaseData = intent.getStringExtra("RELEASE_DATA")
             val release = if (!releaseData.isNullOrBlank()) {
@@ -308,8 +309,8 @@ class MainActivity : AppCompatActivity() {
                 val colorSeedName = userSettings.colorSeed
                 val selectedAppColor = AppThemeColor.entries.find { it.name == colorSeedName } ?: AppThemeColor.DEFAULT
 
-                var isFirstLaunch by remember { mutableStateOf(sharedPrefs.getBoolean("first_launch", true)) }
-                var currentScreen by remember { mutableStateOf("home") }
+                var isFirstLaunch by rememberSaveable { mutableStateOf(sharedPrefs.getBoolean("first_launch", true)) }
+                var currentScreen by rememberSaveable { mutableStateOf("home") }
 
                 val uiState by viewModel.uiState.collectAsState()
                 val context = LocalContext.current
@@ -325,6 +326,13 @@ class MainActivity : AppCompatActivity() {
                 var selectedItemForDetail by remember { mutableStateOf<CurrencyItem?>(null) }
                 var selectedAlarmForEdit by remember { mutableStateOf<AlarmEntity?>(null) }
                 var selectedTechnicalAsset by remember { mutableStateOf<CurrencyItem?>(null) }
+                var selectedTechnicalSymbol by rememberSaveable { mutableStateOf<String?>(null) }
+
+                val openTechnicalChart: (CurrencyItem?) -> Unit = { item ->
+                    selectedTechnicalAsset = item
+                    selectedTechnicalSymbol = item?.symbol
+                    currentScreen = "technical_chart"
+                }
 
                 androidx.activity.compose.BackHandler(currentScreen == "technical_chart") {
                     currentScreen = "home"
@@ -425,13 +433,15 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
 
-                    // Schedule background WorkManager periodic check
-                    UpdateWorker.schedulePeriodicCheck(context)
+                    // Schedule background WorkManager periodic check and immediate update lookup
+                    if (BuildConfig.ENABLE_SELF_UPDATE) {
+                        UpdateWorker.schedulePeriodicCheck(context)
 
-                    val currentVersion = BuildConfig.VERSION_NAME
-                    UpdateManager.checkForUpdate(currentVersion, userSettings.downloadBetaVersions).onSuccess { release ->
-                        if (release != null) {
-                            UpdateManager.pendingUpdateRelease = release
+                        val currentVersion = BuildConfig.VERSION_NAME
+                        UpdateManager.checkForUpdate(currentVersion, userSettings.downloadBetaVersions).onSuccess { release ->
+                            if (release != null) {
+                                UpdateManager.pendingUpdateRelease = release
+                            }
                         }
                     }
                 }
@@ -461,8 +471,7 @@ class MainActivity : AppCompatActivity() {
 
                 val handleAssetClick: (CurrencyItem) -> Unit = { item ->
                     if (userSettings.assetClickAction == "technical") {
-                        selectedTechnicalAsset = item
-                        currentScreen = "technical_chart"
+                        openTechnicalChart(item)
                     } else {
                         selectedItemForDetail = item
                     }
@@ -979,23 +988,25 @@ class MainActivity : AppCompatActivity() {
                                         onShowAgenciesSheetChanged = { showAgenciesSheet = it },
                                         isCheckingUpdates = isCheckingUpdatesManually,
                                         onCheckForUpdates = {
-                                            isCheckingUpdatesManually = true
-                                            coroutineScope.launch {
-                                                val currentVersion = BuildConfig.VERSION_NAME
-                                                val result = UpdateManager.checkForUpdate(currentVersion, userSettings.downloadBetaVersions)
-                                                isCheckingUpdatesManually = false
-                                                result.fold(
-                                                    onSuccess = { release ->
-                                                        if (release != null) {
-                                                            UpdateManager.pendingUpdateRelease = release
-                                                        } else {
-                                                            Toast.makeText(context, "شما از آخرین نسخه برنامه ($currentVersion) استفاده می‌کنید.", Toast.LENGTH_LONG).show()
+                                            if (BuildConfig.ENABLE_SELF_UPDATE) {
+                                                isCheckingUpdatesManually = true
+                                                coroutineScope.launch {
+                                                    val currentVersion = BuildConfig.VERSION_NAME
+                                                    val result = UpdateManager.checkForUpdate(currentVersion, userSettings.downloadBetaVersions)
+                                                    isCheckingUpdatesManually = false
+                                                    result.fold(
+                                                        onSuccess = { release ->
+                                                            if (release != null) {
+                                                                UpdateManager.pendingUpdateRelease = release
+                                                            } else {
+                                                                Toast.makeText(context, "شما از آخرین نسخه برنامه ($currentVersion) استفاده می‌کنید.", Toast.LENGTH_LONG).show()
+                                                            }
+                                                        },
+                                                        onFailure = {
+                                                            Toast.makeText(context, "خطا در برقراری ارتباط با گیت‌هاب", Toast.LENGTH_SHORT).show()
                                                         }
-                                                    },
-                                                    onFailure = {
-                                                        Toast.makeText(context, "خطا در برقراری ارتباط با گیت‌هاب", Toast.LENGTH_SHORT).show()
-                                                    }
-                                                )
+                                                    )
+                                                }
                                             }
                                         },
                                         downloadBetaVersions = userSettings.downloadBetaVersions,
@@ -1029,8 +1040,11 @@ class MainActivity : AppCompatActivity() {
                                     } catch (_: Exception) {
                                         Color(0xFFFF3D00)
                                     }
+                                    val resolvedTechnicalAsset = selectedTechnicalAsset
+                                        ?: selectedTechnicalSymbol?.let { sym -> uiState.items.find { it.symbol == sym } }
+                                        ?: fallback
                                     com.mmdparsadev.cheghad.ui.technical.TechnicalChartScreen(
-                                        initialCurrency = selectedTechnicalAsset ?: fallback,
+                                        initialCurrency = resolvedTechnicalAsset,
                                         allCurrencies = uiState.items,
                                         digitType = digitType,
                                         calendarType = userSettings.calendarType,
@@ -1052,8 +1066,7 @@ class MainActivity : AppCompatActivity() {
                                             selectedAlarmForEdit = alarm
                                         },
                                         onOpenTechnicalChart = {
-                                            selectedTechnicalAsset = uiState.items.firstOrNull()
-                                            currentScreen = "technical_chart"
+                                            openTechnicalChart(uiState.items.firstOrNull())
                                         }
                                     )
                                 }
@@ -1165,7 +1178,9 @@ class MainActivity : AppCompatActivity() {
                                     modifier = Modifier.fillMaxSize(),
                                     containerColor = MaterialTheme.colorScheme.background,
                                     topBar = {
-                                        ConnectivityStatusBanner(uiState = uiState)
+                                        if (currentScreen != "technical_chart") {
+                                            ConnectivityStatusBanner(uiState = uiState)
+                                        }
                                     }
                                 ) { innerPadding ->
                                     CheghadAppContent(innerPadding)
@@ -1187,9 +1202,8 @@ class MainActivity : AppCompatActivity() {
                             onFetchHistory = { range -> viewModel.fetchHistory(item.symbol, range.id, item.currentPrice, item.changePercentage) },
                             onDismiss = { selectedItemForDetail = null },
                             onOpenTechnicalChart = {
-                                selectedTechnicalAsset = item
                                 selectedItemForDetail = null
-                                currentScreen = "technical_chart"
+                                openTechnicalChart(item)
                             },
                             onSaveAlarm = { price, isAbove ->
                                 viewModel.addAlarm(
@@ -1219,12 +1233,14 @@ class MainActivity : AppCompatActivity() {
                     }
 
                     // Update Dialog
-                    availableUpdateRelease?.let { release ->
-                        UpdateDialog(
-                            release = release,
-                            digitType = digitType,
-                            onDismiss = { UpdateManager.pendingUpdateRelease = null }
-                        )
+                    if (BuildConfig.ENABLE_SELF_UPDATE) {
+                        availableUpdateRelease?.let { release ->
+                            UpdateDialog(
+                                release = release,
+                                digitType = digitType,
+                                onDismiss = { UpdateManager.pendingUpdateRelease = null }
+                            )
+                        }
                     }
                 }
             }
@@ -5723,79 +5739,81 @@ fun SettingsScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        if (BuildConfig.ENABLE_SELF_UPDATE) {
+            Spacer(modifier = Modifier.height(20.dp))
 
-        // Check for Updates Section
-        SettingsCard(
-            title = androidx.compose.ui.res.stringResource(R.string.settings_update_check_title),
-            subtitle = stringResource(R.string.version_label, BuildConfig.VERSION_NAME),
-            icon = Icons.Default.SystemUpdate
-        ) {
-            Column {
-                SettingsSwitchRow(
-                    title = stringResource(R.string.settings_update_beta_title),
-                    description = stringResource(R.string.settings_update_beta_subtitle),
-                    isChecked = downloadBetaVersions,
-                    onCheckedChange = onDownloadBetaVersionsChanged
-                )
+            // Check for Updates Section
+            SettingsCard(
+                title = androidx.compose.ui.res.stringResource(R.string.settings_update_check_title),
+                subtitle = stringResource(R.string.version_label, BuildConfig.VERSION_NAME),
+                icon = Icons.Default.SystemUpdate
+            ) {
+                Column {
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_update_beta_title),
+                        description = stringResource(R.string.settings_update_beta_subtitle),
+                        isChecked = downloadBetaVersions,
+                        onCheckedChange = onDownloadBetaVersionsChanged
+                    )
 
-                Spacer(modifier = Modifier.height(adaptiveDp(16f)))
+                    Spacer(modifier = Modifier.height(adaptiveDp(16f)))
 
-                val checkUpdateFocus = rememberTvFocusState(
-                    isTv = isTv,
-                    focusedScale = 1.02f,
-                    focusedBorderWidth = 2.5.dp,
-                    unfocusedBorderWidth = 1.dp,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                )
-                Surface(
-                    onClick = onCheckForUpdates,
-                    interactionSource = checkUpdateFocus.interactionSource,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .scale(checkUpdateFocus.scale)
-                        .clip(RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    color = if (checkUpdateFocus.isFocused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                    border = BorderStroke(checkUpdateFocus.borderWidth, checkUpdateFocus.borderColor)
-                ) {
-                    Row(
+                    val checkUpdateFocus = rememberTvFocusState(
+                        isTv = isTv,
+                        focusedScale = 1.02f,
+                        focusedBorderWidth = 2.5.dp,
+                        unfocusedBorderWidth = 1.dp,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                    )
+                    Surface(
+                        onClick = onCheckForUpdates,
+                        interactionSource = checkUpdateFocus.interactionSource,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .scale(checkUpdateFocus.scale)
+                            .clip(RoundedCornerShape(16.dp)),
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (checkUpdateFocus.isFocused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        border = BorderStroke(checkUpdateFocus.borderWidth, checkUpdateFocus.borderColor)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (isCheckingUpdates) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isCheckingUpdates) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = if (isCheckingUpdates) stringResource(R.string.settings_update_checking) else stringResource(R.string.settings_update_check_btn),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                             }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = if (isCheckingUpdates) stringResource(R.string.settings_update_checking) else stringResource(R.string.settings_update_check_btn),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp)
                             )
                         }
-
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(14.dp)
-                        )
                     }
                 }
             }

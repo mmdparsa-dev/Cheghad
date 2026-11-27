@@ -29,6 +29,7 @@ class UpdateWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
+        if (!BuildConfig.ENABLE_SELF_UPDATE) return Result.success()
         return try {
             val downloadBeta = appContext.dataStore.data.map { 
                 it[booleanPreferencesKey("download_beta_versions")] ?: false 
@@ -64,6 +65,7 @@ class UpdateWorker(
         const val NOTIFICATION_ID = 2026
 
         fun schedulePeriodicCheck(context: Context) {
+            if (!BuildConfig.ENABLE_SELF_UPDATE) return
             try {
                 val constraints = Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -85,6 +87,7 @@ class UpdateWorker(
         }
 
         fun sendUpdateNotification(context: Context, release: GitHubRelease) {
+            if (!BuildConfig.ENABLE_SELF_UPDATE) return
             try {
                 val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
