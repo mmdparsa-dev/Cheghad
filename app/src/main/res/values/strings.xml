@@ -244,6 +244,7 @@
     <string name="tech_fullscreen">Fullscreen</string>
     <string name="tech_landscape_view">Landscape view</string>
     <string name="tech_portrait_mode">Portrait mode</string>
+    <string name="tech_drawing_tools">Drawing tools</string>
     <string name="tech_export_chart">Export chart</string>
     <string name="tech_back">Back</string>
     <string name="tech_toman_short"> T</string>
