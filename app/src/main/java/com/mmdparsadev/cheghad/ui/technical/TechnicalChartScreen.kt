@@ -23,11 +23,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import android.app.Activity
-import android.app.UiModeManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
-import android.content.res.Configuration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -49,6 +47,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.zIndex
+import com.mmdparsadev.cheghad.ui.TvFocusableIconButton
+import com.mmdparsadev.cheghad.ui.rememberTvFocusState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -143,6 +145,7 @@ import com.mmdparsadev.cheghad.data.models.EmaTouchStatus
 import com.mmdparsadev.cheghad.data.repository.TechnicalRepository
 import com.mmdparsadev.cheghad.formatPrice
 import com.mmdparsadev.cheghad.getLocalizedTitle
+import com.mmdparsadev.cheghad.isTvDevice
 import com.mmdparsadev.cheghad.toLocalizedDigits
 import com.mmdparsadev.cheghad.ui.theme.getFontFamilyForText
 import kotlinx.coroutines.launch
@@ -153,15 +156,6 @@ import kotlin.math.roundToInt
 
 enum class ExportFormat {
     PNG, PDF
-}
-
-@Composable
-fun isTvDevice(): Boolean {
-    val context = LocalContext.current
-    val uiModeManager = remember(context) {
-        context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
-    }
-    return uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
@@ -427,15 +421,19 @@ fun TechnicalChartScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                .padding(horizontal = if (isTv) 12.dp else 8.dp, vertical = if (isTv) 6.dp else 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                IconButton(onClick = {
-                                    isFullScreen = false
-                                    if (isLandscape) toggleLandscape(false)
-                                }) {
+                                TvFocusableIconButton(
+                                    onClick = {
+                                        isFullScreen = false
+                                        if (isLandscape) toggleLandscape(false)
+                                    },
+                                    isTv = isTv,
+                                    modifier = Modifier.size(if (isTv) 40.dp else 36.dp)
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.FullscreenExit,
                                         contentDescription = stringResource(R.string.tech_exit_fullscreen),
@@ -446,66 +444,91 @@ fun TechnicalChartScreen(
                                 Text(
                                     text = localizedTitle,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 13.sp,
+                                    fontSize = if (isTv) 15.sp else 13.sp,
                                     color = MaterialTheme.colorScheme.onSurface,
                                     fontFamily = getFontFamilyForText(localizedTitle)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "(${currentCurrency.symbol})",
-                                    fontSize = 11.sp,
+                                    fontSize = if (isTv) 12.sp else 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 val fsPrice = latestCandle?.close ?: currentCurrency.currentPrice
                                 AnimatedPriceText(
                                     price = fsPrice,
                                     symbol = currentCurrency.symbol,
                                     digitType = digitType,
                                     suffix = tomanShort,
-                                    fontSize = 12.sp,
+                                    fontSize = if (isTv) 14.sp else 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     defaultColor = MaterialTheme.colorScheme.primary
                                 )
                             }
 
                             // Multi-EMA dropdown, RSI, Landscape & Export
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(if (isTv) 6.dp else 2.dp)
+                            ) {
+                                val fsEmaFocus = rememberTvFocusState(
+                                    isTv = isTv,
+                                    focusedScale = 1.08f,
+                                    unfocusedBorderColor = animatedEmaBorder
+                                )
                                 Box {
                                     Surface(
                                         onClick = { showEmaMenu = true },
-                                        shape = RoundedCornerShape(8.dp),
+                                        interactionSource = fsEmaFocus.interactionSource,
+                                        shape = RoundedCornerShape(if (isTv) 10.dp else 8.dp),
                                         color = animatedEmaBg,
-                                        border = BorderStroke(1.dp, animatedEmaBorder),
-                                        modifier = Modifier.padding(end = 4.dp)
+                                        border = BorderStroke(fsEmaFocus.borderWidth, fsEmaFocus.borderColor),
+                                        modifier = Modifier
+                                            .padding(end = 2.dp)
+                                            .scale(fsEmaFocus.scale)
                                     ) {
                                         val emaBadge = if (enabledEmas.isNotEmpty()) {
                                             "EMA (${enabledEmas.size})".toLocalizedDigits(digitType)
                                         } else "EMA"
                                         Text(
                                             text = emaBadge,
-                                            fontSize = 10.sp,
+                                            fontSize = if (isTv) 12.sp else 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                            modifier = Modifier.padding(
+                                                horizontal = if (isTv) 10.dp else 6.dp,
+                                                vertical = if (isTv) 5.dp else 3.dp
+                                            )
                                         )
                                     }
                                     EmaDropdownMenu()
                                 }
 
+                                val fsRsiFocus = rememberTvFocusState(
+                                    isTv = isTv,
+                                    focusedScale = 1.08f,
+                                    unfocusedBorderColor = animatedRsiBorder
+                                )
                                 Surface(
                                     onClick = { showRsi = !showRsi },
-                                    shape = RoundedCornerShape(8.dp),
+                                    interactionSource = fsRsiFocus.interactionSource,
+                                    shape = RoundedCornerShape(if (isTv) 10.dp else 8.dp),
                                     color = animatedRsiBg,
-                                    border = BorderStroke(1.dp, animatedRsiBorder),
-                                    modifier = Modifier.padding(end = 4.dp)
+                                    border = BorderStroke(fsRsiFocus.borderWidth, fsRsiFocus.borderColor),
+                                    modifier = Modifier
+                                        .padding(end = 2.dp)
+                                        .scale(fsRsiFocus.scale)
                                 ) {
                                     Text(
                                         text = "RSI",
-                                        fontSize = 10.sp,
+                                        fontSize = if (isTv) 12.sp else 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (showRsi) rsiColor else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        modifier = Modifier.padding(
+                                            horizontal = if (isTv) 10.dp else 6.dp,
+                                            vertical = if (isTv) 5.dp else 3.dp
+                                        )
                                     )
                                 }
 
@@ -523,15 +546,16 @@ fun TechnicalChartScreen(
                                     }
                                 }
 
-                                IconButton(
+                                TvFocusableIconButton(
                                     onClick = { showExportSheet = true },
-                                    modifier = Modifier.size(32.dp)
+                                    isTv = isTv,
+                                    modifier = Modifier.size(if (isTv) 38.dp else 32.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Share,
                                         contentDescription = stringResource(R.string.tech_export_chart),
                                         tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(if (isTv) 20.dp else 18.dp)
                                     )
                                 }
                             }
@@ -547,7 +571,7 @@ fun TechnicalChartScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
+                                .padding(horizontal = if (isTv) 12.dp else 8.dp, vertical = if (isTv) 8.dp else 6.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -555,21 +579,25 @@ fun TechnicalChartScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                IconButton(onClick = {
-                                    if (isLandscape) toggleLandscape(false)
-                                    onBack()
-                                }) {
+                                TvFocusableIconButton(
+                                    onClick = {
+                                        if (isLandscape) toggleLandscape(false)
+                                        onBack()
+                                    },
+                                    isTv = isTv
+                                ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                         contentDescription = stringResource(R.string.tech_back),
                                         tint = MaterialTheme.colorScheme.onBackground
                                     )
                                 }
+                                Spacer(modifier = Modifier.width(if (isTv) 6.dp else 0.dp))
                                 Column {
                                     val localizedTitle = getLocalizedTitle(currentCurrency.symbol, currentCurrency.title)
                                     Text(
                                         text = localizedTitle,
-                                        fontSize = 15.sp,
+                                        fontSize = if (isTv) 17.sp else 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onBackground,
                                         fontFamily = getFontFamilyForText(localizedTitle),
@@ -578,7 +606,7 @@ fun TechnicalChartScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                             text = currentCurrency.symbol,
-                                            fontSize = 11.sp,
+                                            fontSize = if (isTv) 12.sp else 11.sp,
                                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
                                             fontWeight = FontWeight.Medium
                                         )
@@ -592,7 +620,7 @@ fun TechnicalChartScreen(
                                         val tfLabel = selectedTimeframe?.localizedTitle(isEnglish) ?: stringResource(R.string.tech_custom_zoom)
                                         Text(
                                             text = tfLabel,
-                                            fontSize = 11.sp,
+                                            fontSize = if (isTv) 12.sp else 11.sp,
                                             color = MaterialTheme.colorScheme.primary,
                                             fontWeight = FontWeight.SemiBold,
                                             fontFamily = getFontFamilyForText(tfLabel)
@@ -601,22 +629,36 @@ fun TechnicalChartScreen(
                                 }
                             }
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(if (isTv) 6.dp else 2.dp)
+                            ) {
                                 // Animated Multi-EMA toggle pill
+                                val topEmaFocus = rememberTvFocusState(
+                                    isTv = isTv,
+                                    focusedScale = 1.08f,
+                                    unfocusedBorderColor = animatedEmaBorder
+                                )
                                 Surface(
                                     onClick = { toggleHeaderEma() },
+                                    interactionSource = topEmaFocus.interactionSource,
                                     shape = RoundedCornerShape(12.dp),
                                     color = animatedEmaBg,
-                                    border = BorderStroke(1.dp, animatedEmaBorder),
-                                    modifier = Modifier.padding(end = 4.dp)
+                                    border = BorderStroke(topEmaFocus.borderWidth, topEmaFocus.borderColor),
+                                    modifier = Modifier
+                                        .padding(end = 2.dp)
+                                        .scale(topEmaFocus.scale)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)
+                                        modifier = Modifier.padding(
+                                            horizontal = if (isTv) 10.dp else 7.dp,
+                                            vertical = if (isTv) 6.dp else 5.dp
+                                        )
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(7.dp)
+                                                .size(if (isTv) 8.dp else 7.dp)
                                                 .clip(CircleShape)
                                                 .background(if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.outline)
                                         )
@@ -626,7 +668,7 @@ fun TechnicalChartScreen(
                                         } else "EMA"
                                         Text(
                                             text = labelText,
-                                            fontSize = 11.sp,
+                                            fontSize = if (isTv) 12.5.sp else 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (hasAnyEma) emaHeaderColor else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -634,27 +676,38 @@ fun TechnicalChartScreen(
                                 }
 
                                 // Animated RSI button
+                                val topRsiFocus = rememberTvFocusState(
+                                    isTv = isTv,
+                                    focusedScale = 1.08f,
+                                    unfocusedBorderColor = animatedRsiBorder
+                                )
                                 Surface(
                                     onClick = { showRsi = !showRsi },
+                                    interactionSource = topRsiFocus.interactionSource,
                                     shape = RoundedCornerShape(12.dp),
                                     color = animatedRsiBg,
-                                    border = BorderStroke(1.dp, animatedRsiBorder),
-                                    modifier = Modifier.padding(end = 2.dp)
+                                    border = BorderStroke(topRsiFocus.borderWidth, topRsiFocus.borderColor),
+                                    modifier = Modifier
+                                        .padding(end = 2.dp)
+                                        .scale(topRsiFocus.scale)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 5.dp)
+                                        modifier = Modifier.padding(
+                                            horizontal = if (isTv) 10.dp else 7.dp,
+                                            vertical = if (isTv) 6.dp else 5.dp
+                                        )
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(7.dp)
+                                                .size(if (isTv) 8.dp else 7.dp)
                                                 .clip(CircleShape)
                                                 .background(if (showRsi) rsiColor else MaterialTheme.colorScheme.outline)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
                                             text = "RSI",
-                                            fontSize = 11.sp,
+                                            fontSize = if (isTv) 12.5.sp else 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (showRsi) rsiColor else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -677,9 +730,10 @@ fun TechnicalChartScreen(
                                 }
 
                                 // Fullscreen button
-                                IconButton(
+                                TvFocusableIconButton(
                                     onClick = { isFullScreen = true },
-                                    modifier = Modifier.size(34.dp)
+                                    isTv = isTv,
+                                    modifier = Modifier.size(if (isTv) 38.dp else 34.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Fullscreen,
@@ -689,9 +743,10 @@ fun TechnicalChartScreen(
                                 }
 
                                 // Share button
-                                IconButton(
+                                TvFocusableIconButton(
                                     onClick = { showExportSheet = true },
-                                    modifier = Modifier.size(34.dp)
+                                    isTv = isTv,
+                                    modifier = Modifier.size(if (isTv) 38.dp else 34.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Share,
@@ -710,15 +765,15 @@ fun TechnicalChartScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 10.dp, vertical = 3.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 10.dp, vertical = if (isTv) 5.dp else 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isTv) 8.dp else 6.dp)
             ) {
                 ChartTimeframe.entries.forEach { tf ->
                     val isSelected = selectedTimeframe == tf
                     val interactionSource = remember { MutableInteractionSource() }
                     val isFocused by interactionSource.collectIsFocusedAsState()
                     val chipScale by animateFloatAsState(
-                        targetValue = if (isTv && isFocused) 1.1f else 1.0f,
+                        targetValue = if (isTv && isFocused) 1.08f else 1.0f,
                         label = "chipScale"
                     )
 
@@ -740,7 +795,8 @@ fun TechnicalChartScreen(
                             }
                         ),
                         modifier = Modifier
-                            .height(if (isTv) 34.dp else 28.dp)
+                            .height(if (isTv) 36.dp else 28.dp)
+                            .zIndex(if (isTv && isFocused) 1f else 0f)
                             .scale(chipScale)
                     ) {
                         Box(
@@ -770,8 +826,8 @@ fun TechnicalChartScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 10.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        .padding(horizontal = 10.dp, vertical = if (isTv) 5.dp else 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (isTv) 8.dp else 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     for (period in EmaPeriod.entries) {
@@ -783,33 +839,42 @@ fun TechnicalChartScreen(
                         } else {
                             style.color
                         }
+                        val unfocusedBorder = if (isActive) {
+                            if (isSubtleLine) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f) else style.color
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                        }
+                        val emaFocus = rememberTvFocusState(
+                            isTv = isTv,
+                            focusedScale = 1.08f,
+                            focusedBorderWidth = 2.5.dp,
+                            unfocusedBorderWidth = if (isActive) 1.3.dp else 1.dp,
+                            unfocusedBorderColor = unfocusedBorder
+                        )
 
                         Surface(
                             onClick = { toggleEmaPeriod(period) },
+                            interactionSource = emaFocus.interactionSource,
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isActive) {
-                                style.color.copy(alpha = if (isSubtleLine) 0.12f else 0.16f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceContainerLow
+                            color = when {
+                                emaFocus.isFocused -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                isActive -> style.color.copy(alpha = if (isSubtleLine) 0.12f else 0.16f)
+                                else -> MaterialTheme.colorScheme.surfaceContainerLow
                             },
-                            border = BorderStroke(
-                                width = if (isActive) 1.3.dp else 1.dp,
-                                color = if (isActive) {
-                                    if (isSubtleLine) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f) else style.color
-                                } else {
-                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
-                                }
-                            ),
-                            modifier = Modifier.height(if (isTv) 32.dp else 26.dp)
+                            border = BorderStroke(emaFocus.borderWidth, emaFocus.borderColor),
+                            modifier = Modifier
+                                .height(if (isTv) 34.dp else 26.dp)
+                                .zIndex(if (emaFocus.isFocused) 1f else 0f)
+                                .scale(emaFocus.scale)
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
-                                modifier = Modifier.padding(horizontal = 8.dp)
+                                modifier = Modifier.padding(horizontal = if (isTv) 10.dp else 8.dp)
                             ) {
-                                Canvas(modifier = Modifier.size(width = 14.dp, height = 6.dp)) {
+                                Canvas(modifier = Modifier.size(width = if (isTv) 16.dp else 14.dp, height = 6.dp)) {
                                     drawLine(
-                                        color = if (isActive) style.color else style.color.copy(alpha = 0.4f),
+                                        color = if (isActive || emaFocus.isFocused) style.color else style.color.copy(alpha = 0.4f),
                                         start = Offset(0f, size.height / 2f),
                                         end = Offset(size.width, size.height / 2f),
                                         strokeWidth = style.strokeWidthDp.dp.toPx(),
@@ -820,8 +885,8 @@ fun TechnicalChartScreen(
                                 Text(
                                     text = period.label,
                                     fontSize = if (isTv) 12.sp else 10.sp,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isActive) chipAccentText else MaterialTheme.colorScheme.onSurfaceVariant
+                                    fontWeight = if (isActive || emaFocus.isFocused) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isActive || emaFocus.isFocused) chipAccentText else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -837,28 +902,38 @@ fun TechnicalChartScreen(
                     )
                     for ((presetTitle, presetSet) in presets) {
                         val matchesPreset = enabledEmas == presetSet
+                        val presetFocus = rememberTvFocusState(
+                            isTv = isTv,
+                            focusedScale = 1.08f,
+                            unfocusedBorderColor = if (matchesPreset) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                        )
                         Surface(
                             onClick = {
                                 enabledEmas = presetSet
                                 if (presetSet.isNotEmpty()) lastNonEmptyEmas = presetSet
                             },
+                            interactionSource = presetFocus.interactionSource,
                             shape = RoundedCornerShape(12.dp),
-                            color = if (matchesPreset) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                            border = BorderStroke(
-                                1.dp,
-                                if (matchesPreset) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                            ),
-                            modifier = Modifier.height(if (isTv) 32.dp else 26.dp)
+                            color = when {
+                                presetFocus.isFocused -> MaterialTheme.colorScheme.primaryContainer
+                                matchesPreset -> MaterialTheme.colorScheme.secondaryContainer
+                                else -> MaterialTheme.colorScheme.surfaceContainerLow
+                            },
+                            border = BorderStroke(presetFocus.borderWidth, presetFocus.borderColor),
+                            modifier = Modifier
+                                .height(if (isTv) 34.dp else 26.dp)
+                                .zIndex(if (presetFocus.isFocused) 1f else 0f)
+                                .scale(presetFocus.scale)
                         ) {
                             Box(
                                 contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 8.dp)
+                                modifier = Modifier.padding(horizontal = if (isTv) 12.dp else 8.dp)
                             ) {
                                 Text(
                                     text = presetTitle,
-                                    fontSize = if (isTv) 11.5.sp else 9.5.sp,
-                                    fontWeight = if (matchesPreset) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (matchesPreset) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = if (isTv) 12.sp else 9.5.sp,
+                                    fontWeight = if (matchesPreset || presetFocus.isFocused) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (matchesPreset || presetFocus.isFocused) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                     fontFamily = getFontFamilyForText(presetTitle)
                                 )
                             }
@@ -1074,8 +1149,8 @@ fun TechnicalChartScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                .padding(horizontal = 8.dp, vertical = if (isTv) 5.dp else 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(if (isTv) 6.dp else 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             val tabs = listOf(
@@ -1118,7 +1193,8 @@ fun TechnicalChartScreen(
                                         }
                                     ),
                                     modifier = Modifier
-                                        .height(if (isTv) 34.dp else 28.dp)
+                                        .height(if (isTv) 36.dp else 28.dp)
+                                        .zIndex(if (isTv && isTabFocused) 1f else 0f)
                                         .scale(tabScale)
                                 ) {
                                     Box(
@@ -1216,6 +1292,16 @@ fun TechnicalChartScreen(
 
     // Export Options Modal Bottom Sheet
     if (showExportSheet) {
+        fun buildExportBitmap() = renderChartToBitmap(
+            candles = candles,
+            enabledEmas = enabledEmas,
+            showRsi = showRsi,
+            isDark = isDarkTheme,
+            drawings = drawings,
+            bullishColor = bullishColor,
+            bearishColor = bearishColor
+        )
+
         ModalBottomSheet(
             onDismissRequest = {
                 showExportSheet = false
@@ -1224,482 +1310,242 @@ fun TechnicalChartScreen(
             sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden),
             containerColor = MaterialTheme.colorScheme.surface
         ) {
-            AnimatedContent(
-                targetState = selectedExportFormat,
-                transitionSpec = {
-                    if (targetState != null) {
-                        (slideInHorizontally(animationSpec = tween(300, easing = FastOutSlowInEasing)) { it / 2 } + fadeIn(tween(300)))
-                            .togetherWith(slideOutHorizontally(animationSpec = tween(250, easing = FastOutSlowInEasing)) { -it / 2 } + fadeOut(tween(200)))
-                    } else {
-                        (slideInHorizontally(animationSpec = tween(300, easing = FastOutSlowInEasing)) { -it / 2 } + fadeIn(tween(300)))
-                            .togetherWith(slideOutHorizontally(animationSpec = tween(250, easing = FastOutSlowInEasing)) { it / 2 } + fadeOut(tween(200)))
-                    }
-                },
-                label = "exportAnim"
-            ) { format ->
-                when (format) {
-                    null -> {
-                        // Level 1: Choose format (PNG or PDF)
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 16.dp)
-                        ) {
-                            val exportTitle = stringResource(R.string.tech_export_sheet_title)
-                            Text(
-                                text = exportTitle,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontFamily = getFontFamilyForText(exportTitle)
-                            )
-                            val exportTf = (selectedTimeframe ?: activeExportTimeframe).localizedTitle(isEnglish)
-                            Text(
-                                text = stringResource(
-                                    R.string.tech_export_sheet_subtitle,
-                                    getLocalizedTitle(currentCurrency.symbol, currentCurrency.title),
-                                    currentCurrency.symbol,
-                                    exportTf
-                                ),
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            Spacer(modifier = Modifier.height(20.dp))
-
-                            // PNG Export Option Card
-                            Surface(
-                                onClick = { selectedExportFormat = ExportFormat.PNG },
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.primaryContainer),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                                    }
-                                    Spacer(modifier = Modifier.width(14.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        val pngTitle = stringResource(R.string.tech_export_png_title)
-                                        Text(
-                                            text = pngTitle,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText(pngTitle)
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.tech_export_png_desc),
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronLeft,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // PDF Export Option Card
-                            Surface(
-                                onClick = { selectedExportFormat = ExportFormat.PDF },
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.secondaryContainer),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-                                    }
-                                    Spacer(modifier = Modifier.width(14.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        val pdfTitle = stringResource(R.string.tech_export_pdf_title)
-                                        Text(
-                                            text = pdfTitle,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText(pdfTitle)
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.tech_export_pdf_desc),
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronLeft,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(20.dp))
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                AnimatedContent(
+                    targetState = selectedExportFormat,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (isTv) Modifier.widthIn(max = 600.dp) else Modifier),
+                    transitionSpec = {
+                        if (targetState != null) {
+                            (slideInHorizontally(animationSpec = tween(300, easing = FastOutSlowInEasing)) { it / 2 } + fadeIn(tween(300)))
+                                .togetherWith(slideOutHorizontally(animationSpec = tween(250, easing = FastOutSlowInEasing)) { -it / 2 } + fadeOut(tween(200)))
+                        } else {
+                            (slideInHorizontally(animationSpec = tween(300, easing = FastOutSlowInEasing)) { -it / 2 } + fadeIn(tween(300)))
+                                .togetherWith(slideOutHorizontally(animationSpec = tween(250, easing = FastOutSlowInEasing)) { it / 2 } + fadeOut(tween(200)))
                         }
-                    }
-                    ExportFormat.PNG -> {
-                        // Level 2 for PNG: Share OR Save to Files
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 16.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
+                    },
+                    label = "exportAnim"
+                ) { format ->
+                    when (format) {
+                        null -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 16.dp)
                             ) {
-                                IconButton(onClick = { selectedExportFormat = null }) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = stringResource(R.string.tech_back),
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Column {
-                                    val pngSheetTitle = stringResource(R.string.tech_export_png_sheet_title)
-                                    Text(
-                                        text = pngSheetTitle,
-                                        fontSize = 17.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontFamily = getFontFamilyForText(pngSheetTitle)
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.tech_export_choose_how),
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                val exportTitle = stringResource(R.string.tech_export_sheet_title)
+                                Text(
+                                    text = exportTitle,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    fontFamily = getFontFamilyForText(exportTitle)
+                                )
+                                val exportTf = (selectedTimeframe ?: activeExportTimeframe).localizedTitle(isEnglish)
+                                Text(
+                                    text = stringResource(
+                                        R.string.tech_export_sheet_subtitle,
+                                        getLocalizedTitle(currentCurrency.symbol, currentCurrency.title),
+                                        currentCurrency.symbol,
+                                        exportTf
+                                    ),
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(20.dp))
+                                ExportOptionCard(
+                                    title = stringResource(R.string.tech_export_png_title),
+                                    subtitle = stringResource(R.string.tech_export_png_desc),
+                                    icon = Icons.Default.Image,
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                    iconBgColor = MaterialTheme.colorScheme.primaryContainer,
+                                    iconTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    isTv = isTv,
+                                    showTrailingChevron = true,
+                                    onClick = { selectedExportFormat = ExportFormat.PNG }
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                ExportOptionCard(
+                                    title = stringResource(R.string.tech_export_pdf_title),
+                                    subtitle = stringResource(R.string.tech_export_pdf_desc),
+                                    icon = Icons.Default.PictureAsPdf,
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                    iconBgColor = MaterialTheme.colorScheme.secondaryContainer,
+                                    iconTint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    isTv = isTv,
+                                    showTrailingChevron = true,
+                                    onClick = { selectedExportFormat = ExportFormat.PDF }
+                                )
+                                Spacer(modifier = Modifier.height(20.dp))
                             }
-
-                            Spacer(modifier = Modifier.height(20.dp))
-
-                            // Action 1: Share
-                            Surface(
-                                onClick = {
-                                    showExportSheet = false
-                                    selectedExportFormat = null
-                                    val bitmap = renderChartToBitmap(
-                                        candles = candles,
-                                        enabledEmas = enabledEmas,
-                                        showRsi = showRsi,
-                                        isDark = isDarkTheme,
-                                        drawings = drawings,
-                                        bullishColor = bullishColor,
-                                        bearishColor = bearishColor
-                                    )
-                                    TechnicalExportHelper.sharePng(
-                                        context = context,
-                                        bitmap = bitmap,
-                                        currency = currentCurrency,
-                                        timeframe = activeExportTimeframe
-                                    )
-                                },
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.primary),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Share,
-                                            contentDescription = stringResource(R.string.tech_export_share),
-                                            tint = MaterialTheme.colorScheme.onPrimary
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(14.dp))
-                                    Column {
-                                        val shareTitle = stringResource(R.string.tech_export_share)
-                                        Text(
-                                            text = shareTitle,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText(shareTitle)
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.tech_export_share_png_desc),
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Action 2: Save to Files
-                            Surface(
-                                onClick = {
-                                    showExportSheet = false
-                                    selectedExportFormat = null
-                                    val bitmap = renderChartToBitmap(
-                                        candles = candles,
-                                        enabledEmas = enabledEmas,
-                                        showRsi = showRsi,
-                                        isDark = isDarkTheme,
-                                        drawings = drawings,
-                                        bullishColor = bullishColor,
-                                        bearishColor = bearishColor
-                                    )
-                                    TechnicalExportHelper.savePngToDevice(
-                                        context = context,
-                                        bitmap = bitmap,
-                                        currency = currentCurrency,
-                                        timeframe = activeExportTimeframe
-                                    )
-                                },
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.FileDownload,
-                                            contentDescription = stringResource(R.string.tech_export_save_files),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(14.dp))
-                                    Column {
-                                        val saveTitle = stringResource(R.string.tech_export_save_files)
-                                        Text(
-                                            text = saveTitle,
-                                            fontSize = 14.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText(saveTitle)
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.tech_export_save_png_desc),
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(20.dp))
                         }
-                    }
-                    ExportFormat.PDF -> {
-                        // Level 2 for PDF: Share OR Save to Files
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 16.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(onClick = { selectedExportFormat = null }) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                        contentDescription = stringResource(R.string.tech_back),
-                                        tint = MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Column {
-                                    val pdfSheetTitle = stringResource(R.string.tech_export_pdf_title)
-                                    Text(
-                                        text = pdfSheetTitle,
-                                        fontSize = 17.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        fontFamily = getFontFamilyForText(pdfSheetTitle)
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.tech_export_choose_how_pdf),
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(20.dp))
-
-                            // Action 1: Share
-                            Surface(
-                                onClick = {
-                                    showExportSheet = false
-                                    selectedExportFormat = null
-                                    val bitmap = renderChartToBitmap(
-                                        candles = candles,
-                                        enabledEmas = enabledEmas,
-                                        showRsi = showRsi,
-                                        isDark = isDarkTheme,
-                                        drawings = drawings,
-                                        bullishColor = bullishColor,
-                                        bearishColor = bearishColor
-                                    )
-                                    TechnicalExportHelper.sharePdf(
-                                        context = context,
-                                        chartBitmap = bitmap,
-                                        currency = currentCurrency,
-                                        timeframe = activeExportTimeframe,
-                                        candles = candles,
-                                        enabledEmas = enabledEmas
-                                    )
-                                },
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
+                        ExportFormat.PNG -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 16.dp)
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(16.dp),
+                                    modifier = Modifier.fillMaxWidth(),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.secondary),
-                                        contentAlignment = Alignment.Center
-                                    ) {
+                                    TvFocusableIconButton(onClick = { selectedExportFormat = null }, isTv = isTv) {
                                         Icon(
-                                            imageVector = Icons.Default.Share,
-                                            contentDescription = stringResource(R.string.tech_export_share),
-                                            tint = MaterialTheme.colorScheme.onSecondary
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = stringResource(R.string.tech_back),
+                                            tint = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Column {
-                                        val sharePdfTitle = stringResource(R.string.tech_export_share)
+                                        val pngSheetTitle = stringResource(R.string.tech_export_png_sheet_title)
                                         Text(
-                                            text = sharePdfTitle,
-                                            fontSize = 14.sp,
+                                            text = pngSheetTitle,
+                                            fontSize = 17.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText(sharePdfTitle)
+                                            fontFamily = getFontFamilyForText(pngSheetTitle)
                                         )
                                         Text(
-                                            text = stringResource(R.string.tech_export_share_pdf_desc),
+                                            text = stringResource(R.string.tech_export_choose_how),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Action 2: Save to Files
-                            Surface(
-                                onClick = {
-                                    showExportSheet = false
-                                    selectedExportFormat = null
-                                    val bitmap = renderChartToBitmap(
-                                        candles = candles,
-                                        enabledEmas = enabledEmas,
-                                        showRsi = showRsi,
-                                        isDark = isDarkTheme,
-                                        drawings = drawings,
-                                        bullishColor = bullishColor,
-                                        bearishColor = bearishColor
-                                    )
-                                    TechnicalExportHelper.savePdfToDevice(
-                                        context = context,
-                                        chartBitmap = bitmap,
-                                        currency = currentCurrency,
-                                        timeframe = activeExportTimeframe,
-                                        candles = candles,
-                                        enabledEmas = enabledEmas
-                                    )
-                                },
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(44.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.FileDownload,
-                                            contentDescription = stringResource(R.string.tech_export_save_files),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                Spacer(modifier = Modifier.height(20.dp))
+                                ExportOptionCard(
+                                    title = stringResource(R.string.tech_export_share),
+                                    subtitle = stringResource(R.string.tech_export_share_png_desc),
+                                    icon = Icons.Default.Share,
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                                    borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                    iconBgColor = MaterialTheme.colorScheme.primary,
+                                    iconTint = MaterialTheme.colorScheme.onPrimary,
+                                    isTv = isTv,
+                                    onClick = {
+                                        showExportSheet = false
+                                        selectedExportFormat = null
+                                        TechnicalExportHelper.sharePng(
+                                            context = context,
+                                            bitmap = buildExportBitmap(),
+                                            currency = currentCurrency,
+                                            timeframe = activeExportTimeframe
                                         )
                                     }
-                                    Spacer(modifier = Modifier.width(14.dp))
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                ExportOptionCard(
+                                    title = stringResource(R.string.tech_export_save_files),
+                                    subtitle = stringResource(R.string.tech_export_save_png_desc),
+                                    icon = Icons.Default.FileDownload,
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                    iconBgColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    isTv = isTv,
+                                    onClick = {
+                                        showExportSheet = false
+                                        selectedExportFormat = null
+                                        TechnicalExportHelper.savePngToDevice(
+                                            context = context,
+                                            bitmap = buildExportBitmap(),
+                                            currency = currentCurrency,
+                                            timeframe = activeExportTimeframe
+                                        )
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(20.dp))
+                            }
+                        }
+                        ExportFormat.PDF -> {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TvFocusableIconButton(onClick = { selectedExportFormat = null }, isTv = isTv) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = stringResource(R.string.tech_back),
+                                            tint = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Column {
-                                        val savePdfTitle = stringResource(R.string.tech_export_save_files)
+                                        val pdfSheetTitle = stringResource(R.string.tech_export_pdf_title)
                                         Text(
-                                            text = savePdfTitle,
-                                            fontSize = 14.sp,
+                                            text = pdfSheetTitle,
+                                            fontSize = 17.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface,
-                                            fontFamily = getFontFamilyForText(savePdfTitle)
+                                            fontFamily = getFontFamilyForText(pdfSheetTitle)
                                         )
                                         Text(
-                                            text = stringResource(R.string.tech_export_save_pdf_desc),
+                                            text = stringResource(R.string.tech_export_choose_how_pdf),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
+                                Spacer(modifier = Modifier.height(20.dp))
+                                ExportOptionCard(
+                                    title = stringResource(R.string.tech_export_share),
+                                    subtitle = stringResource(R.string.tech_export_share_pdf_desc),
+                                    icon = Icons.Default.Share,
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                                    borderColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
+                                    iconBgColor = MaterialTheme.colorScheme.secondary,
+                                    iconTint = MaterialTheme.colorScheme.onSecondary,
+                                    isTv = isTv,
+                                    onClick = {
+                                        showExportSheet = false
+                                        selectedExportFormat = null
+                                        TechnicalExportHelper.sharePdf(
+                                            context = context,
+                                            chartBitmap = buildExportBitmap(),
+                                            currency = currentCurrency,
+                                            timeframe = activeExportTimeframe,
+                                            candles = candles,
+                                            enabledEmas = enabledEmas
+                                        )
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                ExportOptionCard(
+                                    title = stringResource(R.string.tech_export_save_files),
+                                    subtitle = stringResource(R.string.tech_export_save_pdf_desc),
+                                    icon = Icons.Default.FileDownload,
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    borderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                    iconBgColor = MaterialTheme.colorScheme.surfaceVariant,
+                                    iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    isTv = isTv,
+                                    onClick = {
+                                        showExportSheet = false
+                                        selectedExportFormat = null
+                                        TechnicalExportHelper.savePdfToDevice(
+                                            context = context,
+                                            chartBitmap = buildExportBitmap(),
+                                            currency = currentCurrency,
+                                            timeframe = activeExportTimeframe,
+                                            candles = candles,
+                                            enabledEmas = enabledEmas
+                                        )
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(20.dp))
                             }
-
-                            Spacer(modifier = Modifier.height(20.dp))
                         }
                     }
                 }
@@ -2568,6 +2414,74 @@ fun DrawingToolbar(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExportOptionCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    containerColor: Color,
+    borderColor: Color,
+    iconBgColor: Color,
+    iconTint: Color,
+    isTv: Boolean,
+    showTrailingChevron: Boolean = false,
+    onClick: () -> Unit
+) {
+    val tvFocus = rememberTvFocusState(
+        isTv = isTv,
+        focusedScale = 1.02f,
+        unfocusedBorderColor = borderColor
+    )
+    Surface(
+        onClick = onClick,
+        interactionSource = tvFocus.interactionSource,
+        shape = RoundedCornerShape(16.dp),
+        color = if (tvFocus.isFocused) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else containerColor,
+        border = BorderStroke(tvFocus.borderWidth, tvFocus.borderColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(tvFocus.scale)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(iconBgColor),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = if (showTrailingChevron) null else title, tint = iconTint)
+            }
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = if (isTv) 15.sp else 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontFamily = getFontFamilyForText(title)
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = if (isTv) 12.sp else 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (showTrailingChevron) {
+                Icon(
+                    imageVector = Icons.Default.ChevronLeft,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

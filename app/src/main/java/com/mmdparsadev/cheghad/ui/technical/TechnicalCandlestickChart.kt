@@ -623,8 +623,8 @@ fun TechnicalCandlestickChart(
         }
     }
 
-    val priceAxisWidthDp = if (isTvMode) 70.dp else 46.dp
-    val timeAxisHeightDp = if (isTvMode) 28.dp else 18.dp
+    val priceAxisWidthDp = if (isTvMode) 76.dp else 46.dp
+    val timeAxisHeightDp = if (isTvMode) 30.dp else 18.dp
 
     // Gesture Modifier according to activeTool
     val gestureModifier = when (activeTool) {
@@ -758,45 +758,55 @@ fun TechnicalCandlestickChart(
 
     var isChartFocused by remember { mutableStateOf(false) }
 
+    fun stepHoveredCandle(delta: Int) {
+        if (totalCandles <= 0) return
+        val fallbackStart = if (delta < 0) startIndex + visibleCandles.size - 1 else startIndex
+        val currentHover = hoveredIndex ?: fallbackStart
+        val newHover = (currentHover + delta).coerceIn(0, totalCandles - 1)
+        hoveredIndex = newHover
+        if (newHover < startIndex) {
+            panOffset = ((totalCandles - effectiveVisibleCount - newHover) * 10f).coerceIn(0f, maxPan * 10f)
+        } else if (newHover >= endIndex) {
+            panOffset = ((totalCandles - effectiveVisibleCount - (newHover - effectiveVisibleCount + 1)) * 10f).coerceIn(0f, maxPan * 10f)
+        }
+        onHoverCandleChanged(candles.getOrNull(newHover))
+    }
+
+    fun adjustTvZoom(deltaCandles: Int) {
+        val newCount = (visibleCandlesCount + deltaCandles).coerceIn(minZoomCandles, maxZoomCandles)
+        if (newCount != visibleCandlesCount) {
+            visibleCandlesCount = newCount
+            onZoomChanged()
+        }
+    }
+
+    fun resetTvZoom() {
+        visibleCandlesCount = candles.size.coerceAtLeast(1)
+        panOffset = 0f
+        onZoomChanged()
+    }
+
     val keyEventModifier = Modifier.onKeyEvent { keyEvent ->
         if (keyEvent.type != KeyEventType.KeyDown) return@onKeyEvent false
         when (keyEvent.key) {
             Key.DirectionLeft -> {
-                // Older candles (chronological backward)
-                val currentHover = hoveredIndex ?: (startIndex + visibleCandles.size - 1)
-                val newHover = (currentHover - 1).coerceIn(0, totalCandles - 1)
-                hoveredIndex = newHover
-                if (newHover < startIndex) {
-                    panOffset = ((totalCandles - effectiveVisibleCount - newHover) * 10f).coerceIn(0f, maxPan * 10f)
-                }
-                onHoverCandleChanged(candles.getOrNull(newHover))
+                stepHoveredCandle(-1)
                 true
             }
             Key.DirectionRight -> {
-                // Newer candles (chronological forward)
-                val currentHover = hoveredIndex ?: startIndex
-                val newHover = (currentHover + 1).coerceIn(0, totalCandles - 1)
-                hoveredIndex = newHover
-                if (newHover >= endIndex) {
-                    panOffset = ((totalCandles - effectiveVisibleCount - (newHover - effectiveVisibleCount + 1)) * 10f).coerceIn(0f, maxPan * 10f)
-                }
-                onHoverCandleChanged(candles.getOrNull(newHover))
+                stepHoveredCandle(1)
                 true
             }
-            Key.Plus, Key.Equals, Key.PageUp -> {
-                val newCount = (visibleCandlesCount - 5).coerceIn(minZoomCandles, maxZoomCandles)
-                if (newCount != visibleCandlesCount) {
-                    visibleCandlesCount = newCount
-                    onZoomChanged()
-                }
+            Key.Plus, Key.Equals, Key.PageUp, Key.ZoomIn, Key.MediaFastForward -> {
+                adjustTvZoom(-5)
                 true
             }
-            Key.Minus, Key.PageDown -> {
-                val newCount = (visibleCandlesCount + 5).coerceIn(minZoomCandles, maxZoomCandles)
-                if (newCount != visibleCandlesCount) {
-                    visibleCandlesCount = newCount
-                    onZoomChanged()
-                }
+            Key.Minus, Key.PageDown, Key.ZoomOut, Key.MediaRewind -> {
+                adjustTvZoom(5)
+                true
+            }
+            Key.R, Key.NumPad0 -> {
+                resetTvZoom()
                 true
             }
             Key.DirectionCenter, Key.Enter -> {
@@ -1137,7 +1147,7 @@ fun TechnicalCandlestickChart(
                     }
                     val cpBounds = Rect()
                     crossPricePaint.getTextBounds(crossPriceText, 0, crossPriceText.length, cpBounds)
-                    val cpW = (cpBounds.width().toFloat() + 10.dp.toPx()).coerceAtMost(if (isTvMode) 68.dp.toPx() else 44.dp.toPx())
+                    val cpW = (cpBounds.width().toFloat() + 10.dp.toPx()).coerceAtMost(if (isTvMode) 72.dp.toPx() else 44.dp.toPx())
                     val cpH = if (isTvMode) 22.dp.toPx() else 15.dp.toPx()
                     val cpX = chartWidth + 2.dp.toPx()
                     val cpY = (crossY - (cpH / 2f)).coerceIn(0f, mainHeight - cpH)
@@ -1173,7 +1183,7 @@ fun TechnicalCandlestickChart(
                     val ctBounds = Rect()
                     crossTimePaint.getTextBounds(crossTimeText, 0, crossTimeText.length, ctBounds)
                     val ctW = (ctBounds.width().toFloat() + 12.dp.toPx()).coerceAtMost(chartWidth)
-                    val ctH = if (isTvMode) 22.dp.toPx() else 16.dp.toPx()
+                    val ctH = if (isTvMode) 24.dp.toPx() else 16.dp.toPx()
                     val ctX = (crossX - (ctW / 2f)).coerceIn(0f, (chartWidth - ctW).coerceAtLeast(0f))
                     val ctY = usablePlotHeight + 2.dp.toPx()
 
@@ -1193,7 +1203,7 @@ fun TechnicalCandlestickChart(
                     drawContext.canvas.nativeCanvas.drawText(
                         crossTimeText,
                         ctX + 6.dp.toPx(),
-                        ctY + ctH - (if (isTvMode) 5.dp.toPx() else 4.dp.toPx()),
+                        ctY + ctH - (if (isTvMode) 6.dp.toPx() else 4.dp.toPx()),
                         crossTimePaint
                     )
                 }
@@ -1290,16 +1300,16 @@ fun TechnicalCandlestickChart(
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = if (isTvMode) 14.dp else 10.dp, vertical = if (isTvMode) 10.dp else 6.dp),
+            verticalArrangement = Arrangement.spacedBy(if (isTvMode) 6.dp else 4.dp)
         ) {
             val activeCandle = hoveredIndex?.let { candles.getOrNull(it) } ?: candles.lastOrNull()
 
             Row(
                 modifier = Modifier
-                    .fillMaxWidth(0.86f)
+                    .fillMaxWidth(if (isTvMode) 0.90f else 0.86f)
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (isTvMode) 8.dp else 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 for (period in EmaPeriod.entries) {
@@ -1314,16 +1324,24 @@ fun TechnicalCandlestickChart(
                     }
 
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(if (isTvMode) 10.dp else 8.dp),
                         color = style.color.copy(alpha = if (isSubtleLine) 0.08f else 0.14f),
                         border = BorderStroke(1.dp, style.color.copy(alpha = if (isSubtleLine) 0.35f else 0.45f))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            horizontalArrangement = Arrangement.spacedBy(if (isTvMode) 6.dp else 4.dp),
+                            modifier = Modifier.padding(
+                                horizontal = if (isTvMode) 10.dp else 6.dp,
+                                vertical = if (isTvMode) 4.dp else 2.dp
+                            )
                         ) {
-                            Canvas(modifier = Modifier.size(width = 12.dp, height = 6.dp)) {
+                            Canvas(
+                                modifier = Modifier.size(
+                                    width = if (isTvMode) 16.dp else 12.dp,
+                                    height = if (isTvMode) 8.dp else 6.dp
+                                )
+                            ) {
                                 drawLine(
                                     color = style.color,
                                     start = Offset(0f, size.height / 2f),
@@ -1335,7 +1353,7 @@ fun TechnicalCandlestickChart(
                             }
                             Text(
                                 text = "${period.label}: ${formatPriceShort(emaVal, digitType)}",
-                                fontSize = 9.5.sp,
+                                fontSize = if (isTvMode) 12.sp else 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = textColor
                             )
@@ -1351,16 +1369,19 @@ fun TechnicalCandlestickChart(
                         else -> rsiColor
                     }
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(if (isTvMode) 10.dp else 8.dp),
                         color = rColor.copy(alpha = 0.14f),
                         border = BorderStroke(1.dp, rColor.copy(alpha = 0.4f))
                     ) {
                         Text(
                             text = "RSI (14): " + String.format(Locale.US, "%.1f", rVal).toLocalizedDigits(digitType),
-                            fontSize = 9.5.sp,
+                            fontSize = if (isTvMode) 12.sp else 9.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = rColor,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(
+                                horizontal = if (isTvMode) 10.dp else 6.dp,
+                                vertical = if (isTvMode) 4.dp else 2.dp
+                            )
                         )
                     }
                 }
@@ -1370,7 +1391,7 @@ fun TechnicalCandlestickChart(
             hoveredIndex?.let { hIdx ->
                 candles.getOrNull(hIdx)?.let { inspected ->
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(if (isTvMode) 12.dp else 10.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
                         border = BorderStroke(1.dp, crosshairColor.copy(alpha = 0.45f)),
                         tonalElevation = 2.dp
@@ -1384,16 +1405,21 @@ fun TechnicalCandlestickChart(
                             "$hLabel: ${formatPriceShort(inspected.high, digitType)}  " +
                             "$lLabel: ${formatPriceShort(inspected.low, digitType)}  " +
                             "$cLabel: ${formatPriceShort(inspected.close, digitType)}"
-                        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        Column(
+                            modifier = Modifier.padding(
+                                horizontal = if (isTvMode) 12.dp else 8.dp,
+                                vertical = if (isTvMode) 6.dp else 4.dp
+                            )
+                        ) {
                             Text(
                                 text = "$dateTimeText  •  ${formatPriceShort(inspected.close, digitType)}",
-                                fontSize = if (isTvMode) 12.sp else 10.sp,
+                                fontSize = if (isTvMode) 13.sp else 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = crosshairColor
                             )
                             Text(
                                 text = ohlcSummary,
-                                fontSize = if (isTvMode) 11.sp else 9.sp,
+                                fontSize = if (isTvMode) 11.5.sp else 9.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1407,53 +1433,46 @@ fun TechnicalCandlestickChart(
         if (isTvMode) {
             Surface(
                 shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 12.dp, bottom = timeAxisHeightDp + 6.dp)
+                    .padding(start = 14.dp, bottom = timeAxisHeightDp + 8.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
+                    TvChartIconButton(
+                        icon = Icons.Default.ChevronLeft,
+                        contentDescription = stringResource(R.string.tech_tv_prev_candle),
+                        onClick = { stepHoveredCandle(-1) }
+                    )
+                    TvChartIconButton(
+                        icon = Icons.Default.ChevronRight,
+                        contentDescription = stringResource(R.string.tech_tv_next_candle),
+                        onClick = { stepHoveredCandle(1) }
+                    )
                     TvChartIconButton(
                         icon = Icons.Default.Add,
                         contentDescription = stringResource(R.string.tech_tv_zoom_in),
-                        onClick = {
-                            val newCount = (visibleCandlesCount - 5).coerceIn(minZoomCandles, maxZoomCandles)
-                            if (newCount != visibleCandlesCount) {
-                                visibleCandlesCount = newCount
-                                onZoomChanged()
-                            }
-                        }
+                        onClick = { adjustTvZoom(-5) }
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
                     TvChartIconButton(
                         icon = Icons.Default.Remove,
                         contentDescription = stringResource(R.string.tech_tv_zoom_out),
-                        onClick = {
-                            val newCount = (visibleCandlesCount + 5).coerceIn(minZoomCandles, maxZoomCandles)
-                            if (newCount != visibleCandlesCount) {
-                                visibleCandlesCount = newCount
-                                onZoomChanged()
-                            }
-                        }
+                        onClick = { adjustTvZoom(5) }
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
                     TvChartIconButton(
                         icon = Icons.Default.RestartAlt,
                         contentDescription = stringResource(R.string.tech_tv_zoom_reset),
-                        onClick = {
-                            visibleCandlesCount = candles.size.coerceAtLeast(1)
-                            panOffset = 0f
-                            onZoomChanged()
-                        }
+                        onClick = { resetTvZoom() }
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = stringResource(R.string.tech_tv_remote_hint),
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 4.dp)
@@ -1485,11 +1504,11 @@ private fun TvChartIconButton(
     Surface(
         onClick = onClick,
         interactionSource = interactionSource,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
         color = bgColor,
-        border = if (isFocused) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+        border = if (isFocused) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = Modifier
-            .size(30.dp)
+            .size(36.dp)
             .scale(scale)
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -1497,7 +1516,7 @@ private fun TvChartIconButton(
                 imageVector = icon,
                 contentDescription = contentDescription,
                 tint = tintColor,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(20.dp)
             )
         }
     }
