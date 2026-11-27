@@ -14,3 +14,6 @@ debug.keystore
 app/release
 /app/google-services.json
 keystore.properties
+/app/store/
+/app/direct/
+**/mapping.txt
